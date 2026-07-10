@@ -27,6 +27,8 @@ import {
   RotateCw,
 } from 'lucide-react';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
+import { matchesSearch, premisesInTerritory } from '../../lib/listFilters';
 import { buildGuardProfileContext } from '../../lib/guardProfile';
 import { handleWhatsAppDeliveryResult } from '../../lib/whatsappClient';
 
@@ -89,6 +91,8 @@ export default function GuardManagement({
 
   const [docForm, setDocForm] = useState({ type: 'id_copy', label: '', fileName: '' });
   const [trainingForm, setTrainingForm] = useState({ name: '', completedDate: '', expiryDate: '', certificateRef: '' });
+  const [guardSearch, setGuardSearch] = useState('');
+  const [guardTerritoryFilter, setGuardTerritoryFilter] = useState('');
 
   const today = new Date().toISOString().slice(0, 10);
   const onDuty = attendance.filter((a) => a.status === 'On Duty' || a.status === 'Late');
@@ -146,6 +150,27 @@ export default function GuardManagement({
   const territoryName = (id) => territories.find((t) => t.id === id)?.name || '';
   const selectedTerritory = territories.find((t) => t.id === guardForm.territoryId);
   const suburbOptions = selectedTerritory?.suburbs || [];
+  const formPremises = premisesInTerritory(premises, guardForm.territoryId);
+  const premisesForGuardCard = (g) => premisesInTerritory(premises, g.territoryId);
+  const shiftPremises = (() => {
+    const guard = guards.find((g) => g.id === shiftForm.guardId);
+    return guard?.territoryId ? premisesInTerritory(premises, guard.territoryId) : premises;
+  })();
+
+  const filteredGuards = guards.filter((g) => {
+    if (guardTerritoryFilter && g.territoryId !== guardTerritoryFilter) return false;
+    return matchesSearch(g, guardSearch, (item) => [
+      item.fullName,
+      item.employeeNumber,
+      item.phone,
+      item.idNumber,
+      item.email,
+      item.city,
+      item.suburb,
+      territoryName(item.territoryId),
+      ...(item.assignedPremiseIds || []).map(premiseName),
+    ]);
+  });
 
   const resetGuardForm = () => {
     setGuardForm(emptyGuardForm());
@@ -200,11 +225,13 @@ export default function GuardManagement({
 
   const handleTerritoryChange = (territoryId) => {
     const t = territories.find((x) => x.id === territoryId);
+    const validPremiseIds = new Set(premisesInTerritory(premises, territoryId).map((p) => p.id));
     setGuardForm({
       ...guardForm,
       territoryId,
       city: t?.city || guardForm.city,
       suburb: t?.suburbs?.some((s) => s.name === guardForm.suburb) ? guardForm.suburb : '',
+      assignedPremiseIds: guardForm.assignedPremiseIds.filter((id) => validPremiseIds.has(id)),
     });
   };
 
@@ -447,15 +474,21 @@ export default function GuardManagement({
                   </div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Next of Kin — Relationship</label><input className="form-input" value={guardForm.nextOfKinRelationship} onChange={(e) => setGuardForm({ ...guardForm, nextOfKinRelationship: e.target.value })} placeholder="e.g. Spouse, Parent, Sibling" /></div>
                   <div className="input-group" style={{ gridColumn: 'span 3', marginBottom: 0 }}>
-                    <label>Assign to Premises</label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      {premises.map((p) => (
-                        <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', background: guardForm.assignedPremiseIds.includes(p.id) ? '#d8f3dc' : '#fff', border: '1px solid var(--border-light)', padding: '0.35rem 0.6rem', borderRadius: '6px', cursor: 'pointer' }}>
-                          <input type="checkbox" checked={guardForm.assignedPremiseIds.includes(p.id)} onChange={() => togglePremiseAssign(p.id)} />
-                          {p.name}
-                        </label>
-                      ))}
-                    </div>
+                    <label>Assign to Premises {guardForm.territoryId ? `(in ${selectedTerritory?.name || 'territory'})` : ''}</label>
+                    {!guardForm.territoryId ? (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>Select a territory above to see premises in that area only.</p>
+                    ) : formPremises.length === 0 ? (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-dimmed)', margin: '0.35rem 0 0' }}>No premises registered in this territory yet.</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {formPremises.map((p) => (
+                          <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', background: guardForm.assignedPremiseIds.includes(p.id) ? '#d8f3dc' : '#fff', border: '1px solid var(--border-light)', padding: '0.35rem 0.6rem', borderRadius: '6px', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={guardForm.assignedPremiseIds.includes(p.id)} onChange={() => togglePremiseAssign(p.id)} />
+                            {p.name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div style={{ gridColumn: 'span 3', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                     <button type="button" className="btn-secondary" onClick={resetGuardForm}>Cancel</button>
@@ -464,10 +497,27 @@ export default function GuardManagement({
                 </form>
               )}
 
+              {(guards.length > 0 || guardSearch || guardTerritoryFilter) && (
+                <div className="list-filter-row">
+                  <ListSearchBar
+                    value={guardSearch}
+                    onChange={setGuardSearch}
+                    placeholder="Search guards by name, phone, ID, site…"
+                  />
+                  <TerritoryFilterSelect
+                    value={guardTerritoryFilter}
+                    onChange={setGuardTerritoryFilter}
+                    territories={territories}
+                  />
+                </div>
+              )}
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {guards.length === 0 ? (
                   <p style={{ textAlign: 'center', color: 'var(--text-dimmed)', padding: '2rem' }}>No guards registered yet.</p>
-                ) : guards.map((g) => {
+                ) : filteredGuards.length === 0 ? (
+                  <p style={{ textAlign: 'center', color: 'var(--text-dimmed)', padding: '2rem' }}>No guards match your search or territory filter.</p>
+                ) : filteredGuards.map((g) => {
                   const profile = buildGuardProfileContext(synthState, tenantId, g.id);
                   return (
                   <div key={g.id} className="glass-card" style={{ padding: '1rem' }}>
@@ -512,7 +562,7 @@ export default function GuardManagement({
                           <span><GraduationCap size={11} style={{ display: 'inline' }} /> {(g.trainings || []).length} trainings</span>
                         </div>
                         <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                          {premises.map((p) => (
+                          {premisesForGuardCard(g).map((p) => (
                             <button
                               key={p.id}
                               type="button"
@@ -634,8 +684,14 @@ export default function GuardManagement({
 
           {showShiftForm && (
             <form onSubmit={handleSaveShift} style={{ background: '#f8fafc', borderRadius: '10px', padding: '1rem', marginBottom: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.65rem' }}>
-              <div className="input-group" style={{ marginBottom: 0 }}><label>Guard</label><select className="form-select" value={shiftForm.guardId} onChange={(e) => setShiftForm({ ...shiftForm, guardId: e.target.value })} required><option value="">Select guard</option>{guards.filter(g => g.status === 'Active').map(g => <option key={g.id} value={g.id}>{g.fullName}</option>)}</select></div>
-              <div className="input-group" style={{ marginBottom: 0 }}><label>Premises</label><select className="form-select" value={shiftForm.premiseId} onChange={(e) => setShiftForm({ ...shiftForm, premiseId: e.target.value })} required><option value="">Select premises</option>{premises.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+              <div className="input-group" style={{ marginBottom: 0 }}><label>Guard</label><select className="form-select" value={shiftForm.guardId} onChange={(e) => {
+                const guardId = e.target.value;
+                const guard = guards.find((g) => g.id === guardId);
+                const allowed = guard?.territoryId ? premisesInTerritory(premises, guard.territoryId) : premises;
+                const premiseStillValid = allowed.some((p) => p.id === shiftForm.premiseId);
+                setShiftForm({ ...shiftForm, guardId, premiseId: premiseStillValid ? shiftForm.premiseId : '' });
+              }} required><option value="">Select guard</option>{guards.filter(g => g.status === 'Active').map(g => <option key={g.id} value={g.id}>{g.fullName}</option>)}</select></div>
+              <div className="input-group" style={{ marginBottom: 0 }}><label>Premises</label><select className="form-select" value={shiftForm.premiseId} onChange={(e) => setShiftForm({ ...shiftForm, premiseId: e.target.value })} required><option value="">Select premises</option>{shiftPremises.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
               <div className="input-group" style={{ marginBottom: 0 }}><label>Date</label><input className="form-input" type="date" value={shiftForm.date} onChange={(e) => setShiftForm({ ...shiftForm, date: e.target.value })} required /></div>
               <div className="input-group" style={{ marginBottom: 0 }}><label>Start</label><input className="form-input" type="time" value={shiftForm.startTime} onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })} required /></div>
               <div className="input-group" style={{ marginBottom: 0 }}><label>End</label><input className="form-input" type="time" value={shiftForm.endTime} onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })} required /></div>

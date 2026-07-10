@@ -108,6 +108,76 @@ body {
   z-index: 40;
 }
 
+.list-search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.list-search-icon {
+  position: absolute;
+  left: 0.75rem;
+  color: var(--text-dimmed);
+  pointer-events: none;
+}
+
+.list-search-input {
+  width: 100%;
+  padding-left: 2.25rem !important;
+  padding-right: 2rem !important;
+  font-size: 0.85rem !important;
+}
+
+.list-search-clear {
+  position: absolute;
+  right: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-dimmed);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.list-search-clear:hover {
+  background: #f1f5f9;
+  color: var(--text-main);
+}
+
+.list-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.list-filter-row .list-search-bar {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.list-filter-select {
+  flex: 0 1 200px;
+  min-width: 160px;
+}
+
+.list-filter-select label {
+  font-size: 0.72rem;
+  margin-bottom: 0.25rem;
+}
+
+.list-filter-select .form-select {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.65rem;
+}
+
+
 /* Sidebar Navigation Items */
 .sidebar-logo {
   margin-bottom: 1.25rem;

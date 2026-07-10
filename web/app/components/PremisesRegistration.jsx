@@ -20,6 +20,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
+import { matchesSearch } from '../../lib/listFilters';
 import { getSupervisorsForTerritory } from '../../lib/guardProfile';
 
 const PLACE_TYPES = [
@@ -52,6 +54,8 @@ export default function PremisesRegistration({
   const [copiedId, setCopiedId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [premiseSearch, setPremiseSearch] = useState('');
+  const [premiseTerritoryFilter, setPremiseTerritoryFilter] = useState('');
 
   const [premiseForm, setPremiseForm] = useState({
     name: '',
@@ -103,6 +107,20 @@ export default function PremisesRegistration({
     onDutyAtPremises.filter((a) => a.premiseId === premiseId);
   const checkpointsForPremise = (premiseId) =>
     checkpoints.filter((cp) => cp.premiseId === premiseId);
+
+  const filteredPremises = premises.filter((p) => {
+    if (premiseTerritoryFilter && p.territoryId !== premiseTerritoryFilter) return false;
+    return matchesSearch(p, premiseSearch, (item) => [
+      item.name,
+      item.address,
+      item.city,
+      item.suburb,
+      item.ownerName,
+      item.ownerContact,
+      item.id,
+      territoryLabel(item.territoryId),
+    ]);
+  });
 
   const resetPremiseForm = () => {
     setPremiseForm({ name: '', ownerName: '', ownerContact: '', address: '', city: '', suburb: '', territoryId: '', lat: '', lng: '' });
@@ -320,6 +338,21 @@ export default function PremisesRegistration({
             Register each building or site you protect. Every premises gets a unique ID for guards and mobile devices.
           </p>
 
+          {(premises.length > 0 || premiseSearch || premiseTerritoryFilter) && (
+            <div className="list-filter-row">
+              <ListSearchBar
+                value={premiseSearch}
+                onChange={setPremiseSearch}
+                placeholder="Search premises, address, owner…"
+              />
+              <TerritoryFilterSelect
+                value={premiseTerritoryFilter}
+                onChange={setPremiseTerritoryFilter}
+                territories={territories}
+              />
+            </div>
+          )}
+
           {premises.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-dimmed)' }}>
               <Building2 size={36} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
@@ -328,9 +361,11 @@ export default function PremisesRegistration({
                 Register First Premises
               </button>
             </div>
+          ) : filteredPremises.length === 0 ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-dimmed)', padding: '2rem 1rem', fontSize: '0.85rem' }}>No premises match your search or territory filter.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {premises.map((p) => (
+              {filteredPremises.map((p) => (
                 <div
                   key={p.id}
                   role="button"

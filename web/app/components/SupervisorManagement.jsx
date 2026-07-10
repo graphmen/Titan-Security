@@ -16,6 +16,8 @@ import {
   Send,
 } from 'lucide-react';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
+import { matchesSearch } from '../../lib/listFilters';
 import { handleWhatsAppDeliveryResult } from '../../lib/whatsappClient';
 
 const SUPERVISOR_ROLES = ['Area Supervisor', 'Operations Supervisor', 'Regional Manager', 'Night Supervisor'];
@@ -52,6 +54,9 @@ export default function SupervisorManagement({ tenantId, territories = [], super
   const [waSupervisorId, setWaSupervisorId] = useState('');
   const [waGuardId, setWaGuardId] = useState('');
   const [waMessage, setWaMessage] = useState('');
+  const [territorySearch, setTerritorySearch] = useState('');
+  const [supervisorSearch, setSupervisorSearch] = useState('');
+  const [supervisorTerritoryFilter, setSupervisorTerritoryFilter] = useState('');
 
   const postAction = async (action, data) => {
     setSaving(true);
@@ -111,6 +116,29 @@ export default function SupervisorManagement({ tenantId, territories = [], super
       (g) => g.territoryId === territoryId || (g.assignedPremiseIds || []).some((id) => pids.includes(id))
     );
   };
+
+  const filteredTerritories = territories.filter((t) =>
+    matchesSearch(t, territorySearch, (item) => [
+      item.name,
+      item.city,
+      item.description,
+      ...(item.suburbs || []).map((s) => s.name),
+    ])
+  );
+
+  const filteredSupervisors = supervisors.filter((s) => {
+    if (supervisorTerritoryFilter && !(s.assignedTerritoryIds || []).includes(supervisorTerritoryFilter)) {
+      return false;
+    }
+    return matchesSearch(s, supervisorSearch, (item) => [
+      item.fullName,
+      item.employeeNumber,
+      item.phone,
+      item.email,
+      item.role,
+      ...(item.assignedTerritoryIds || []).map(territoryName),
+    ]);
+  });
 
   const addSuburbToForm = () => {
     const name = territoryForm.suburbInput.trim();
@@ -350,6 +378,16 @@ export default function SupervisorManagement({ tenantId, territories = [], super
             </div>
           )}
 
+          {(territories.length > 0 || territorySearch) && (
+            <div className="list-filter-row">
+              <ListSearchBar
+                value={territorySearch}
+                onChange={setTerritorySearch}
+                placeholder="Search territories, city, suburbs…"
+              />
+            </div>
+          )}
+
           {/* Territory cards grid */}
           {territories.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: 'var(--text-dimmed)' }}>
@@ -361,9 +399,11 @@ export default function SupervisorManagement({ tenantId, territories = [], super
                 <Plus size={14} /> Create First Territory
               </button>
             </div>
+          ) : filteredTerritories.length === 0 ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-dimmed)', padding: '2rem' }}>No territories match your search.</p>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-              {territories.map((t) => {
+              {filteredTerritories.map((t) => {
                 const tPremises = premisesForTerritory(t.id);
                 const tGuards = guardsForTerritory(t.id);
                 const tSupervisors = supervisors.filter((s) => (s.assignedTerritoryIds || []).includes(t.id));
@@ -509,6 +549,22 @@ export default function SupervisorManagement({ tenantId, territories = [], super
             </div>
           )}
 
+          {(supervisors.length > 0 || supervisorSearch || supervisorTerritoryFilter) && (
+            <div className="list-filter-row">
+              <ListSearchBar
+                value={supervisorSearch}
+                onChange={setSupervisorSearch}
+                placeholder="Search supervisors by name, phone, role…"
+              />
+              <TerritoryFilterSelect
+                value={supervisorTerritoryFilter}
+                onChange={setSupervisorTerritoryFilter}
+                territories={territories}
+                label="Filter by territory"
+              />
+            </div>
+          )}
+
           {supervisors.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: 'var(--text-dimmed)' }}>
               <div style={{ background: '#dbeafe', width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
@@ -519,9 +575,11 @@ export default function SupervisorManagement({ tenantId, territories = [], super
                 <Plus size={14} /> Add First Supervisor
               </button>
             </div>
+          ) : filteredSupervisors.length === 0 ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-dimmed)', padding: '2rem' }}>No supervisors match your search or territory filter.</p>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-              {supervisors.map((s) => (
+              {filteredSupervisors.map((s) => (
                 <article key={s.id} className="glass-card" style={{ padding: '1.1rem 1.15rem', border: editingSupervisorId === s.id ? '2px solid #2563eb' : '1px solid var(--border-light)', background: editingSupervisorId === s.id ? '#eff6ff' : '#fff' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
                     <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>

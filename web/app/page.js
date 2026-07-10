@@ -1072,8 +1072,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Footer branding */}
-        <footer style={{ padding: '1.25rem 0', textAlign: 'center', color: 'var(--text-dimmed)', fontSize: '0.725rem', borderTop: '1px solid var(--border-light)', marginTop: '2.5rem' }}>
+        <footer className="app-footer">
           Titan Protection Operations Hub &bull; Built to Protect &bull; Developed by Arch Luviah Technologies &copy; 2026.
         </footer>
       </div>

@@ -1,0 +1,34 @@
+---
+description: Keep Titan Protection in sync with GitHub and Vercel
+alwaysApply: true
+---
+
+# GitHub sync (required)
+
+This project is live on **GitHub** (`graphmen/Titan-Security`) and **Vercel** (auto-deploys from `main`).
+
+After completing meaningful code changes:
+
+1. **Commit** with a clear message (only when the user asked for work, or they expect delivery).
+2. **Push** to `origin main` so Vercel redeploys.
+
+## Never commit
+
+- `web/.env.local`, any `.env` with real secrets, API tokens, or database passwords
+- `node_modules/`, `web/.next/`, `mobile/dist/`, build artifacts
+
+## Push on this machine
+
+HTTPS push may fail with SSL errors on the corporate network. Use:
+
+```powershell
+.\scripts\git-push.ps1
+```
+
+Or set `$env:GIT_SSL_CAINFO` to `.git\ssl-ca-bundle.pem` (created by the script) before `git push`.
+
+## Remote
+
+- **Repo:** https://github.com/graphmen/Titan-Security
+- **Branch:** `main`
+- **Vercel root directory:** `web`

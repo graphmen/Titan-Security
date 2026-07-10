@@ -7,18 +7,13 @@ import {
   ChevronLeft,
   Volume2,
   VolumeX,
-  Radio,
   MapPin,
   Clock,
   FileWarning,
-  Download,
   RefreshCw,
   Bell,
-  Database,
-  Sliders,
   Activity,
   Check,
-  MessageCircle,
 } from 'lucide-react';
 
 const PANELS = {
@@ -27,8 +22,6 @@ const PANELS = {
   gps: { title: 'GPS & Geofencing', subtitle: 'Clock-in radius and site boundary rules' },
   patrol: { title: 'Patrol Monitoring', subtitle: 'Movement checks for guards on active shifts' },
   compliance: { title: 'License Compliance', subtitle: 'PSIRA expiry warnings for supervisors' },
-  whatsapp: { title: 'WhatsApp Messaging', subtitle: 'Guard PINs, shifts, and supervisor communications' },
-  server: { title: 'Server & Data', subtitle: 'Connection status and backup to server' },
 };
 
 function MenuRow({ icon: Icon, label, hint, value, onClick }) {
@@ -90,15 +83,9 @@ function SelectSetting({ label, hint, value, options, onChange, disabled, suffix
 
 export default function SystemSettings({
   systemSettings = {},
-  whatsappStatus = {},
   dataSource,
   stats = {},
   onUpdateSettings,
-  onSyncToServer,
-  onNavigateTab,
-  syncing = false,
-  syncMessage,
-  syncError,
 }) {
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState('menu');
@@ -136,11 +123,6 @@ export default function SystemSettings({
       document.removeEventListener('keydown', onEsc);
     };
   }, [open]);
-
-  const goMaster = () => {
-    close();
-    onNavigateTab?.('master');
-  };
 
   const renderPanelBody = () => {
     switch (panel) {
@@ -218,65 +200,6 @@ export default function SystemSettings({
             </div>
           </div>
         );
-      case 'whatsapp':
-        return (
-          <div className="sys-settings-panel-body">
-            <div className={`sys-settings-status-banner ${whatsappStatus.configured ? 'is-connected' : 'is-demo'}`}>
-              <MessageCircle size={14} />
-              <div>
-                <strong>{whatsappStatus.configured ? whatsappStatus.label : 'Manual WhatsApp (wa.me)'}</strong>
-                <p>
-                  {whatsappStatus.configured
-                    ? 'PINs, shift assignments, and supervisor messages send automatically when guards are registered or shifts are scheduled.'
-                    : 'Messages open in WhatsApp with text pre-filled. Tap Send to deliver. Add API keys below for fully automatic delivery.'}
-                </p>
-              </div>
-            </div>
-            <div className="sys-settings-info-card">
-              <MessageCircle size={14} />
-              <span>
-                Add to <code>web/.env.local</code>: WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_CLOUD_TOKEN from Meta Business → WhatsApp → API Setup. Restart npm run dev after saving.
-              </span>
-            </div>
-            <ul style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.55, paddingLeft: '1rem', margin: 0 }}>
-              <li>Guard registration → login PIN</li>
-              <li>Shift create/update → assignment details</li>
-              <li>Supervisor tab → custom instructions</li>
-            </ul>
-          </div>
-        );
-      case 'server':
-        return (
-          <div className="sys-settings-panel-body">
-            <div className={`sys-settings-status-banner ${connected ? 'is-connected' : 'is-demo'}`}>
-              <Radio size={14} />
-              <div>
-                <strong>{connected ? 'Server connected' : 'Demo mode'}</strong>
-                <p>
-                  {connected
-                    ? 'Guards, premises, territories, shifts, and settings are stored on the server.'
-                    : 'Data is in memory only until you save to the server.'}
-                </p>
-              </div>
-            </div>
-            <div className="sys-settings-stats-grid">
-              <div><span>{stats.guards ?? 0}</span><small>Guards</small></div>
-              <div><span>{stats.premises ?? 0}</span><small>Sites</small></div>
-              <div><span>{stats.territories ?? 0}</span><small>Territories</small></div>
-              <div><span>{stats.onDuty ?? 0}</span><small>On duty</small></div>
-            </div>
-            <button
-              type="button"
-              className="btn-primary sys-settings-sync-btn"
-              onClick={onSyncToServer}
-              disabled={syncing}
-            >
-              {syncing ? <><RefreshCw size={14} className="spin" /> Saving…</> : <><Download size={14} /> Save all data to server</>}
-            </button>
-            {syncMessage && <p className="sys-settings-sync-msg is-ok">{syncMessage}</p>}
-            {syncError && <p className="sys-settings-sync-msg is-error">{syncError}</p>}
-          </div>
-        );
       default:
         return (
           <>
@@ -310,27 +233,6 @@ export default function SystemSettings({
                 label="License Compliance"
                 hint={`${systemSettings.licenseExpiryWarningDays ?? 60} day warning`}
                 onClick={() => setPanel('compliance')}
-              />
-              <MenuRow
-                icon={MessageCircle}
-                label="WhatsApp Messaging"
-                hint={whatsappStatus.configured ? 'Auto-send on' : 'Manual wa.me'}
-                onClick={() => setPanel('whatsapp')}
-              />
-            </div>
-            <div className="sys-settings-divider" />
-            <div className="sys-settings-menu-group">
-              <MenuRow
-                icon={Database}
-                label="Server & Data"
-                hint={connected ? 'Connected' : 'Demo mode'}
-                onClick={() => setPanel('server')}
-              />
-              <MenuRow
-                icon={Sliders}
-                label="Master Admin"
-                hint="Checklists, audits, configuration"
-                onClick={goMaster}
               />
             </div>
           </>

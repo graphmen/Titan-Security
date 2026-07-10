@@ -484,7 +484,6 @@ export default function DashboardPage() {
 
         <SystemSettings
           systemSettings={systemSettings}
-          whatsappStatus={state.whatsappStatus || { configured: false, provider: 'manual', label: 'Manual (wa.me links)' }}
           dataSource={state.dataSource}
           stats={{
             guards: curGuards.length,
@@ -494,11 +493,6 @@ export default function DashboardPage() {
             activeAlerts: activeAlertCount,
           }}
           onUpdateSettings={handleUpdateSystemSettings}
-          onSyncToServer={handleSyncToServer}
-          onNavigateTab={setActiveTab}
-          syncing={syncing}
-          syncMessage={syncMessage}
-          syncError={syncError}
         />
       </aside>
 

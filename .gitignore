@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets (never commit)
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Next.js
+web/.next/
+web/out/
+
+# Mobile / Vite
+mobile/dist/
+mobile/dist-ssr/
+
+# Android build artifacts
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/local.properties
+mobile/android/.idea/
+mobile/android/capacitor-cordova-android-plugins/
+
+# Vercel
+.vercel/
+web/.vercel/
+
+# Logs & debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.sw?
+
+# Local-only business files at repo root (not app source)
+/*.pdf
+/*.docx
+/*.jpeg
+/*.jpg
+/*.png
+!web/public/**

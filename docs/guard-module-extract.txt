@@ -1,0 +1,151 @@
+Comprehensive  Guard Management Module
+Great project! Based on what you've described (GPS geofencing clock-in, NFC patrol checkpoints, 45-minute movement alerts), here's a thorough breakdown of everything you can manage, organized by domain:
+1. 👤 PERSONNEL / HR MANAGEMENT
+Guard Profile — Full name, photo, ID number, contact details, next of kin
+Document Management — Copies of ID, security license, PSIRA (or equivalent regulatory body) registration, medical certificate
+License & Certification Expiry Tracking — Alert management when a guard's license is about to expire
+Guard Ranking/Grade — e.g., Grade A, B, C, PSIRA grades, or internal ranks
+Uniform Size & Issuance
+Banking Details (for payroll)
+Employment Status — Active, Suspended, Resigned, Terminated
+Guard Rating/Score — Based on performance metrics
+2. 📅 SHIFT & SCHEDULING MANAGEMENT
+Shift Templates — e.g., 06:00–18:00 (Day), 18:00–06:00 (Night), 8-hour, 12-hour
+Roster/Schedule Builder — Assign guards to sites × shifts × dates (weekly/monthly view)
+Shift Swapping — Allow guards to request swaps, with supervisor approval
+Overtime Management — Track hours beyond contracted time
+Relief/Cover Guards — Auto-suggest available guards when someone is absent
+Shift Conflict Detection — Prevent double-booking a guard
+Rest Period Enforcement — Legal minimum rest between shifts (e.g., 12 hours between shifts)
+On-Call Roster
+Holiday/Public Holiday Scheduling
+3. ⏱️ ATTENDANCE & TIME MANAGEMENT
+(You already have some of this — here's the full picture)
+GPS Geofence Clock-In/Clock-Out ✅ (you have this)
+Late Arrival Detection — Compare actual clock-in vs. scheduled shift start
+Early Departure Detection
+Absence Tracking — No-show, sick leave, AWOL
+Break Logging — Meal breaks, rest breaks with GPS verification
+Actual vs. Scheduled Hours Report
+Attendance Scorecard — Per guard, per site, per period
+Timesheet Generation — For payroll processing
+4. 📍 PATROL & ROUTE MANAGEMENT
+(You have NFC + GPS — expand on it)
+Patrol Route Design — Define ordered sequence of NFC checkpoints per site
+Route Compliance — Did the guard visit checkpoints in the correct order?
+Checkpoint Timestamps ✅ (you have this)
+Dwell Time at Checkpoint — How long the guard stayed at each NFC point
+Missed Checkpoint Alerts — If a checkpoint was skipped or missed within a time window
+Patrol Completion % — e.g., "Guard completed 8/10 checkpoints"
+Random Checkpoint Insertion — System adds a surprise checkpoint to prevent routine complacency
+Patrol Speed/Gap Analysis — Time between checkpoints (too fast = didn't inspect, too slow = sleeping)
+Movement Trail/GPS Track — Full breadcrumb trail of the guard's movement during shift
+45-Minute Movement Reminder ✅ (you have this)
+Geofence Violation Alerts — If guard leaves the premise boundary during shift
+5. 🚨 INCIDENT & EVENT REPORTING
+Incident Logging — Guard reports incidents (theft, trespassing, fire, vandalism) from the mobile app
+Incident Categories — Predefined types with severity levels
+Photo/Video/Audio Evidence Attachment
+GPS-Tagged Incidents — Where exactly the incident was reported
+Timestamped Incident Reports
+Incident Escalation Workflow — Guard → Supervisor → Client → Police
+Visitor/Contractor Log — Guard logs people entering/exiting the premise
+Vehicle Log — Log vehicles entering/exiting
+Key Register — Track who has which keys and when
+Daily Occurrence Book (DOB/OB) — Digital version of the physical logbook
+SOP Checklist Per Shift — e.g., "Gates locked at 22:00", "Alarm armed"
+6. 📊 PERFORMANCE & COMPLIANCE
+Guard Scorecard/Dashboard — Composite score from:
+Attendance punctuality
+Patrol completion %
+Incident report quality
+Response time to alerts
+No geofence violations
+Guard Leaderboard/Ranking
+SLA Compliance per Client Site — Did we meet the client's contract requirements?
+Audit Trail — Every action logged (who, what, when)
+Non-Compliance Flags — Missed patrols, sleeping on duty (no movement), leaving geofence
+Sleeping on Duty Detection — If GPS shows no movement for extended period + no NFC scans
+7. 🏢 CLIENT & SITE/PREMISES MANAGEMENT
+Client Profiles — Company name, contacts, contract details
+Site/Premise Profiles — Address, GPS coordinates, geofence polygon/radius
+Site-Specific SOPs — Each client site has different rules
+NFC Checkpoint Management — Add/remove/relocate checkpoints per site with their GPS buffer zones
+Geofence Management — Draw buffer zones on a map per site
+Site Access Rules — Who is allowed at which site
+Contract Management — Number of guards required per site, per shift
+Client Portal/Dashboard — Let clients see their site's guard activity in real-time
+Site Risk Assessment Records
+8. 📱 MOBILE APP FEATURES (Guard-Side)
+Real-Time GPS Tracking ✅
+NFC Checkpoint Scanning ✅
+45-Minute Beep/Alert ✅
+Panic/SOS Button — Sends immediate alert with GPS location to control room
+Duress Code — Discrete alert (e.g., fake PIN that silently triggers alarm)
+Push Notifications — Shift reminders, route changes, emergency alerts
+Offline Mode — Cache NFC scans and GPS data when there's no network, sync when online
+Battery Monitoring — Alert management if guard's phone battery is critically low
+Guard Messaging — Chat between guard and supervisor/control room
+Photo Capture for Evidence
+Digital OB Entry
+Weather Alerts — Relevant for outdoor guards
+Lone Worker Safety — If guard doesn't respond to check-in, escalate
+9. 🔔 ALERTS & NOTIFICATIONS ENGINE
+Late Clock-In Alert → Supervisor
+Missed NFC Checkpoint Alert → Supervisor
+Geofence Exit Alert → Control Room
+No Movement Alert (possible sleeping) → Supervisor
+Low Battery Alert → Supervisor
+Panic/SOS Alert → Control Room + Emergency Contacts
+Incident Reported Alert → Management
+License Expiry Alert → HR
+Shift Starting Soon Reminder → Guard
+Missed 45-Min Check Alert → Supervisor
+10. 🎓 TRAINING & CERTIFICATIONS
+Training Records — First aid, fire fighting, firearms, customer service
+Certification Expiry Dates — With auto-reminders
+Training Assignment — Assign mandatory training to guards
+Site-Specific Induction — Guard must complete before being assigned to a new site
+Drill Records — Fire drills, evacuation drills
+11. 🔫 EQUIPMENT & ASSET MANAGEMENT
+Issued Equipment Tracking — Radio, flashlight, baton, pepper spray, firearm, uniform
+Equipment Condition Reporting
+Return/Handover Logging — Especially at shift change
+Firearm Register (if applicable) — Serial numbers, ammunition count
+NFC Tag Inventory — Track physical NFC tags deployed at sites
+Vehicle Assignment — If guards use company vehicles
+12. 💰 PAYROLL INTEGRATION
+Hours Worked Calculation — From GPS clock-in/out data
+Overtime Calculation
+Night Shift Allowance
+Public Holiday Pay Multipliers
+Deductions — Absences, late penalties
+Payslip Generation
+Export to Payroll Systems — CSV/API integration
+13. 📈 REPORTING & ANALYTICS DASHBOARDS
+Daily/Weekly/Monthly Attendance Reports
+Patrol Compliance Reports per site
+Incident Frequency & Trends per site
+Guard Performance Reports
+Client SLA Reports
+Site Activity Heatmaps — Where guards spend most time
+GPS Movement Replay — Playback a guard's entire shift route on a map
+Financial Reports — Cost per site, overtime costs
+Compliance Audit Reports
+14. 🔐 SYSTEM ADMIN & SECURITY
+Role-Based Access Control — Admin, Manager, Supervisor, Control Room Operator, Guard, Client
+Multi-Factor Authentication
+Data Encryption — GPS data, personal info
+Audit Logs — Who changed what in the system
+POPIA/GDPR Compliance — Guard personal data protection
+API Integrations — With client systems, payroll, alarm systems
+🗺️ Recommended Architecture Mapping
+Based on your existing GPS + NFC foundation:
+💡 Pro Tips for Your Build
+Offline-first mobile app — Guards often work in basements or areas with poor signal. Cache NFC scans + GPS locally, sync when online
+Anti-fraud measures — Prevent GPS spoofing (mock location detection), prevent NFC tag cloning, require biometric (fingerprint/face) on clock-in
+Battery optimization — Continuous GPS drains battery fast. Use balanced accuracy modes and adaptive intervals
+Geofence shapes — Use polygons (not just circles) for complex premise shapes
+Timestamp integrity — Use server-side timestamps, not device time (guards can change phone clocks)
+Tamper detection — If the app is closed or phone is turned off mid-shift, flag it immediately
+---TABLES---

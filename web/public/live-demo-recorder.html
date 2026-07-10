@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Titan Protection — Live Demo Recorder</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0b1f17;
+      color: #fff;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .top-bar {
+      background: #122820;
+      border-bottom: 2px solid #1b4332;
+      padding: 0.6rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .top-bar h1 { font-size: 1rem; color: #95d5b2; font-weight: 700; }
+    .top-bar .rec {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: rgba(239,68,68,0.15); border: 1px solid #ef4444;
+      padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.75rem;
+    }
+    .rec-dot {
+      width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 50% { opacity: 0.3; } }
+    .layout {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 0;
+      min-height: 0;
+    }
+    .panel-label {
+      background: #1b4332;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #d8f3dc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-label a { color: #95d5b2; text-decoration: none; font-size: 0.65rem; }
+    .web-panel, .mobile-panel { display: flex; flex-direction: column; min-height: 0; }
+    .web-panel { border-right: 2px solid #1b4332; }
+    .web-panel iframe { flex: 1; width: 100%; border: none; background: #f4faf6; }
+    .mobile-frame-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f1f17;
+      padding: 0.5rem;
+      min-height: 0;
+    }
+    .phone-shell {
+      width: 100%;
+      max-width: 390px;
+      height: 100%;
+      max-height: 780px;
+      border: 8px solid #2d6a4f;
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(27,67,50,0.4);
+    }
+    .phone-shell iframe { width: 100%; height: 100%; border: none; background: #fff; }
+    .bottom {
+      background: #122820;
+      border-top: 2px solid #1b4332;
+      flex-shrink: 0;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      min-height: 130px;
+    }
+    .scenes {
+      border-right: 1px solid #1b4332;
+      padding: 0.5rem;
+      overflow-y: auto;
+      max-height: 130px;
+    }
+    .scene-btn {
+      display: block; width: 100%; text-align: left;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #d8f3dc; padding: 0.4rem 0.6rem;
+      border-radius: 6px; margin-bottom: 0.3rem;
+      cursor: pointer; font-size: 0.72rem;
+    }
+    .scene-btn.active { background: #1b4332; border-color: #40916c; color: #fff; }
+    .scene-btn:hover { background: rgba(27,67,50,0.5); }
+    .narration-box { padding: 0.75rem 1rem; display: flex; flex-direction: column; justify-content: center; }
+    .narration-box .step { font-size: 0.7rem; color: #40916c; font-weight: 700; margin-bottom: 0.25rem; }
+    .narration-box .text { font-size: 0.9rem; line-height: 1.55; color: rgba(255,255,255,0.9); }
+    .narration-box .action { font-size: 0.75rem; color: #95d5b2; margin-top: 0.4rem; font-style: italic; }
+    .nav-row {
+      display: flex; gap: 0.5rem; margin-top: 0.5rem;
+    }
+    .nav-row button {
+      background: #1b4332; border: 1px solid #40916c; color: #fff;
+      padding: 0.25rem 0.65rem; border-radius: 5px; cursor: pointer; font-size: 0.72rem;
+    }
+    .nav-row button:hover { background: #2d6a4f; }
+    .config {
+      font-size: 0.65rem; color: #7a9485;
+      display: flex; gap: 0.75rem; align-items: center;
+    }
+    .config input {
+      background: #0b1f17; border: 1px solid #1b4332; color: #fff;
+      padding: 0.2rem 0.4rem; border-radius: 4px; width: 130px; font-size: 0.65rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h1>🎬 Titan Protection — Live Side-by-Side Demo Recorder</h1>
+    <div class="config">
+      <label>Web: <input id="webUrl" value="" placeholder="auto" /></label>
+      <label>Mobile: <input id="mobileUrl" value="" placeholder="auto" /></label>
+      <button onclick="reloadFrames()" style="background:#1b4332;border:1px solid #40916c;color:#fff;padding:0.2rem 0.5rem;border-radius:4px;cursor:pointer;font-size:0.65rem">Reload</button>
+    </div>
+    <div class="rec"><span class="rec-dot"></span> Press Win+G to record this window</div>
+  </div>
+
+  <div class="layout">
+    <div class="web-panel">
+      <div class="panel-label">
+        <span>🖥️ Web Command Centre</span>
+        <a id="webLink" href="/" target="_blank">Open ↗</a>
+      </div>
+      <iframe id="webFrame" title="Web Dashboard"></iframe>
+    </div>
+    <div class="mobile-panel">
+      <div class="panel-label">
+        <span>📱 Guard Mobile App</span>
+        <a id="mobileLink" href="#" target="_blank">Open ↗</a>
+      </div>
+      <div class="mobile-frame-wrap">
+        <div class="phone-shell">
+          <iframe id="mobileFrame" title="Mobile App"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="scenes" id="scenes"></div>
+    <div class="narration-box">
+      <div class="step" id="stepLabel">Step 1 of 10</div>
+      <div class="text" id="narrText"></div>
+      <div class="action" id="narrAction"></div>
+      <div class="nav-row">
+        <button onclick="prevScene()">◀ Previous</button>
+        <button onclick="nextScene()">Next ▶</button>
+        <button onclick="toggleAuto()" id="autoBtn">▶ Auto-play</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const scenes = [
+      { title: "1. Introduction", text: "Welcome to Titan Protection — Built to Protect. On the left is the supervisor Command Centre. On the right is the Guard Mobile app. Both sync in real time.", action: "No action needed — introduce both panels." },
+      { title: "2. Command Centre overview", text: "The web dashboard shows compliance rate, checkpoint scans, active visitors, and alerts. The live map tracks guard movement and checkpoint status.", action: "Point to the statistics cards and live map on the web panel." },
+      { title: "3. Patrol — mobile tap", text: "Guards use the Patrol tab to scan NFC checkpoints. Each tap records their location and updates the Command Centre.", action: "On MOBILE: tap Patrol tab → tap NFC Tap on 'Main Gate Entrance'." },
+      { title: "4. Patrol — web update", text: "Within seconds, the web dashboard shows the patrol tap in the Occurrence Book and the checkpoint turns green on the map.", action: "On WEB: point to the new OB entry and updated compliance rate." },
+      { title: "5. SOS emergency", text: "In an emergency, the guard presses Distress SOS. A red overlay confirms the alert was sent.", action: "On MOBILE: tap Distress SOS → show red overlay → Cancel Distress Alarm." },
+      { title: "6. SOS on Command Centre", text: "Supervisors see a Critical Distress Signal banner immediately, with guard name and timestamp. Siren plays if enabled.", action: "On WEB: show the red SOS banner → click Dismiss Alarm." },
+      { title: "7. Incident report", text: "Guards file incidents in the Occurrence Book with category, description, photo, and voice memo.", action: "On MOBILE: Incident OB tab → select category → enter description → Submit." },
+      { title: "8. Visitor check-in", text: "Visitors are registered on mobile and appear instantly on the web visitor log.", action: "On MOBILE: Access tab → Scan QR or fill form → Register. On WEB: show visitor in log." },
+      { title: "9. Checklist audit", text: "Supervisors publish checklist templates in Master Admin. Guards complete them on mobile with progress tracking.", action: "On WEB: Master Admin → show templates. On MOBILE: Checklist tab → Inspect → submit." },
+      { title: "10. Closing", text: "Titan Protection connects supervisors and guards in real time — patrols, emergencies, incidents, and access control. Built to Protect. Thank you.", action: "End recording." },
+    ];
+
+    let current = 0, autoTimer = null, autoOn = false;
+
+    const MOBILE_PORTS = [5173, 5174, 5175, 5176];
+
+    function detectUrls() {
+      const origin = window.location.origin;
+      const web = document.getElementById('webUrl').value.trim() || origin;
+      const mobileInput = document.getElementById('mobileUrl').value.trim();
+      return { web, mobile: mobileInput || null };
+    }
+
+    async function findMobileUrl() {
+      for (const port of MOBILE_PORTS) {
+        const open = await new Promise((resolve) => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => {
+            controller.abort();
+            resolve(false);
+          }, 700);
+          fetch(`http://127.0.0.1:${port}/`, { signal: controller.signal, mode: 'no-cors' })
+            .then(() => { clearTimeout(timer); resolve(true); })
+            .catch(() => { clearTimeout(timer); resolve(false); });
+        });
+        if (open) return `http://localhost:${port}/`;
+      }
+      return 'http://localhost:5173/';
+    }
+
+    async function reloadFrames() {
+      const { web, mobile: mobileInput } = detectUrls();
+      const mobile = mobileInput || await findMobileUrl();
+      if (!mobileInput) document.getElementById('mobileUrl').placeholder = mobile;
+      document.getElementById('webFrame').src = web;
+      document.getElementById('mobileFrame').src = mobile;
+      document.getElementById('webLink').href = web;
+      document.getElementById('mobileLink').href = mobile;
+    }
+
+    function renderScenes() {
+      const el = document.getElementById('scenes');
+      el.innerHTML = scenes.map((s, i) =>
+        `<button class="scene-btn ${i === current ? 'active' : ''}" onclick="goScene(${i})">${s.title}</button>`
+      ).join('');
+    }
+
+    function goScene(n) {
+      current = n;
+      document.getElementById('stepLabel').textContent = `Step ${n + 1} of ${scenes.length} — ${scenes[n].title}`;
+      document.getElementById('narrText').textContent = scenes[n].text;
+      document.getElementById('narrAction').textContent = '👉 Demo: ' + scenes[n].action;
+      renderScenes();
+    }
+
+    function nextScene() { if (current < scenes.length - 1) goScene(current + 1); }
+    function prevScene() { if (current > 0) goScene(current - 1); }
+
+    function toggleAuto() {
+      autoOn = !autoOn;
+      document.getElementById('autoBtn').textContent = autoOn ? '⏸ Pause auto' : '▶ Auto-play';
+      if (autoOn) {
+        autoTimer = setInterval(() => {
+          if (current < scenes.length - 1) nextScene();
+          else { toggleAuto(); }
+        }, 12000);
+      } else {
+        clearInterval(autoTimer);
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight') nextScene();
+      if (e.key === 'ArrowLeft') prevScene();
+      if (e.key === ' ') { e.preventDefault(); toggleAuto(); }
+    });
+
+    reloadFrames();
+    goScene(0);
+  </script>
+</body>
+</html>

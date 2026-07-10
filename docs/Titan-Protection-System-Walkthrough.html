@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Titan Protection — System Walkthrough</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0b1f17;
+      color: #fff;
+      overflow: hidden;
+      height: 100vh;
+    }
+    .deck { height: 100vh; position: relative; }
+    .slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      padding: 3rem 4rem;
+      opacity: 0; transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+      pointer-events: none;
+      text-align: center;
+    }
+    .slide.active { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .slide h1 {
+      font-size: 2.4rem; font-weight: 800;
+      color: #fff; margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+    .slide h2 {
+      font-size: 1.5rem; font-weight: 600;
+      color: #95d5b2; margin-bottom: 1.5rem;
+    }
+    .slide p, .slide li {
+      font-size: 1.15rem; line-height: 1.7;
+      color: rgba(255,255,255,0.88);
+      max-width: 780px;
+    }
+    .slide ul { text-align: left; list-style: none; }
+    .slide ul li { padding: 0.4rem 0; padding-left: 1.5rem; position: relative; }
+    .slide ul li::before {
+      content: '▸'; position: absolute; left: 0;
+      color: #40916c; font-weight: bold;
+    }
+    .tagline {
+      font-size: 0.85rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: #40916c;
+      margin-top: 1rem;
+    }
+    .logo { height: 80px; margin-bottom: 1.5rem; border-radius: 8px; }
+    .badge {
+      display: inline-block; background: #1b4332;
+      border: 1px solid #40916c; color: #d8f3dc;
+      padding: 0.35rem 0.85rem; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 600; margin: 0.25rem;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; max-width: 700px; }
+    .card {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px; padding: 1.25rem; text-align: left;
+    }
+    .card h3 { color: #95d5b2; font-size: 1rem; margin-bottom: 0.5rem; }
+    .card p { font-size: 0.9rem; color: rgba(255,255,255,0.75); }
+    .narration {
+      position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.75); border: 1px solid #1b4332;
+      border-radius: 10px; padding: 0.75rem 1.25rem;
+      max-width: 820px; width: 90%; font-size: 0.95rem;
+      color: #d8f3dc; line-height: 1.5; text-align: center;
+    }
+    .controls {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(11,31,23,0.95); border-top: 1px solid #1b4332;
+      padding: 0.65rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .progress { flex: 1; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin: 0 1rem; overflow: hidden; }
+    .progress-bar { height: 100%; background: #40916c; width: 0%; transition: width 0.3s; }
+    .btn {
+      background: #1b4332; border: 1px solid #40916c; color: #fff;
+      padding: 0.4rem 0.9rem; border-radius: 6px; cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .btn:hover { background: #2d6a4f; }
+    .timer { font-size: 0.8rem; color: #95d5b2; min-width: 60px; }
+    .platform { font-size: 3rem; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck"></div>
+  <div class="narration" id="narration"></div>
+  <div class="controls">
+    <button class="btn" id="prevBtn">◀ Prev</button>
+    <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+    <span class="timer" id="timer">0:00</span>
+    <button class="btn" id="nextBtn">Next ▶</button>
+    <button class="btn" id="pauseBtn">⏸ Pause</button>
+  </div>
+
+  <script>
+    const slides = [
+      {
+        html: `<img class="logo" src="../web/public/emblem-dark.jpg" alt="Titan Protection" onerror="this.style.display='none'" />
+               <h1>Titan Protection</h1>
+               <h2>Security Operations Platform</h2>
+               <p class="tagline">Built to Protect</p>
+               <div style="margin-top:1.5rem"><span class="badge">Web Command Centre</span><span class="badge">Guard Mobile App</span><span class="badge">Real-Time Sync</span></div>`,
+        narration: "Welcome to Titan Protection. This video explains how supervisors and guards use the web Command Centre and mobile app together to manage security operations in real time."
+      },
+      {
+        html: `<h1>System Overview</h1>
+               <div class="grid">
+                 <div class="card"><h3>🖥️ Web Dashboard</h3><p>Command Centre for supervisors — live monitoring, SOS response, visitor logs, and administration.</p></div>
+                 <div class="card"><h3>📱 Mobile App</h3><p>Field tool for guards — patrol taps, emergency SOS, incident reports, checklists, and access control.</p></div>
+                 <div class="card"><h3>🔄 Real-Time Sync</h3><p>Actions on mobile appear on the web dashboard within seconds. Works offline with automatic sync.</p></div>
+                 <div class="card"><h3>🏢 Multi-Tenant</h3><p>Support multiple security providers and client sites from one platform.</p></div>
+               </div>`,
+        narration: "The platform has two main parts: a web dashboard for supervisors and a mobile app for guards. They share one backend and sync in real time. Multiple security companies can operate as separate tenants."
+      },
+      {
+        html: `<div class="platform">🖥️</div>
+               <h1>Web — Command Centre</h1>
+               <ul>
+                 <li>Compliance rate and patrol statistics at a glance</li>
+                 <li>Live Guard Geofence Tracker with animated map</li>
+                 <li>Occurrence Book feed for all security events</li>
+                 <li>Critical SOS alert banner with audible siren</li>
+                 <li>Visitor check-in desk and live guest log</li>
+               </ul>`,
+        narration: "The Command Centre is the supervisor's main screen. You see compliance rates, a live patrol map, and the Occurrence Book — a digital log of every patrol tap, incident, and SOS alert. When a guard triggers SOS, a red banner appears here immediately."
+      },
+      {
+        html: `<h1>Occurrence Book & SOS</h1>
+               <ul>
+                 <li><strong>Patrol Tap</strong> — checkpoint NFC scan recorded</li>
+                 <li><strong>SOS Panic Alarm</strong> — emergency distress signal</li>
+                 <li><strong>Intrusion Alert</strong> — guard-reported incident</li>
+                 <li><strong>Checklist Submission</strong> — completed audit</li>
+               </ul>
+               <p style="margin-top:1rem">Supervisors update incident status: Unassigned → Investigating → Resolved</p>`,
+        narration: "The Occurrence Book captures every event. Patrol taps confirm guards reached their checkpoints. SOS alerts are flagged as critical. Supervisors can attach photos, play voice memos, and update each incident's status as they investigate."
+      },
+      {
+        html: `<h1>Web — Master Administration</h1>
+               <ul>
+                 <li>Build custom checklist templates with Yes/No and text questions</li>
+                 <li>Onboard new security providers as tenants</li>
+                 <li>Review completed guard audit submissions</li>
+                 <li>Switch between tenants from the sidebar</li>
+               </ul>`,
+        narration: "Administrators use Master Admin to create safety checklist templates, onboard new security companies, and review completed audits. Switch tenants from the sidebar to manage different client sites."
+      },
+      {
+        html: `<div class="platform">📱</div>
+               <h1>Mobile — Patrol Tab</h1>
+               <ul>
+                 <li>Radar map showing nearby checkpoints</li>
+                 <li>Tap NFC Tap at each checkpoint to record patrol</li>
+                 <li>Green Tap OK confirms successful scan</li>
+                 <li>Command Centre updates within seconds</li>
+               </ul>`,
+        narration: "On the mobile Patrol tab, guards see a radar map and list of checkpoints. At each location, they tap NFC Tap to confirm their patrol. The button turns green and the Command Centre map updates automatically."
+      },
+      {
+        html: `<h1>Mobile — Distress SOS</h1>
+               <ul>
+                 <li>Press Distress SOS in the guard profile bar</li>
+                 <li>Full-screen red emergency overlay confirms alert sent</li>
+                 <li>Command Centre receives instant notification with sound</li>
+                 <li>Cancel Distress Alarm when the situation is resolved</li>
+               </ul>`,
+        narration: "In an emergency, the guard presses Distress SOS. The screen turns red confirming the alert was sent. Supervisors see it immediately on the web dashboard with an audible siren. Cancel the alarm once help arrives."
+      },
+      {
+        html: `<h1>Mobile — Incidents, Checklists & Access</h1>
+               <div class="grid">
+                 <div class="card"><h3>⚠️ Incident OB</h3><p>Report intrusions, hazards, or observations with photo and voice attachments.</p></div>
+                 <div class="card"><h3>✅ Checklists</h3><p>Complete compliance audits with progress tracking and submit to supervisors.</p></div>
+                 <div class="card"><h3>👥 Access Desk</h3><p>Scan visitor QR codes or manually register guests and vehicle plates.</p></div>
+                 <div class="card"><h3>📡 Offline Mode</h3><p>Works without internet. All actions queue and sync when connection returns.</p></div>
+               </div>`,
+        narration: "Guards can file incident reports with photos and voice memos, complete safety checklists, and register visitors at the access desk. If connectivity drops, the app saves everything locally and syncs automatically when back online."
+      },
+      {
+        html: `<h1>Daily Workflow</h1>
+               <ul>
+                 <li>Supervisor opens Command Centre and monitors live data</li>
+                 <li>Guard performs patrol route — tapping each checkpoint</li>
+                 <li>Incidents and visitors logged throughout the shift</li>
+                 <li>SOS available at all times for emergencies</li>
+                 <li>End-of-shift checklists completed on mobile</li>
+               </ul>`,
+        narration: "A typical shift: the supervisor monitors from the Command Centre while guards patrol, report incidents, check in visitors, and complete audits. SOS is always one tap away for emergencies."
+      },
+      {
+        html: `<img class="logo" src="../web/public/emblem-dark.jpg" alt="Titan Protection" onerror="this.style.display='none'" />
+               <h1>Thank You</h1>
+               <h2>Titan Protection — Built to Protect</h2>
+               <p style="margin-top:1rem">Web: Command Centre &nbsp;|&nbsp; Mobile: Guard Field App</p>
+               <p class="tagline" style="margin-top:1.5rem">Arch Luviah Technologies © 2026</p>`,
+        narration: "That concludes the Titan Protection system overview. For detailed instructions, refer to the User Manual. Built to Protect."
+      }
+    ];
+
+    let current = 0, paused = false, elapsed = 0, interval;
+    const SLIDE_DURATION = 8;
+
+    const deck = document.getElementById('deck');
+    const narration = document.getElementById('narration');
+    const progressBar = document.getElementById('progressBar');
+    const timer = document.getElementById('timer');
+
+    slides.forEach((s, i) => {
+      const div = document.createElement('div');
+      div.className = 'slide' + (i === 0 ? ' active' : '');
+      div.innerHTML = s.html;
+      deck.appendChild(div);
+    });
+
+    function showSlide(n) {
+      document.querySelectorAll('.slide').forEach((s, i) => s.classList.toggle('active', i === n));
+      narration.textContent = '🎙️ ' + slides[n].narration;
+      progressBar.style.width = ((n + 1) / slides.length * 100) + '%';
+      current = n;
+      elapsed = 0;
+    }
+
+    function tick() {
+      if (paused) return;
+      elapsed++;
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      timer.textContent = mins + ':' + String(secs).padStart(2, '0');
+      if (elapsed > 0 && elapsed % SLIDE_DURATION === 0 && current < slides.length - 1) {
+        showSlide(current + 1);
+      }
+    }
+
+    document.getElementById('nextBtn').onclick = () => { if (current < slides.length - 1) showSlide(current + 1); };
+    document.getElementById('prevBtn').onclick = () => { if (current > 0) showSlide(current - 1); };
+    document.getElementById('pauseBtn').onclick = () => {
+      paused = !paused;
+      document.getElementById('pauseBtn').textContent = paused ? '▶ Play' : '⏸ Pause';
+    };
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); document.getElementById('nextBtn').click(); }
+      if (e.key === 'ArrowLeft') document.getElementById('prevBtn').click();
+      if (e.key === 'p') document.getElementById('pauseBtn').click();
+    });
+
+    showSlide(0);
+    interval = setInterval(tick, 1000);
+  </script>
+</body>
+</html>

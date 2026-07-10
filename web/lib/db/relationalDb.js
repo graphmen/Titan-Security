@@ -43,7 +43,7 @@ export async function countGuardsInDb() {
   return count || 0;
 }
 
-/** Load full app state from relational tables. */
+/** Load full app state from relational tables (parallel queries for faster serverless cold starts). */
 export async function loadAppStateFromRelationalDb() {
   const state = {
     activeTenantId: TITAN_TENANT_ID,
@@ -67,9 +67,70 @@ export async function loadAppStateFromRelationalDb() {
     activeSosAlerts: {},
   };
 
-  const { data: tenants, error: tErr } = await supabase.from('tenants').select('*');
-  if (tErr) throw tErr;
-  (tenants || []).forEach((r) => {
+  const [
+    tenantsRes,
+    settingsRes,
+    territoriesRes,
+    suburbsRes,
+    supRowsRes,
+    supTerRes,
+    premRowsRes,
+    placeRowsRes,
+    guardRowsRes,
+    gpRowsRes,
+    shiftRowsRes,
+    attRowsRes,
+    cpRowsRes,
+    alertRowsRes,
+    swapRowsRes,
+    waRowsRes,
+    obRowsRes,
+    visRowsRes,
+    tplRowsRes,
+    subRowsRes,
+    sosRowsRes,
+  ] = await Promise.all([
+    supabase.from('tenants').select('*'),
+    supabase.from('app_settings').select('key, value').in('key', ['active_tenant_id', 'system_settings']),
+    supabase.from('territories').select('*'),
+    supabase.from('territory_suburbs').select('*'),
+    supabase.from('supervisors').select('*'),
+    supabase.from('supervisor_territories').select('*'),
+    supabase.from('premises').select('*'),
+    supabase.from('places').select('*'),
+    supabase.from('guards').select('*'),
+    supabase.from('guard_premises').select('*'),
+    supabase.from('shifts').select('*'),
+    supabase.from('guard_attendance').select('*'),
+    supabase.from('checkpoints').select('*'),
+    supabase.from('guard_alerts').select('*'),
+    supabase.from('shift_swap_requests').select('*'),
+    supabase.from('whatsapp_outbox').select('*'),
+    supabase.from('occurrence_book').select('*').order('timestamp', { ascending: false }),
+    supabase.from('visitors').select('*').order('check_in_time', { ascending: false }),
+    supabase.from('checklist_templates').select('*'),
+    supabase.from('checklist_submissions').select('*').order('timestamp', { ascending: false }),
+    supabase.from('active_sos_alerts').select('*'),
+  ]);
+
+  if (tenantsRes.error) throw tenantsRes.error;
+  if (territoriesRes.error) throw territoriesRes.error;
+  if (suburbsRes.error) throw suburbsRes.error;
+  if (supRowsRes.error) throw supRowsRes.error;
+  if (supTerRes.error) throw supTerRes.error;
+  if (premRowsRes.error) throw premRowsRes.error;
+  if (placeRowsRes.error) throw placeRowsRes.error;
+  if (guardRowsRes.error) throw guardRowsRes.error;
+  if (gpRowsRes.error) throw gpRowsRes.error;
+  if (shiftRowsRes.error) throw shiftRowsRes.error;
+  if (attRowsRes.error) throw attRowsRes.error;
+  if (cpRowsRes.error) throw cpRowsRes.error;
+  if (alertRowsRes.error) throw alertRowsRes.error;
+  if (swapRowsRes.error) throw swapRowsRes.error;
+  if (waRowsRes.error) throw waRowsRes.error;
+
+  const tenants = tenantsRes.data || [];
+  tenants.forEach((r) => {
     state.tenants[r.id] = rowToTenant(r);
     state.territories[r.id] = [];
     state.supervisors[r.id] = [];
@@ -84,12 +145,7 @@ export async function loadAppStateFromRelationalDb() {
     state.checklistTemplates[r.id] = [];
   });
 
-  const { data: settings } = await supabase
-    .from('app_settings')
-    .select('key, value')
-    .in('key', ['active_tenant_id', 'system_settings']);
-
-  (settings || []).forEach((row) => {
+  (settingsRes.data || []).forEach((row) => {
     if (row.key === 'system_settings' && row.value) {
       state.systemSettings =
         typeof row.value === 'object' ? { ...DEFAULT_SYSTEM_SETTINGS, ...row.value } : { ...DEFAULT_SYSTEM_SETTINGS };
@@ -97,117 +153,82 @@ export async function loadAppStateFromRelationalDb() {
   });
   state.activeTenantId = TITAN_TENANT_ID;
 
-  const { data: territories, error: terErr } = await supabase.from('territories').select('*');
-  if (terErr) throw terErr;
-
-  const { data: suburbs, error: subErr } = await supabase.from('territory_suburbs').select('*');
-  if (subErr) throw subErr;
-
   const suburbsByTerritory = {};
-  (suburbs || []).forEach((s) => {
+  (suburbsRes.data || []).forEach((s) => {
     if (!suburbsByTerritory[s.territory_id]) suburbsByTerritory[s.territory_id] = [];
     suburbsByTerritory[s.territory_id].push({ id: s.id, name: s.name });
   });
 
-  (territories || []).forEach((r) => {
+  (territoriesRes.data || []).forEach((r) => {
     if (!state.territories[r.tenant_id]) state.territories[r.tenant_id] = [];
     state.territories[r.tenant_id].push(rowToTerritory(r, suburbsByTerritory[r.id] || []));
   });
 
-  const { data: supRows, error: supErr } = await supabase.from('supervisors').select('*');
-  if (supErr) throw supErr;
-
-  const { data: supTer, error: stErr } = await supabase.from('supervisor_territories').select('*');
-  if (stErr) throw stErr;
-
   const terBySup = {};
-  (supTer || []).forEach((st) => {
+  (supTerRes.data || []).forEach((st) => {
     if (!terBySup[st.supervisor_id]) terBySup[st.supervisor_id] = [];
     terBySup[st.supervisor_id].push(st.territory_id);
   });
 
-  (supRows || []).forEach((r) => {
+  (supRowsRes.data || []).forEach((r) => {
     if (!state.supervisors[r.tenant_id]) state.supervisors[r.tenant_id] = [];
     state.supervisors[r.tenant_id].push(rowToSupervisor(r, terBySup[r.id] || []));
   });
 
-  const { data: premRows, error: pErr } = await supabase.from('premises').select('*');
-  if (pErr) throw pErr;
-  (premRows || []).forEach((r) => {
+  (premRowsRes.data || []).forEach((r) => {
     if (!state.premises[r.tenant_id]) state.premises[r.tenant_id] = [];
     state.premises[r.tenant_id].push(rowToPremise(r));
   });
 
-  const { data: placeRows, error: plErr } = await supabase.from('places').select('*');
-  if (plErr) throw plErr;
-  (placeRows || []).forEach((r) => {
+  (placeRowsRes.data || []).forEach((r) => {
     const place = rowToPlace(r);
     if (!state.places[r.premise_id]) state.places[r.premise_id] = [];
     state.places[r.premise_id].push(place);
   });
 
-  const { data: guardRows, error: gErr } = await supabase.from('guards').select('*');
-  if (gErr) throw gErr;
-
-  const { data: gpRows, error: gpErr } = await supabase.from('guard_premises').select('*');
-  if (gpErr) throw gpErr;
-
   const premisesByGuard = {};
-  (gpRows || []).forEach((gp) => {
+  (gpRowsRes.data || []).forEach((gp) => {
     if (!premisesByGuard[gp.guard_id]) premisesByGuard[gp.guard_id] = [];
     premisesByGuard[gp.guard_id].push(gp.premise_id);
   });
 
-  (guardRows || []).forEach((r) => {
+  (guardRowsRes.data || []).forEach((r) => {
     if (!state.guards[r.tenant_id]) state.guards[r.tenant_id] = [];
     state.guards[r.tenant_id].push(rowToGuard(r, premisesByGuard[r.id] || []));
   });
 
-  const { data: shiftRows, error: shErr } = await supabase.from('shifts').select('*');
-  if (shErr) throw shErr;
-  (shiftRows || []).forEach((r) => {
+  (shiftRowsRes.data || []).forEach((r) => {
     if (!state.shifts[r.tenant_id]) state.shifts[r.tenant_id] = [];
     state.shifts[r.tenant_id].push(rowToShift(r));
   });
 
-  const { data: attRows, error: aErr } = await supabase.from('guard_attendance').select('*');
-  if (aErr) throw aErr;
-  (attRows || []).forEach((r) => {
+  (attRowsRes.data || []).forEach((r) => {
     if (!state.attendance[r.tenant_id]) state.attendance[r.tenant_id] = [];
     state.attendance[r.tenant_id].push(rowToAttendance(r));
   });
 
-  const { data: cpRows, error: cpErr } = await supabase.from('checkpoints').select('*');
-  if (cpErr) throw cpErr;
-  (cpRows || []).forEach((r) => {
+  (cpRowsRes.data || []).forEach((r) => {
     if (!state.checkpoints[r.tenant_id]) state.checkpoints[r.tenant_id] = [];
     state.checkpoints[r.tenant_id].push(rowToCheckpoint(r));
   });
 
-  const { data: alertRows, error: alErr } = await supabase.from('guard_alerts').select('*');
-  if (alErr) throw alErr;
-  (alertRows || []).forEach((r) => {
+  (alertRowsRes.data || []).forEach((r) => {
     if (!state.guardAlerts[r.tenant_id]) state.guardAlerts[r.tenant_id] = [];
     state.guardAlerts[r.tenant_id].push(rowToAlert(r));
   });
 
-  const { data: swapRows, error: swErr } = await supabase.from('shift_swap_requests').select('*');
-  if (swErr) throw swErr;
-  (swapRows || []).forEach((r) => {
+  (swapRowsRes.data || []).forEach((r) => {
     if (!state.shiftSwapRequests[r.tenant_id]) state.shiftSwapRequests[r.tenant_id] = [];
     state.shiftSwapRequests[r.tenant_id].push(rowToSwap(r));
   });
 
-  const { data: waRows, error: waErr } = await supabase.from('whatsapp_outbox').select('*');
-  if (waErr) throw waErr;
-  (waRows || []).forEach((r) => {
+  (waRowsRes.data || []).forEach((r) => {
     if (!state.whatsappOutbox[r.tenant_id]) state.whatsappOutbox[r.tenant_id] = [];
     state.whatsappOutbox[r.tenant_id].push(rowToWa(r));
   });
 
-  // Legacy command-centre tables (if they exist)
-  const { data: obRows } = await supabase.from('occurrence_book').select('*').order('timestamp', { ascending: false });
-  if (obRows) {
+  const obRows = obRowsRes.data;
+  if (obRows && !obRowsRes.error) {
     state.occurrenceBook = obRows.map((item) => ({
       id: item.id,
       tenantId: item.tenant_id,
@@ -220,8 +241,8 @@ export async function loadAppStateFromRelationalDb() {
     }));
   }
 
-  const { data: visRows } = await supabase.from('visitors').select('*').order('check_in_time', { ascending: false });
-  if (visRows) {
+  const visRows = visRowsRes.data;
+  if (visRows && !visRowsRes.error) {
     state.visitors = visRows.map((v) => ({
       id: v.id,
       tenantId: v.tenant_id,
@@ -235,8 +256,8 @@ export async function loadAppStateFromRelationalDb() {
     }));
   }
 
-  const { data: tplRows } = await supabase.from('checklist_templates').select('*');
-  if (tplRows) {
+  const tplRows = tplRowsRes.data;
+  if (tplRows && !tplRowsRes.error) {
     tplRows.forEach((temp) => {
       if (!state.checklistTemplates[temp.tenant_id]) state.checklistTemplates[temp.tenant_id] = [];
       state.checklistTemplates[temp.tenant_id].push({
@@ -248,8 +269,8 @@ export async function loadAppStateFromRelationalDb() {
     });
   }
 
-  const { data: subRows } = await supabase.from('checklist_submissions').select('*').order('timestamp', { ascending: false });
-  if (subRows) {
+  const subRows = subRowsRes.data;
+  if (subRows && !subRowsRes.error) {
     state.checklistSubmissions = subRows.map((sub) => ({
       id: sub.id,
       tenantId: sub.tenant_id,
@@ -261,8 +282,8 @@ export async function loadAppStateFromRelationalDb() {
     }));
   }
 
-  const { data: sosRows } = await supabase.from('active_sos_alerts').select('*');
-  if (sosRows) {
+  const sosRows = sosRowsRes.data;
+  if (sosRows && !sosRowsRes.error) {
     sosRows.forEach((alert) => {
       state.activeSosAlerts[alert.tenant_id] = {
         active: true,
@@ -445,6 +466,8 @@ export async function saveAppStateToRelationalDb(state) {
 
 /** Seed relational DB from built-in seed state when tables are empty. */
 export async function seedRelationalDbIfEmpty() {
+  if (globalThis.__titanSeedChecked) return false;
+  globalThis.__titanSeedChecked = true;
   const count = await countGuardsInDb();
   if (count > 0) return false;
   const seed = createSeedState();

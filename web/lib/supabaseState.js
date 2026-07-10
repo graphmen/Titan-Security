@@ -11,8 +11,10 @@ import { deliverAndSummarize, getWhatsAppStatus } from './whatsapp';
 const PROBE_TIMEOUT_MS = 8000;
 const CACHE_OK_MS = 30_000;
 const CACHE_FAIL_MS = 60_000;
+const HYDRATE_CACHE_MS = 10_000;
 
 let readyCache = { ok: null, at: 0 };
+let hydrateCache = { at: 0, promise: null };
 
 function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
   return Promise.race([
@@ -25,6 +27,37 @@ function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
 
 export function invalidateSupabaseCache() {
   readyCache = { ok: null, at: 0 };
+  hydrateCache = { at: 0, promise: null };
+}
+
+function buildAppStateResponse() {
+  return {
+    ...getLocalStateWithMonitoring(),
+    dataSource: 'supabase',
+    storage: 'relational',
+    whatsappStatus: getWhatsAppStatus(),
+  };
+}
+
+async function hydrateIfNeeded() {
+  const now = Date.now();
+  if (globalThis.__titanState && now - hydrateCache.at < HYDRATE_CACHE_MS) {
+    return;
+  }
+  if (hydrateCache.promise) {
+    await hydrateCache.promise;
+    return;
+  }
+  hydrateCache.promise = (async () => {
+    await seedRelationalDbIfEmpty();
+    await hydrateStateFromSupabase();
+    hydrateCache.at = Date.now();
+  })();
+  try {
+    await hydrateCache.promise;
+  } finally {
+    hydrateCache.promise = null;
+  }
 }
 
 function tenantIdOf(state) {
@@ -99,23 +132,19 @@ export async function isSupabaseReady() {
 }
 
 export async function getSupabaseAppState() {
-  await seedRelationalDbIfEmpty();
-  await hydrateStateFromSupabase();
-  return {
-    ...getLocalStateWithMonitoring(),
-    dataSource: 'supabase',
-    storage: 'relational',
-    whatsappStatus: getWhatsAppStatus(),
-  };
+  await hydrateIfNeeded();
+  return buildAppStateResponse();
 }
 
 export async function runSupabaseAction(payload) {
-  await hydrateStateFromSupabase();
+  invalidateSupabaseCache();
+  await hydrateIfNeeded();
   const result = processLocalAction(payload);
   if (result?.error) return result;
   const tenantId = payload.tenantId || getLocalState().activeTenantId || 'titan';
   const whatsapp = await deliverAndSummarize(getLocalState(), tenantId, result.whatsappEntryId);
   await persistStateToSupabase();
+  invalidateSupabaseCache();
   if (result?.guard) return { ...result, whatsapp };
   if (result?.generatedPin) return { ...result, whatsapp };
   if (result?.waLink) return { ...result, whatsapp };

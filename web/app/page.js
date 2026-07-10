@@ -65,17 +65,33 @@ export default function DashboardPage() {
   // Map Canvas Ref
   const canvasRef = useRef(null);
   const guardPosition = useRef({ x: 120, y: 180, index: 0, direction: 1 });
+  const fetchInFlightRef = useRef(false);
+  const pollDelayRef = useRef(10000);
+  const pollTimerRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const audioReadyRef = useRef(false);
+
+  const schedulePoll = () => {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    pollTimerRef.current = setTimeout(async () => {
+      await fetchState();
+      schedulePoll();
+    }, pollDelayRef.current);
+  };
 
   // Load state function
   const fetchState = async () => {
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     try {
-      const res = await fetch('/api/state', { signal: AbortSignal.timeout(8000) });
+      const res = await fetch('/api/state', { signal: AbortSignal.timeout(30000) });
       if (!res.ok) throw new Error('Failed to pull system data');
       const data = await res.json();
       setState(data);
       sirenEnabledRef.current = mergeSystemSettings(data.systemSettings).sirenAlertsEnabled;
       setLoading(false);
       setError(null);
+      pollDelayRef.current = 10000;
       hasLoadedRef.current = true;
       
       // Play SOS beep if a new SOS alert has arrived
@@ -87,18 +103,23 @@ export default function DashboardPage() {
       prevAlertsCount.current = currentSosCount;
       prevAlertsCount.currentGuard = guardAlertCount;
     } catch (err) {
-      console.error(err);
-      setError(hasLoadedRef.current
-        ? 'Connection lost — retrying…'
-        : 'Cannot reach Titan server. Start the web app (npm run dev on port 3001) and refresh.');
+      if (hasLoadedRef.current) {
+        setError('Connection lost — retrying…');
+        pollDelayRef.current = Math.min(Math.round(pollDelayRef.current * 1.5), 60000);
+      } else {
+        setError('Cannot reach Titan server. Check your connection and refresh.');
+      }
+    } finally {
+      fetchInFlightRef.current = false;
     }
   };
 
-  // Setup sound triggers
+  // Setup sound triggers (requires user gesture before AudioContext starts)
   const playAlertSound = () => {
-    if (!sirenEnabledRef.current) return;
+    if (!sirenEnabledRef.current || !audioReadyRef.current) return;
     try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const audioCtx = audioCtxRef.current;
+      if (!audioCtx || audioCtx.state === 'suspended') return;
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sawtooth';
@@ -110,16 +131,33 @@ export default function DashboardPage() {
       gain.connect(audioCtx.destination);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.5);
-    } catch (e) {
-      console.warn('Audio play blocked:', e);
+    } catch {
+      // Audio blocked until user interacts with the page
     }
   };
 
-  // Poll state every 1.5 seconds
+  // Poll state every 10s (backs off on errors instead of hammering the server)
   useEffect(() => {
+    const enableAudio = () => {
+      if (audioReadyRef.current) return;
+      try {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        audioReadyRef.current = true;
+        audioCtxRef.current.resume?.();
+      } catch {
+        // ignore
+      }
+    };
+    document.addEventListener('click', enableAudio, { once: true });
+    document.addEventListener('keydown', enableAudio, { once: true });
+
     fetchState();
-    const interval = setInterval(fetchState, 1500);
-    return () => clearInterval(interval);
+    schedulePoll();
+    return () => {
+      document.removeEventListener('click', enableAudio);
+      document.removeEventListener('keydown', enableAudio);
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
   }, []);
 
   // Update incident status

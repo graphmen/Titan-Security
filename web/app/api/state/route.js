@@ -4,6 +4,9 @@ import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from '
 import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary } from '../../../lib/supabaseState';
 import { deliverAndSummarize, getWhatsAppStatus } from '../../../lib/whatsapp';
 
+export const maxDuration = 30;
+export const dynamic = 'force-dynamic';
+
 const CACHE_HEADERS = {
   'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
   Pragma: 'no-cache',

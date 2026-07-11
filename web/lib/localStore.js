@@ -931,6 +931,16 @@ export function processLocalAction(payload) {
         mustChangePin: !!guard.pinMustChange,
       };
     }
+    case 'RESEND_WHATSAPP': {
+      const { entryId } = payload;
+      const outbox = state.whatsappOutbox?.[tenantId] || [];
+      const entry = outbox.find((e) => e.id === entryId);
+      if (!entry) return { error: 'Message not found in outbox', status: 404 };
+      entry.status = 'queued';
+      entry.error = null;
+      entry.note = null;
+      return { success: true, whatsappEntryId: entry.id };
+    }
     case 'SEND_GUARD_WHATSAPP': {
       const { guardId, message, supervisorName = 'Supervisor' } = payload;
       if (!guardId || !message?.trim()) {

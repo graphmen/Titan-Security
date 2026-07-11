@@ -875,3 +875,163 @@ button {
   border-top: 1px solid var(--border-light);
   background: #fafafa;
 }
+
+/* WhatsApp setup panel */
+.wa-setup-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.wa-setup-panel.is-compact {
+  padding: 0.85rem 1rem;
+}
+
+.wa-setup-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+}
+
+.wa-setup-banner.is-live {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #1b4332;
+}
+
+.wa-setup-banner.is-partial {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+}
+
+.wa-setup-banner.is-manual {
+  background: #f8fafc;
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+}
+
+.wa-setup-banner strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.2rem;
+}
+
+.wa-setup-banner p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.wa-setup-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  opacity: 0.9;
+}
+
+.wa-setup-refresh {
+  margin-left: auto;
+  padding: 0.35rem !important;
+  flex-shrink: 0;
+}
+
+.wa-setup-missing {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.75rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  color: #991b1b;
+  line-height: 1.45;
+  margin-bottom: 1rem;
+}
+
+.wa-setup-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.wa-setup-steps li {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  font-size: 0.78rem;
+}
+
+.wa-setup-step-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #d8f3dc;
+  color: var(--color-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wa-setup-steps strong {
+  display: block;
+  font-size: 0.8rem;
+  margin-bottom: 0.15rem;
+}
+
+.wa-setup-steps p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.wa-setup-docs-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--color-primary);
+  margin-bottom: 1rem;
+}
+
+.wa-setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.wa-setup-test-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex: 1 1 280px;
+}
+
+.wa-setup-test-form .form-input {
+  flex: 1 1 160px;
+  min-width: 140px;
+  font-size: 0.82rem !important;
+}
+
+.wa-setup-footnote {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.85rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-dimmed);
+  line-height: 1.4;
+}

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
+import WhatsAppSetupPanel from './WhatsAppSetupPanel';
 import { matchesSearch, premisesInTerritory } from '../../lib/listFilters';
 import { buildGuardProfileContext } from '../../lib/guardProfile';
 import { handleWhatsAppDeliveryResult } from '../../lib/whatsappClient';
@@ -305,6 +306,26 @@ export default function GuardManagement({
     if (ok) {
       setMessageText('');
       setMessageGuardId(null);
+    }
+  };
+
+  const resendOutboxMessage = async (entryId) => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RESEND', entryId, tenantId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.hint || 'Resend failed');
+      handleWhatsAppDeliveryResult(data, { pinLabel: 'Message' });
+      if (data.hint && !data.whatsapp?.sent) alert(data.hint);
+      onRefresh?.();
+    } catch (err) {
+      alert(err.message || 'Could not resend');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -879,6 +900,9 @@ export default function GuardManagement({
 
       {tab === 'whatsapp' && (
         <div className="dashboard-grid">
+          <div className="col-12">
+            <WhatsAppSetupPanel />
+          </div>
           <div className="col-5">
             <div className="glass-panel" style={{ padding: '1.25rem' }}>
               <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>Supervisor Message</h3>
@@ -916,12 +940,6 @@ export default function GuardManagement({
           </div>
           <div className="col-7">
             <div className="glass-panel" style={{ padding: '1.25rem' }}>
-              <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '10px', padding: '0.85rem 1rem', marginBottom: '1rem', fontSize: '0.78rem', lineHeight: 1.5 }}>
-                <strong>WhatsApp delivery</strong>
-                <p style={{ margin: '0.35rem 0 0' }}>
-                  With <strong>Meta WhatsApp Cloud API</strong> keys in <code>web/.env.local</code>, PINs and shift messages send automatically when you register guards or schedule shifts. Without keys, WhatsApp opens with the message ready — tap Send to deliver.
-                </p>
-              </div>
               <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>WhatsApp Outbox</h3>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
                 PIN welcomes, shift assignments, and supervisor messages. Status updates after each send attempt.
@@ -939,11 +957,19 @@ export default function GuardManagement({
                       <div style={{ color: 'var(--text-muted)', marginBottom: '0.35rem' }}>{m.to} · {new Date(m.createdAt).toLocaleString()}</div>
                       {m.note && <div style={{ fontSize: '0.68rem', color: '#b45309', marginBottom: '0.35rem' }}>{m.note}</div>}
                       <pre style={{ whiteSpace: 'pre-wrap', margin: '0 0 0.5rem', fontFamily: 'inherit', fontSize: '0.72rem', lineHeight: 1.45 }}>{m.body}</pre>
-                      {m.waLink && (
-                        <a href={m.waLink} target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', padding: '0.4rem 0.75rem', textDecoration: 'none' }}>
-                          <MessageCircle size={13} /> Open in WhatsApp
-                        </a>
-                      )}
+                      {m.error && <div style={{ fontSize: '0.68rem', color: '#991b1b', marginBottom: '0.35rem' }}>{m.error}</div>}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {(m.status === 'failed' || m.status === 'manual_send') && (
+                          <button type="button" className="btn-secondary" style={{ fontSize: '0.72rem', padding: '0.4rem 0.75rem' }} onClick={() => resendOutboxMessage(m.id)} disabled={saving}>
+                            <RotateCw size={13} /> Retry send
+                          </button>
+                        )}
+                        {m.waLink && (
+                          <a href={m.waLink} target="_blank" rel="noopener noreferrer" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', padding: '0.4rem 0.75rem', textDecoration: 'none' }}>
+                            <MessageCircle size={13} /> Open in WhatsApp
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

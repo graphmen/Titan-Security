@@ -184,7 +184,7 @@ export async function deliverWhatsApp(entry) {
 
   if (provider === 'manual') {
     entry.status = 'manual_send';
-    entry.note = 'Auto-send not configured — use Open in WhatsApp, or set Meta Cloud API keys in .env.local';
+    entry.note = 'Auto-send not configured — use Open in WhatsApp, or set Meta Cloud API keys in .env.local and Vercel.';
     return entry;
   }
 
@@ -197,6 +197,53 @@ export async function deliverWhatsApp(entry) {
     entry.provider = provider;
     return entry;
   }
+}
+
+/** Verify Meta token and phone number ID without sending a message. */
+export async function probeMetaWhatsApp() {
+  const token = process.env.WHATSAPP_CLOUD_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const version = process.env.WHATSAPP_API_VERSION || 'v21.0';
+
+  if (!token || !phoneNumberId) {
+    return { ok: false, error: 'WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_CLOUD_TOKEN are required.' };
+  }
+
+  const res = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(12000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: data.error?.message || `Meta API returned ${res.status}`,
+      code: data.error?.code,
+    };
+  }
+  return {
+    ok: true,
+    displayNumber: data.display_phone_number || null,
+    verifiedName: data.verified_name || null,
+    qualityRating: data.quality_rating || null,
+  };
+}
+
+/** Send a one-off test message (does not use app state outbox). */
+export async function sendWhatsAppTest(phone, message) {
+  const entry = {
+    id: `WA-TEST-${Date.now()}`,
+    to: normalizePhone(phone),
+    type: 'test',
+    body:
+      message ||
+      '*Titan Protection — Test*\n\nYour WhatsApp integration is working. Guard PINs and shift messages will send automatically from Titan.',
+    status: 'queued',
+    createdAt: new Date().toISOString(),
+    waLink: buildWhatsAppWebUrl(normalizePhone(phone), message || 'Titan Protection test message'),
+  };
+  await deliverWhatsApp(entry);
+  return buildWhatsAppDeliveryPayload(entry);
 }
 
 export function getWhatsAppStatus() {

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
+import WhatsAppSetupPanel from './WhatsAppSetupPanel';
 import { matchesSearch } from '../../lib/listFilters';
 import { handleWhatsAppDeliveryResult } from '../../lib/whatsappClient';
 
@@ -627,6 +628,9 @@ export default function SupervisorManagement({ tenantId, territories = [], super
 
       {tab === 'whatsapp' && (
         <div className="dashboard-grid">
+          <div className="col-12">
+            <WhatsAppSetupPanel />
+          </div>
           <div className="col-6">
             <div className="glass-panel" style={{ padding: '1.25rem' }}>
               <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -674,9 +678,6 @@ export default function SupervisorManagement({ tenantId, territories = [], super
                 <li><strong>Shift scheduling</strong> — date, time, and site when a shift is created or updated</li>
                 <li><strong>Supervisor messages</strong> — custom instructions from this tab or Guard Management</li>
               </ul>
-              <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', fontSize: '0.75rem', color: '#1b4332', lineHeight: 1.5 }}>
-                For messages to send <strong>without opening WhatsApp</strong>, add Meta WhatsApp Cloud API keys to <code>web/.env.local</code> and restart the server.
-              </div>
             </div>
           </div>
         </div>

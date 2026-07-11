@@ -21,37 +21,193 @@ export function explainWhatsAppError(error = '') {
   return msg || 'Unknown WhatsApp error.';
 }
 
-export const WHATSAPP_SETUP_STEPS = [
+export function explainTwilioError(error = '') {
+  const msg = String(error);
+  const lower = msg.toLowerCase();
+
+  if (lower.includes('21211') || lower.includes('invalid') && lower.includes('to')) {
+    return 'Invalid phone number. Use international format, e.g. +263771234567.';
+  }
+  if (lower.includes('21608') || lower.includes('unverified')) {
+    return 'Twilio trial accounts can only send to verified numbers. Add the guard number in Twilio Console → Phone Numbers → Verified Caller IDs.';
+  }
+  if (lower.includes('21659') || lower.includes('not a valid')) {
+    return 'TWILIO_SMS_FROM is not a valid Twilio number. Buy or use a Twilio phone number from Console → Phone Numbers.';
+  }
+  if (lower.includes('63007') || lower.includes('whatsapp')) {
+    return 'Twilio WhatsApp sandbox: join by sending the join code to +1 415 523 8886 from the guard phone, then retry.';
+  }
+  if (lower.includes('authenticate') || lower.includes('401')) {
+    return 'Twilio credentials invalid. Check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env.local and Vercel.';
+  }
+  return msg || 'Unknown Twilio error.';
+}
+
+export function explainMessagingError(error = '', provider = '') {
+  if (provider === 'twilio_sms' || provider === 'twilio') return explainTwilioError(error);
+  return explainWhatsAppError(error);
+}
+
+export const MESSAGING_PROVIDERS = [
   {
-    id: 'app',
-    title: 'Create Meta app with WhatsApp',
-    detail: 'Go to developers.facebook.com → Create App → choose “Connect with customers through WhatsApp”.',
+    id: 'manual',
+    title: 'Manual WhatsApp (no API)',
+    badge: 'Works now',
+    summary: 'Register a guard → WhatsApp opens with the PIN pre-filled → tap Send. No developer account needed.',
+    steps: [
+      {
+        id: 'use',
+        title: 'Already active',
+        detail: 'When you register or reset a guard PIN, Titan opens wa.me with the message ready. Tap Send in WhatsApp on your phone.',
+      },
+      {
+        id: 'upgrade',
+        title: 'Want fully automatic PINs?',
+        detail: 'Set up Twilio SMS below — no Meta developer portal required. PINs arrive as text messages automatically.',
+      },
+    ],
+    docsUrl: null,
+    docsLabel: null,
   },
   {
-    id: 'keys',
-    title: 'Copy API credentials',
-    detail: 'WhatsApp → API Setup: copy Phone number ID and temporary access token (or System User token for production).',
+    id: 'twilio_sms',
+    title: 'Twilio SMS (recommended)',
+    badge: 'No Meta needed',
+    summary: 'Guard login PINs and resets send as SMS automatically. Easiest path if Meta verification is blocked in Zimbabwe.',
+    steps: [
+      {
+        id: 'signup',
+        title: 'Create a Twilio account',
+        detail: 'Sign up at twilio.com (free trial). Verify your email — no Meta/Facebook developer account required.',
+      },
+      {
+        id: 'number',
+        title: 'Get a Twilio phone number',
+        detail: 'Console → Phone Numbers → Buy a number (SMS-capable). Trial accounts can send to verified numbers only.',
+      },
+      {
+        id: 'verify',
+        title: 'Verify guard numbers (trial)',
+        detail: 'Console → Phone Numbers → Verified Caller IDs — add each guard number (+263…) while on trial.',
+      },
+      {
+        id: 'env',
+        title: 'Add keys to Titan',
+        detail: 'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_SMS_FROM (+1234567890) in web/.env.local and Vercel → Environment Variables, then redeploy.',
+      },
+      {
+        id: 'test',
+        title: 'Send a test SMS',
+        detail: 'Use the test panel below with channel “SMS”. Register a guard — the PIN should arrive as a text message.',
+      },
+    ],
+    docsUrl: 'https://www.twilio.com/docs/messaging',
+    docsLabel: 'Twilio SMS documentation',
   },
   {
-    id: 'env',
-    title: 'Add keys to Titan',
-    detail: 'Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_CLOUD_TOKEN in web/.env.local locally and in Vercel → Settings → Environment Variables for your live site.',
+    id: 'twilio_wa',
+    title: 'Twilio WhatsApp Sandbox',
+    badge: 'Bypass Meta portal',
+    summary: 'Use Twilio’s WhatsApp sandbox for testing — guards join with a code instead of Meta Business verification.',
+    steps: [
+      {
+        id: 'signup',
+        title: 'Create a Twilio account',
+        detail: 'Sign up at twilio.com if you have not already.',
+      },
+      {
+        id: 'sandbox',
+        title: 'Enable WhatsApp sandbox',
+        detail: 'Console → Messaging → Try it out → Send a WhatsApp message. Note the sandbox number (+1 415 523 8886) and join code.',
+      },
+      {
+        id: 'join',
+        title: 'Guards join the sandbox',
+        detail: 'Each guard sends “join <your-code>” to the sandbox number from their WhatsApp. They must do this once.',
+      },
+      {
+        id: 'env',
+        title: 'Add keys to Titan',
+        detail: 'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM=whatsapp:+14155238886 in .env.local and Vercel, then redeploy.',
+      },
+      {
+        id: 'test',
+        title: 'Send a test message',
+        detail: 'Use the test panel with channel “WhatsApp”. Shift and supervisor messages also send via this channel.',
+      },
+    ],
+    docsUrl: 'https://www.twilio.com/docs/whatsapp/sandbox',
+    docsLabel: 'Twilio WhatsApp sandbox guide',
   },
   {
-    id: 'recipients',
-    title: 'Add test phone numbers',
-    detail: 'Under API Setup → “To”, add each guard WhatsApp number (+263…) until Meta Business Verification is complete.',
-  },
-  {
-    id: 'test',
-    title: 'Send a test message',
-    detail: 'Use the test panel below, then register a guard — the login PIN should arrive automatically on WhatsApp.',
+    id: 'meta',
+    title: 'Meta WhatsApp Cloud API',
+    badge: 'Optional',
+    summary: 'Official WhatsApp Business API via Meta. Requires Meta developer account SMS verification (currently blocked for you).',
+    steps: [
+      {
+        id: 'app',
+        title: 'Create Meta app with WhatsApp',
+        detail: 'developers.facebook.com → Create App → “Connect with customers through WhatsApp”. Requires SMS verification on your Meta account.',
+      },
+      {
+        id: 'keys',
+        title: 'Copy API credentials',
+        detail: 'WhatsApp → API Setup: copy Phone number ID and access token (or System User token for production).',
+      },
+      {
+        id: 'env',
+        title: 'Add keys to Titan',
+        detail: 'Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_CLOUD_TOKEN in web/.env.local and Vercel, then redeploy.',
+      },
+      {
+        id: 'recipients',
+        title: 'Add test phone numbers',
+        detail: 'Under API Setup → “To”, add each guard WhatsApp number (+263…) until Meta Business Verification is complete.',
+      },
+      {
+        id: 'test',
+        title: 'Send a test message',
+        detail: 'Use the test panel below. Register a guard — the login PIN should arrive automatically on WhatsApp.',
+      },
+    ],
+    docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api/get-started/',
+    docsLabel: 'Meta WhatsApp Cloud API guide',
   },
 ];
+
+export const WHATSAPP_SETUP_STEPS = MESSAGING_PROVIDERS.find((p) => p.id === 'meta').steps;
 
 export function getMissingWhatsAppEnv() {
   const missing = [];
   if (!process.env.WHATSAPP_PHONE_NUMBER_ID) missing.push('WHATSAPP_PHONE_NUMBER_ID');
   if (!process.env.WHATSAPP_CLOUD_TOKEN) missing.push('WHATSAPP_CLOUD_TOKEN');
   return missing;
+}
+
+export function getMissingTwilioSmsEnv() {
+  const missing = [];
+  if (!process.env.TWILIO_ACCOUNT_SID) missing.push('TWILIO_ACCOUNT_SID');
+  if (!process.env.TWILIO_AUTH_TOKEN) missing.push('TWILIO_AUTH_TOKEN');
+  if (!process.env.TWILIO_SMS_FROM) missing.push('TWILIO_SMS_FROM');
+  return missing;
+}
+
+export function getMissingTwilioWaEnv() {
+  const missing = [];
+  if (!process.env.TWILIO_ACCOUNT_SID) missing.push('TWILIO_ACCOUNT_SID');
+  if (!process.env.TWILIO_AUTH_TOKEN) missing.push('TWILIO_AUTH_TOKEN');
+  if (!process.env.TWILIO_WHATSAPP_FROM) missing.push('TWILIO_WHATSAPP_FROM');
+  return missing;
+}
+
+export function getMissingEnvForProvider(providerId) {
+  if (providerId === 'twilio_sms') return getMissingTwilioSmsEnv();
+  if (providerId === 'twilio_wa') return getMissingTwilioWaEnv();
+  if (providerId === 'meta') return getMissingWhatsAppEnv();
+  return [];
+}
+
+export function getProviderSteps(providerId) {
+  return MESSAGING_PROVIDERS.find((p) => p.id === providerId)?.steps || MESSAGING_PROVIDERS[0].steps;
 }

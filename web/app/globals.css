@@ -889,6 +889,49 @@ button {
   padding: 0.85rem 1rem;
 }
 
+.wa-setup-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.wa-setup-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.72rem;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.wa-setup-tab.is-active {
+  background: var(--accent-primary, #1b4332);
+  border-color: var(--accent-primary, #1b4332);
+  color: #fff;
+}
+
+.wa-setup-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  border-radius: 999px;
+  background: rgba(27, 67, 50, 0.12);
+  color: #1b4332;
+  vertical-align: middle;
+}
+
+.wa-setup-channel-select {
+  max-width: 7rem;
+  flex-shrink: 0;
+}
+
 .wa-setup-banner {
   display: flex;
   align-items: flex-start;

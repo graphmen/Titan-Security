@@ -109,6 +109,33 @@ export function buildSupervisorMessage(guard, supervisorName, message) {
   );
 }
 
+/** Plain-text version for SMS (no WhatsApp markdown). */
+export function plainTextBody(body) {
+  return String(body || '')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1');
+}
+
+export function isPinMessageType(type) {
+  return type === 'welcome_pin' || type === 'pin_reset' || type === 'test';
+}
+
+export function isTwilioSmsConfigured() {
+  return Boolean(
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_SMS_FROM
+  );
+}
+
+export function isTwilioWhatsAppConfigured() {
+  return Boolean(
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_WHATSAPP_FROM
+  );
+}
+
 async function deliverViaMeta(entry) {
   const token = process.env.WHATSAPP_CLOUD_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -146,7 +173,44 @@ async function deliverViaMeta(entry) {
   return entry;
 }
 
-async function deliverViaTwilio(entry) {
+async function deliverViaTwilioSms(entry) {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_SMS_FROM;
+  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+  const to = normalizePhone(entry.to);
+
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      From: from,
+      To: to,
+      Body: plainTextBody(entry.body),
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    entry.status = 'failed';
+    entry.error = (data.message || JSON.stringify(data)).slice(0, 240);
+    entry.provider = 'twilio_sms';
+    return entry;
+  }
+
+  entry.status = 'sent';
+  entry.provider = 'twilio_sms';
+  entry.channel = 'sms';
+  entry.messageId = data.sid || null;
+  entry.deliveredAt = new Date().toISOString();
+  return entry;
+}
+
+async function deliverViaTwilioWhatsApp(entry) {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_WHATSAPP_FROM;
@@ -161,42 +225,60 @@ async function deliverViaTwilio(entry) {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({ From: fromNum, To: to, Body: entry.body }),
-    signal: AbortSignal.timeout(10000),
+    signal: AbortSignal.timeout(15000),
   });
 
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const errText = await res.text();
     entry.status = 'failed';
-    entry.error = errText.slice(0, 240);
+    entry.error = (data.message || JSON.stringify(data)).slice(0, 240);
     entry.provider = 'twilio';
     return entry;
   }
 
   entry.status = 'sent';
   entry.provider = 'twilio';
+  entry.channel = 'whatsapp';
+  entry.messageId = data.sid || null;
   entry.deliveredAt = new Date().toISOString();
   return entry;
 }
 
-/** Attempt live WhatsApp delivery. Updates entry status. */
+/** Attempt live delivery (WhatsApp API, SMS fallback for PINs, or manual wa.me). */
 export async function deliverWhatsApp(entry) {
   const provider = getWhatsAppProvider();
 
-  if (provider === 'manual') {
-    entry.status = 'manual_send';
-    entry.note = 'Auto-send not configured — use Open in WhatsApp, or set Meta Cloud API keys in .env.local and Vercel.';
-    return entry;
+  if (provider !== 'manual') {
+    try {
+      if (provider === 'meta') {
+        const result = await deliverViaMeta(entry);
+        result.channel = 'whatsapp';
+        return result;
+      }
+      return await deliverViaTwilioWhatsApp(entry);
+    } catch (err) {
+      entry.status = 'failed';
+      entry.error = err.message;
+      entry.provider = provider;
+      return entry;
+    }
   }
 
-  try {
-    if (provider === 'meta') return await deliverViaMeta(entry);
-    return await deliverViaTwilio(entry);
-  } catch (err) {
-    entry.status = 'failed';
-    entry.error = err.message;
-    entry.provider = provider;
-    return entry;
+  if (isPinMessageType(entry.type) && isTwilioSmsConfigured()) {
+    try {
+      return await deliverViaTwilioSms(entry);
+    } catch (err) {
+      entry.status = 'failed';
+      entry.error = err.message;
+      entry.provider = 'twilio_sms';
+      return entry;
+    }
   }
+
+  entry.status = 'manual_send';
+  entry.note =
+    'Auto-send not configured — use Open in WhatsApp, or add Twilio SMS keys (recommended) or WhatsApp API keys in .env.local and Vercel.';
+  return entry;
 }
 
 /** Verify Meta token and phone number ID without sending a message. */
@@ -230,34 +312,93 @@ export async function probeMetaWhatsApp() {
 }
 
 /** Send a one-off test message (does not use app state outbox). */
-export async function sendWhatsAppTest(phone, message) {
+export async function sendWhatsAppTest(phone, message, channel = 'auto') {
+  const normalized = normalizePhone(phone);
+  const body =
+    message ||
+    '*Titan Protection — Test*\n\nYour messaging integration is working. Guard PINs and shift messages will send automatically from Titan.';
   const entry = {
     id: `WA-TEST-${Date.now()}`,
-    to: normalizePhone(phone),
+    to: normalized,
     type: 'test',
-    body:
-      message ||
-      '*Titan Protection — Test*\n\nYour WhatsApp integration is working. Guard PINs and shift messages will send automatically from Titan.',
+    body,
     status: 'queued',
     createdAt: new Date().toISOString(),
-    waLink: buildWhatsAppWebUrl(normalizePhone(phone), message || 'Titan Protection test message'),
+    waLink: buildWhatsAppWebUrl(normalized, body),
   };
-  await deliverWhatsApp(entry);
+
+  if (channel === 'sms' && isTwilioSmsConfigured()) {
+    await deliverViaTwilioSms(entry);
+  } else if (channel === 'whatsapp' && getWhatsAppProvider() !== 'manual') {
+    await deliverWhatsApp(entry);
+  } else if (channel === 'sms') {
+    entry.status = 'failed';
+    entry.error = 'Twilio SMS not configured — set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_SMS_FROM.';
+  } else {
+    await deliverWhatsApp(entry);
+  }
+
   return buildWhatsAppDeliveryPayload(entry);
 }
 
-export function getWhatsAppStatus() {
-  const provider = getWhatsAppProvider();
+export async function probeTwilio() {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) {
+    return { ok: false, error: 'TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are required.' };
+  }
+  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}.json`, {
+    headers: { Authorization: `Basic ${auth}` },
+    signal: AbortSignal.timeout(12000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false, error: data.message || `Twilio API returned ${res.status}` };
+  }
   return {
-    configured: provider !== 'manual',
-    provider,
-    label:
-      provider === 'meta'
-        ? 'Meta WhatsApp Cloud API'
-        : provider === 'twilio'
-          ? 'Twilio WhatsApp'
-          : 'Manual (wa.me links)',
+    ok: true,
+    friendlyName: data.friendly_name || null,
+    status: data.status || null,
+    smsConfigured: isTwilioSmsConfigured(),
+    whatsappConfigured: isTwilioWhatsAppConfigured(),
   };
+}
+
+export function getMessagingStatus() {
+  const whatsappProvider = getWhatsAppProvider();
+  const smsConfigured = isTwilioSmsConfigured();
+  const whatsappConfigured = whatsappProvider !== 'manual';
+
+  let label = 'Manual (wa.me links)';
+  if (whatsappProvider === 'meta') label = 'Meta WhatsApp Cloud API';
+  else if (whatsappProvider === 'twilio') label = 'Twilio WhatsApp';
+  else if (smsConfigured) label = 'Twilio SMS (PINs auto-send)';
+
+  return {
+    configured: whatsappConfigured || smsConfigured,
+    provider: whatsappConfigured ? whatsappProvider : smsConfigured ? 'twilio_sms' : 'manual',
+    label,
+    whatsapp: {
+      provider: whatsappProvider,
+      configured: whatsappConfigured,
+      label:
+        whatsappProvider === 'meta'
+          ? 'Meta WhatsApp Cloud API'
+          : whatsappProvider === 'twilio'
+            ? 'Twilio WhatsApp'
+            : 'Manual (wa.me links)',
+    },
+    sms: {
+      configured: smsConfigured,
+      provider: smsConfigured ? 'twilio_sms' : null,
+      label: smsConfigured ? 'Twilio SMS' : 'Not configured',
+    },
+  };
+}
+
+export function getWhatsAppStatus() {
+  return getMessagingStatus();
 }
 
 export function findOutboxEntry(state, tenantId, entryId) {
@@ -275,12 +416,14 @@ export function buildWhatsAppDeliveryPayload(entry) {
     status: entry.status,
     sent: entry.status === 'sent',
     manual: entry.status === 'manual_send',
+    channel: entry.channel || (entry.provider === 'twilio_sms' ? 'sms' : entry.provider ? 'whatsapp' : null),
     waLink: entry.waLink || null,
     to: entry.to || null,
     error: entry.error || null,
     note: entry.note || null,
     type: entry.type || null,
     messageId: entry.messageId || null,
+    deliveryProvider: entry.provider || null,
   };
 }
 

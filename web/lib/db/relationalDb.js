@@ -1,5 +1,7 @@
 import { supabaseAdmin } from '../../app/supabase';
 import { DEFAULT_SYSTEM_SETTINGS, TITAN_TENANT_ID } from '../systemSettings';
+import { stripLegacyDemoEntities, filterLegacyDemoFromLoadedState, LEGACY_DEMO_GUARD_IDS } from './legacyDemo';
+import { wipeOperationalTablesDirectSql } from './directWipe';
 import {
   tenantToRow,
   rowToTenant,
@@ -50,11 +52,11 @@ export async function probeRelationalDb() {
   return true;
 }
 
-/** Count guards in DB — used to detect empty vs seeded DB. */
+/** Count non-demo guards in DB. */
 export async function countGuardsInDb() {
-  const { count, error } = await db.from('guards').select('id', { count: 'exact', head: true });
+  const { data, error } = await db.from('guards').select('id');
   if (error) throw error;
-  return count || 0;
+  return (data || []).filter((g) => !LEGACY_DEMO_GUARD_IDS.has(g.id)).length;
 }
 
 /** Load full app state from relational tables (parallel queries for faster serverless cold starts). */
@@ -308,7 +310,26 @@ export async function loadAppStateFromRelationalDb() {
     });
   }
 
-  return state;
+  return filterLegacyDemoFromLoadedState(state);
+}
+
+/** Wipe all operational data — direct SQL first (bypasses RLS), then Supabase API fallback. */
+export async function wipeEntireOperationalDatabase() {
+  const usedDirectSql = await wipeOperationalTablesDirectSql();
+  if (usedDirectSql) {
+    return { method: 'direct_sql' };
+  }
+
+  const { data: tenants, error: tenantErr } = await db.from('tenants').select('id');
+  if (tenantErr) throw new Error(`tenants select: ${tenantErr.message}`);
+  for (const row of tenants || []) {
+    await clearTenantOperationalData(row.id);
+  }
+
+  await db.from('titan_state').delete().neq('id', '');
+  await db.from('tenants').delete().in('id', ['alpha', 'omega']);
+
+  return { method: 'supabase_api' };
 }
 
 async function deleteMissing(table, tenantColumn, tenantId, keepIds) {
@@ -570,7 +591,8 @@ async function syncTenantEntities(state, tenantId) {
 
 /** Persist full in-memory state to relational tables. */
 export async function saveAppStateToRelationalDb(state) {
-  const tenantList = Object.values(state.tenants || {});
+  const clean = stripLegacyDemoEntities(state);
+  const tenantList = Object.values(clean.tenants || {});
   if (tenantList.length) {
     const { error } = await db.from('tenants').upsert(tenantList.map(tenantToRow));
     if (error) throw error;
@@ -578,11 +600,11 @@ export async function saveAppStateToRelationalDb(state) {
 
   await db.from('app_settings').upsert([
     { key: 'active_tenant_id', value: TITAN_TENANT_ID },
-    { key: 'system_settings', value: state.systemSettings || DEFAULT_SYSTEM_SETTINGS },
+    { key: 'system_settings', value: clean.systemSettings || DEFAULT_SYSTEM_SETTINGS },
   ]);
 
-  for (const tenantId of Object.keys(state.tenants || {})) {
-    await syncTenantEntities(state, tenantId);
+  for (const tenantId of Object.keys(clean.tenants || {})) {
+    await syncTenantEntities(clean, tenantId);
   }
 }
 

@@ -1507,25 +1507,8 @@ export function processLocalAction(payload) {
     }
     case 'CLEAR_TENANT_DEMO_DATA': {
       const empty = createEmptyAppState();
-      (state.premises[tenantId] || []).forEach((p) => {
-        delete state.places[p.id];
-      });
-      state.territories[tenantId] = [];
-      state.supervisors[tenantId] = [];
-      state.premises[tenantId] = [];
-      state.guards[tenantId] = [];
-      state.shifts[tenantId] = [];
-      state.attendance[tenantId] = [];
-      state.checkpoints[tenantId] = [];
-      state.guardAlerts[tenantId] = [];
-      state.shiftSwapRequests[tenantId] = [];
-      state.whatsappOutbox[tenantId] = [];
-      state.checklistTemplates[tenantId] = [];
-      state.occurrenceBook = (state.occurrenceBook || []).filter((e) => e.tenantId !== tenantId);
-      state.visitors = (state.visitors || []).filter((v) => v.tenantId !== tenantId);
-      state.checklistSubmissions = (state.checklistSubmissions || []).filter((s) => s.tenantId !== tenantId);
-      delete state.activeSosAlerts[tenantId];
-      if (!state.tenants[tenantId]) state.tenants[tenantId] = empty.tenants[tenantId];
+      Object.keys(state).forEach((key) => delete state[key]);
+      Object.assign(state, empty);
       break;
     }
     case 'UPDATE_SYSTEM_SETTINGS': {

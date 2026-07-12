@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabase } from '../../supabase';
 import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from '../../../lib/localStore';
 import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary, persistStateToSupabase, hydrateStateFromSupabase, loadFreshStateFromDatabase } from '../../../lib/supabaseState';
-import { applyDirectRowDelete, clearTenantOperationalData, isDestructiveDbAction } from '../../../lib/db/relationalDb';
+import { applyDirectRowDelete, wipeEntireOperationalDatabase, isDestructiveDbAction, ensureMinimalTenantInDb } from '../../../lib/db/relationalDb';
 import { getWhatsAppStatus } from '../../../lib/whatsapp';
 import { getEmailStatus } from '../../../lib/email';
 import { deliverPinNotifications } from '../../../lib/pinDeliveryServer';
@@ -462,7 +462,8 @@ export async function POST(req) {
         const destructive = isDestructiveDbAction(action);
         if (destructive) {
           if (action === 'CLEAR_TENANT_DEMO_DATA') {
-            await clearTenantOperationalData(tenantId);
+            await wipeEntireOperationalDatabase();
+            await ensureMinimalTenantInDb();
           } else if (typeof action === 'string' && action.startsWith('DELETE_')) {
             await applyDirectRowDelete(action, { ...payload, tenantId }, tenantId);
           }

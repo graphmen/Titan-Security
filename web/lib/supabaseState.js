@@ -6,6 +6,7 @@ import {
   ensureMinimalTenantInDb,
   applyDirectRowDelete,
   clearTenantOperationalData,
+  wipeEntireOperationalDatabase,
   isDestructiveDbAction,
   countGuardsInDb,
   getRelationalSummary,
@@ -158,7 +159,16 @@ export async function runSupabaseAction(payload) {
   const action = payload.action;
 
   if (action === 'CLEAR_TENANT_DEMO_DATA') {
-    await clearTenantOperationalData(tenantId);
+    const wipeResult = await wipeEntireOperationalDatabase();
+    await ensureMinimalTenantInDb();
+    return {
+      success: true,
+      wiped: true,
+      wipeMethod: wipeResult.method,
+      whatsapp,
+      email,
+      state: await loadFreshStateFromDatabase(),
+    };
   } else if (destructive) {
     await applyDirectRowDelete(action, payload, tenantId);
   } else if (!READ_ONLY_ACTIONS.has(action) && RELATIONAL_WRITE_ACTIONS.has(action)) {

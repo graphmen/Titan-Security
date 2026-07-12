@@ -309,12 +309,28 @@ async function deleteMissing(table, tenantColumn, tenantId, keepIds) {
   if (error) throw error;
 }
 
+/** Remove DB rows that reference a guard before the guard row is deleted. */
+async function deleteGuardDependenciesFromDb(guardId, tenantId) {
+  await supabase.from('guard_alerts').delete().eq('guard_id', guardId);
+  await supabase.from('guard_attendance').delete().eq('guard_id', guardId);
+
+  const { data: shifts } = await supabase.from('shifts').select('id').eq('guard_id', guardId).eq('tenant_id', tenantId);
+  const shiftIds = (shifts || []).map((s) => s.id);
+  if (shiftIds.length) {
+    await supabase.from('shift_swap_requests').delete().in('shift_id', shiftIds);
+  }
+  await supabase.from('shift_swap_requests').delete().eq('requester_guard_id', guardId);
+  await supabase.from('shift_swap_requests').delete().eq('target_guard_id', guardId);
+  await supabase.from('shifts').delete().eq('guard_id', guardId).eq('tenant_id', tenantId);
+  await supabase.from('guard_premises').delete().eq('guard_id', guardId);
+}
+
 /** Immediate row delete for DELETE_* actions — ensures DB rows are removed even if sync diff fails. */
 export async function applyDirectRowDelete(action, payload, tenantId) {
   switch (action) {
     case 'DELETE_GUARD': {
       const { guardId } = payload;
-      await supabase.from('guard_premises').delete().eq('guard_id', guardId);
+      await deleteGuardDependenciesFromDb(guardId, tenantId);
       const { error } = await supabase.from('guards').delete().eq('id', guardId).eq('tenant_id', tenantId);
       if (error) throw error;
       break;
@@ -461,6 +477,8 @@ async function syncTenantEntities(state, tenantId) {
 
   const guards = state.guards?.[tenantId] || [];
   const guardIds = guards.map((g) => g.id);
+  const guardIdSet = new Set(guardIds);
+  const shiftIdsSet = new Set((state.shifts?.[tenantId] || []).map((s) => s.id));
   if (guards.length) {
     const { error } = await supabase.from('guards').upsert(guards.map((g) => guardToRow(g, tenantId)));
     if (error) throw error;
@@ -481,7 +499,7 @@ async function syncTenantEntities(state, tenantId) {
     if (error) throw error;
   }
 
-  const shifts = state.shifts?.[tenantId] || [];
+  const shifts = (state.shifts?.[tenantId] || []).filter((s) => guardIdSet.has(s.guardId));
   const shiftIds = shifts.map((s) => s.id);
   if (shifts.length) {
     const { error } = await supabase.from('shifts').upsert(shifts.map((s) => shiftToRow(s, tenantId)));
@@ -489,7 +507,7 @@ async function syncTenantEntities(state, tenantId) {
   }
   await deleteMissing('shifts', 'tenant_id', tenantId, shiftIds);
 
-  const attendance = state.attendance?.[tenantId] || [];
+  const attendance = (state.attendance?.[tenantId] || []).filter((a) => !a.guardId || guardIdSet.has(a.guardId));
   const attIds = attendance.map((a) => a.id);
   if (attendance.length) {
     const { error } = await supabase.from('guard_attendance').upsert(attendance.map((a) => attendanceToRow(a, tenantId)));
@@ -505,7 +523,7 @@ async function syncTenantEntities(state, tenantId) {
   }
   await deleteMissing('checkpoints', 'tenant_id', tenantId, cpIds);
 
-  const alerts = state.guardAlerts?.[tenantId] || [];
+  const alerts = (state.guardAlerts?.[tenantId] || []).filter((a) => !a.guardId || guardIdSet.has(a.guardId));
   const alertIds = alerts.map((a) => a.id);
   if (alerts.length) {
     const { error } = await supabase.from('guard_alerts').upsert(alerts.map((a) => alertToRow(a, tenantId)));
@@ -513,7 +531,12 @@ async function syncTenantEntities(state, tenantId) {
   }
   await deleteMissing('guard_alerts', 'tenant_id', tenantId, alertIds);
 
-  const swaps = state.shiftSwapRequests?.[tenantId] || [];
+  const swaps = (state.shiftSwapRequests?.[tenantId] || []).filter((s) => {
+    const requesterId = s.requestingGuardId || s.requesterGuardId;
+    return shiftIdsSet.has(s.shiftId)
+      && guardIdSet.has(requesterId)
+      && (!s.targetGuardId || guardIdSet.has(s.targetGuardId));
+  });
   const swapIds = swaps.map((s) => s.id);
   if (swaps.length) {
     const { error } = await supabase.from('shift_swap_requests').upsert(swaps.map((s) => swapToRow(s, tenantId)));

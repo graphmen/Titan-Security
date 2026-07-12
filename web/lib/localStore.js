@@ -992,6 +992,12 @@ export function processLocalAction(payload) {
       const before = state.guards[tenantId].length;
       state.guards[tenantId] = state.guards[tenantId].filter((g) => g.id !== guardId);
       if (state.guards[tenantId].length === before) return { error: 'Guard not found', status: 404 };
+      state.guardAlerts[tenantId] = (state.guardAlerts[tenantId] || []).filter((a) => a.guardId !== guardId);
+      state.shifts[tenantId] = (state.shifts[tenantId] || []).filter((s) => s.guardId !== guardId);
+      state.attendance[tenantId] = (state.attendance[tenantId] || []).filter((a) => a.guardId !== guardId);
+      state.shiftSwapRequests[tenantId] = (state.shiftSwapRequests[tenantId] || []).filter(
+        (s) => (s.requestingGuardId || s.requesterGuardId) !== guardId && s.targetGuardId !== guardId
+      );
       break;
     }
     case 'UPDATE_SHIFT': {

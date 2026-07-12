@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../supabase';
 import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from '../../../lib/localStore';
-import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary } from '../../../lib/supabaseState';
+import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary, persistStateToSupabase, hydrateStateFromSupabase } from '../../../lib/supabaseState';
 import { getWhatsAppStatus } from '../../../lib/whatsapp';
 import { getEmailStatus } from '../../../lib/email';
 import { deliverPinNotifications } from '../../../lib/pinDeliveryServer';
+import { sanitizeStateForClient, isWebClientRequest } from '../../../lib/stateSanitize';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -23,8 +24,17 @@ function corsHeaders(origin) {
   };
 }
 
-function jsonResponse(data, status = 200, origin) {
-  return NextResponse.json(data, {
+function jsonResponse(data, status = 200, origin, req) {
+  let payload = data;
+  if (req && data && typeof data === 'object') {
+    const includeGuardPins = isWebClientRequest(req);
+    if (data.state) {
+      payload = { ...data, state: sanitizeStateForClient(data.state, { includeGuardPins }) };
+    } else if (data.guards || data.premises || data.tenants) {
+      payload = sanitizeStateForClient(data, { includeGuardPins });
+    }
+  }
+  return NextResponse.json(payload, {
     status,
     headers: { ...CACHE_HEADERS, ...corsHeaders(origin) },
   });
@@ -197,11 +207,11 @@ export async function GET(req) {
     if (process.env.FORCE_SUPABASE === '1') {
       if (await isSupabaseReady()) {
         const state = await getSupabaseAppState();
-        return jsonResponse(state, 200, origin);
+        return jsonResponse(state, 200, origin, req);
       }
     } else if (await checkSupabase()) {
       const state = await fetchFromSupabase();
-      return jsonResponse(state, 200, origin);
+      return jsonResponse(state, 200, origin, req);
     }
   } catch (err) {
     console.warn('Supabase unavailable, using local store:', err.message);
@@ -213,7 +223,7 @@ export async function GET(req) {
     whatsappStatus: getWhatsAppStatus(),
     emailStatus: getEmailStatus(),
   };
-  return jsonResponse(state, 200, origin);
+  return jsonResponse(state, 200, origin, req);
 }
 
 export async function POST(req) {
@@ -258,7 +268,7 @@ export async function POST(req) {
         if (result?.error) {
           return jsonResponse({ error: result.error }, result.status || 400, origin);
         }
-        return jsonResponse(result, 200, origin);
+        return jsonResponse(result, 200, origin, req);
       } catch (err) {
         console.warn('Supabase action failed, using local store:', err.message);
       }
@@ -428,10 +438,18 @@ export async function POST(req) {
       return jsonResponse({ error: result.error }, result.status || 400, origin);
     }
     const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
-    if (result.guard || result.generatedPin) {
-      return jsonResponse({ ...result, whatsapp, email }, 200, origin);
+    if (await isSupabaseReady()) {
+      try {
+        await persistStateToSupabase();
+        await hydrateStateFromSupabase();
+      } catch (err) {
+        console.warn('Local action persist to Supabase failed:', err.message);
+      }
     }
-    return jsonResponse({ ...result, whatsapp, email, state: getLocalState() }, 200, origin);
+    if (result.guard || result.generatedPin) {
+      return jsonResponse({ ...result, whatsapp, email }, 200, origin, req);
+    }
+    return jsonResponse({ ...result, whatsapp, email, state: getLocalState() }, 200, origin, req);
   } catch (err) {
     console.error('POST api state error:', err);
     return jsonResponse({ error: err.message }, 500, origin);

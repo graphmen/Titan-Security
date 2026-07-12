@@ -383,15 +383,15 @@ async function syncTenantEntities(state, tenantId) {
   }
   await deleteMissing('guards', 'tenant_id', tenantId, guardIds);
 
-  if (guardIds.length) {
-    await supabase.from('guard_premises').delete().in('guard_id', guardIds);
-  }
   const gpRows = [];
   guards.forEach((g) => {
     (g.assignedPremiseIds || []).forEach((pid) => {
       gpRows.push({ guard_id: g.id, premise_id: pid });
     });
   });
+  if (premiseIds.length) {
+    await supabase.from('guard_premises').delete().in('premise_id', premiseIds);
+  }
   if (gpRows.length) {
     const { error } = await supabase.from('guard_premises').upsert(gpRows);
     if (error) throw error;
@@ -464,14 +464,38 @@ export async function saveAppStateToRelationalDb(state) {
   }
 }
 
-/** Seed relational DB from built-in seed state when tables are empty. */
+/** Seed relational DB once on a completely empty install — never re-seed after user deletes data. */
 export async function seedRelationalDbIfEmpty() {
-  if (globalThis.__titanSeedChecked) return false;
-  globalThis.__titanSeedChecked = true;
-  const count = await countGuardsInDb();
-  if (count > 0) return false;
+  const { data: flagRow } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'initial_seed_done')
+    .maybeSingle();
+
+  if (flagRow?.value === true || flagRow?.value === 'true') {
+    return false;
+  }
+
+  const guardCount = await countGuardsInDb();
+  const { count: tenantCount, error: tenantErr } = await supabase
+    .from('tenants')
+    .select('*', { count: 'exact', head: true });
+  if (tenantErr) throw tenantErr;
+
+  if (guardCount > 0 || (tenantCount ?? 0) > 0) {
+    await supabase.from('app_settings').upsert({
+      key: 'initial_seed_done',
+      value: true,
+    });
+    return false;
+  }
+
   const seed = createSeedState();
   await saveAppStateToRelationalDb(seed);
+  await supabase.from('app_settings').upsert({
+    key: 'initial_seed_done',
+    value: true,
+  });
   return true;
 }
 

@@ -87,9 +87,6 @@ export function getStateSummary(state = getLocalState()) {
 /** Load from relational DB into memory. Always prefer DB on cold start. */
 export async function hydrateStateFromSupabase() {
   const remote = await loadAppStateFromRelationalDb();
-  const remoteCount = recordCount(remote);
-  if (remoteCount === 0) return false;
-
   globalThis.__titanState = remote;
   return true;
 }
@@ -148,8 +145,10 @@ export async function runSupabaseAction(payload) {
   const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
   await persistStateToSupabase();
   invalidateSupabaseCache();
-  if (result?.guard) return { ...result, whatsapp, email };
-  if (result?.generatedPin) return { ...result, whatsapp, email };
-  if (result?.waLink) return { ...result, whatsapp, email };
-  return { success: true, whatsapp, email, state: getLocalState() };
+  await hydrateStateFromSupabase();
+  const state = getLocalState();
+  if (result?.guard) return { ...result, whatsapp, email, state };
+  if (result?.generatedPin) return { ...result, whatsapp, email, state };
+  if (result?.waLink) return { ...result, whatsapp, email, state };
+  return { success: true, whatsapp, email, state };
 }

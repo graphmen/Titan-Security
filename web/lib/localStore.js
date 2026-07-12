@@ -640,19 +640,6 @@ export function getLocalState() {
       if (!p.territoryId) p.territoryId = null;
     });
   });
-  const seedMerge = createSeedState();
-  Object.keys(seedMerge.premises || {}).forEach((tid) => {
-    if (!state.premises?.[tid]) return;
-    seedMerge.premises[tid].forEach((sp) => {
-      if (!state.premises[tid].some((p) => p.id === sp.id)) {
-        state.premises[tid].push(sp);
-        state.places[sp.id] = seedMerge.places[sp.id] || [];
-        (seedMerge.places[sp.id] || []).forEach((place) => {
-          syncCheckpointFromPlace(state, tid, sp, place);
-        });
-      }
-    });
-  });
   ensureSystemSettings(state);
   return state;
 }

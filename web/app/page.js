@@ -84,7 +84,7 @@ export default function DashboardPage() {
     if (fetchInFlightRef.current) return;
     fetchInFlightRef.current = true;
     try {
-      const res = await fetch('/api/state', { signal: AbortSignal.timeout(30000) });
+      const res = await fetch('/api/state?client=web', { signal: AbortSignal.timeout(30000) });
       if (!res.ok) throw new Error('Failed to pull system data');
       const data = await res.json();
       setState(data);

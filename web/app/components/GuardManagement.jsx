@@ -572,6 +572,11 @@ export default function GuardManagement({
                           <strong style={{ fontSize: '0.95rem' }}>{g.fullName}</strong>
                           <span className="badge badge-blue">{g.grade}</span>
                           <code style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{g.employeeNumber}</code>
+                          {g.loginPin && (
+                            <code style={{ fontSize: '0.65rem', color: 'var(--color-primary)', background: '#f0fdf4', padding: '0.1rem 0.35rem', borderRadius: 4 }} title="Mobile app login PIN">
+                              PIN: {g.loginPin}
+                            </code>
+                          )}
                           {g.performanceScore && (
                             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: scoreColor(g.performanceScore.composite) }}>
                               Score: {g.performanceScore.composite}%

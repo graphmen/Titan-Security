@@ -72,6 +72,7 @@ export default function App() {
   const [mustChangePin, setMustChangePin] = useState(false);
   const [loginPinUsed, setLoginPinUsed] = useState('');
   const [pendingGuard, setPendingGuard] = useState(null);
+  const [loggedInGuard, setLoggedInGuard] = useState(null);
   const [guardId, setGuardId] = useState(
     () => authSession?.guardId || localStorage.getItem('titan_guard_id') || ''
   );
@@ -184,6 +185,13 @@ export default function App() {
     return () => clearInterval(interval);
   }, [serverUrl, tenantId]);
 
+  // Keep logged-in guard profile in sync with server state (PIN never included in API)
+  useEffect(() => {
+    if (!isAuthenticated || !guardId || !state) return;
+    const fresh = (state.guards?.[tenantId] || []).find((g) => g.id === guardId);
+    if (fresh) setLoggedInGuard(fresh);
+  }, [state, guardId, tenantId, isAuthenticated]);
+
   // Auto-select first premise when tenant changes
   useEffect(() => {
     const premises = state?.premises?.[tenantId] || [];
@@ -198,18 +206,6 @@ export default function App() {
       localStorage.setItem('titan_premise_id', first);
     }
   }, [state, tenantId, premiseId]);
-
-  // Auto-select guard assigned to premise
-  useEffect(() => {
-    const assigned = (state?.guards?.[tenantId] || []).filter(
-      (g) => g.status === 'Active' && (g.assignedPremiseIds || []).includes(premiseId)
-    );
-    if (assigned.length === 0) return;
-    if (!assigned.some((g) => g.id === guardId)) {
-      setGuardId(assigned[0].id);
-      localStorage.setItem('titan_guard_id', assigned[0].id);
-    }
-  }, [state, tenantId, premiseId, guardId]);
 
   const getLocation = () => new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -741,8 +737,8 @@ export default function App() {
   const assignedGuards = allGuards.filter(
     (g) => g.status === 'Active' && (!premiseId || (g.assignedPremiseIds || []).includes(premiseId))
   );
-  const activeGuard = allGuards.find((g) => g.id === guardId) || assignedGuards[0];
-  const guardName = activeGuard?.fullName || 'Select Guard';
+  const activeGuard = loggedInGuard || allGuards.find((g) => g.id === guardId) || null;
+  const guardName = activeGuard?.fullName || 'Guard';
   const premises = state?.premises?.[tenantId] || [];
   const guardProfile = state && guardId ? buildGuardProfileContext(state, tenantId, guardId) : null;
   const myPremises = activeGuard
@@ -821,7 +817,13 @@ export default function App() {
   const handleLogin = (guard, options = {}) => {
     setAuthSession(guard.id);
     setGuardId(guard.id);
+    setLoggedInGuard(guard);
     localStorage.setItem('titan_guard_id', guard.id);
+    const assigned = guard.assignedPremiseIds || [];
+    if (assigned.length && !assigned.includes(premiseId)) {
+      setPremiseId(assigned[0]);
+      localStorage.setItem('titan_premise_id', assigned[0]);
+    }
     if (options.mustChangePin) {
       setPendingGuard(guard);
       setLoginPinUsed(options.currentPin || '');
@@ -851,6 +853,7 @@ export default function App() {
     setMustChangePin(false);
     setLoginPinUsed('');
     setPendingGuard(null);
+    setLoggedInGuard(null);
     setActiveTab('patrol');
     showToast('Signed out securely', 'info');
   };

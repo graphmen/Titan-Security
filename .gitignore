@@ -18,6 +18,7 @@ mobile/dist-ssr/
 # Android build artifacts
 mobile/android/.gradle/
 mobile/android/app/build/
+mobile/*.apk
 mobile/android/build/
 mobile/android/local.properties
 mobile/android/.idea/

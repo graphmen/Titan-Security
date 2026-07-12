@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "Building mobile web assets (v1.0.0)..." -ForegroundColor Cyan
+Write-Host "Building mobile web assets (v1.0.1)..." -ForegroundColor Cyan
 npm run build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -13,21 +13,23 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $androidDir = Join-Path $PSScriptRoot "android"
 $apkOut = Join-Path $androidDir "app\build\outputs\apk\debug\app-debug.apk"
 $repackScript = Join-Path $androidDir "repack-apk.ps1"
+$sslScript = Join-Path $androidDir "setup-gradle-ssl.ps1"
 
-# Try Gradle build first
 Write-Host "Building debug APK..." -ForegroundColor Cyan
 Push-Location $androidDir
 try {
+  if (Test-Path $sslScript) { . $sslScript }
   & .\gradlew.bat assembleDebug --no-daemon 2>&1 | Out-Host
   if ($LASTEXITCODE -eq 0 -and (Test-Path $apkOut)) {
     $size = [math]::Round((Get-Item $apkOut).Length / 1MB, 2)
     Write-Host ""
-    Write-Host "APK ready: $apkOut ($size MB)" -ForegroundColor Green
+    Write-Host "APK ready (Gradle): $apkOut ($size MB)" -ForegroundColor Green
   } elseif (Test-Path $repackScript) {
-    Write-Host "Gradle failed — trying repack-apk.ps1..." -ForegroundColor Yellow
+    Write-Host "Gradle unavailable — using fixed repack-apk.ps1..." -ForegroundColor Yellow
     & $repackScript
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   } else {
-    Write-Host "Gradle build failed. Open Android Studio to build manually." -ForegroundColor Yellow
+    throw "Could not build APK."
   }
 } finally {
   Pop-Location

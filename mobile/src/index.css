@@ -1568,6 +1568,84 @@ body {
   color: var(--mob-primary);
 }
 
+.pin-server-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 999px;
+  margin-bottom: 1rem;
+  border: 1px solid var(--mob-border);
+}
+
+.pin-server-status.online {
+  background: rgba(34, 197, 94, 0.12);
+  color: #166534;
+}
+
+.pin-server-status.offline {
+  background: rgba(248, 113, 113, 0.12);
+  color: #b91c1c;
+}
+
+.pin-version {
+  margin-left: auto;
+  opacity: 0.7;
+  font-size: 0.65rem;
+}
+
+.pin-server-details {
+  margin-top: 1rem;
+  border: 1px solid var(--mob-border);
+  border-radius: var(--mob-radius-md);
+  padding: 0.65rem 0.75rem;
+  background: var(--mob-gradient-card);
+}
+
+.pin-server-details summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--mob-text);
+}
+
+.pin-server-hint {
+  font-size: 0.68rem;
+  color: var(--mob-text-muted);
+  margin: 0.5rem 0;
+  line-height: 1.4;
+}
+
+.pin-server-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.pin-server-input {
+  flex: 1;
+  margin-bottom: 0 !important;
+  font-size: 0.72rem !important;
+  padding: 0.45rem 0.55rem !important;
+}
+
+.pin-server-link {
+  width: auto !important;
+  padding: 0.45rem 0.75rem !important;
+  font-size: 0.72rem !important;
+  flex-shrink: 0;
+}
+
+.pin-server-active {
+  font-size: 0.65rem;
+  color: var(--mob-text-muted);
+  margin: 0.45rem 0 0;
+  word-break: break-all;
+}
+
 .pin-back-btn {
   background: none;
   border: none;

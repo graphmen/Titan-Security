@@ -1,33 +1,51 @@
-# Titan Monitor — sync web assets and open Android Studio to build the APK.
+# Titan Monitor — sync web assets and build APK.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "Building mobile web assets..." -ForegroundColor Cyan
+Write-Host "Building mobile web assets (v1.0.0)..." -ForegroundColor Cyan
 npm run build
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Syncing into Android project..." -ForegroundColor Cyan
 npx cap sync android
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $androidDir = Join-Path $PSScriptRoot "android"
+$apkOut = Join-Path $androidDir "app\build\outputs\apk\debug\app-debug.apk"
+$repackScript = Join-Path $androidDir "repack-apk.ps1"
+
+# Try Gradle build first
+Write-Host "Building debug APK..." -ForegroundColor Cyan
+Push-Location $androidDir
+try {
+  & .\gradlew.bat assembleDebug --no-daemon 2>&1 | Out-Host
+  if ($LASTEXITCODE -eq 0 -and (Test-Path $apkOut)) {
+    $size = [math]::Round((Get-Item $apkOut).Length / 1MB, 2)
+    Write-Host ""
+    Write-Host "APK ready: $apkOut ($size MB)" -ForegroundColor Green
+  } elseif (Test-Path $repackScript) {
+    Write-Host "Gradle failed — trying repack-apk.ps1..." -ForegroundColor Yellow
+    & $repackScript
+  } else {
+    Write-Host "Gradle build failed. Open Android Studio to build manually." -ForegroundColor Yellow
+  }
+} finally {
+  Pop-Location
+}
+
+Write-Host ""
+Write-Host "Install on phone:" -ForegroundColor Yellow
+Write-Host "  1. Copy app-debug.apk to your phone and install"
+Write-Host "  2. Default server: https://titan-security.vercel.app (works on mobile data)"
+Write-Host "  3. Register a guard on the web dashboard with YOUR email"
+Write-Host "  4. Check email for 6-digit PIN -> enter in Titan Monitor app"
+Write-Host ""
+Write-Host "LAN testing (office Wi-Fi):" -ForegroundColor Yellow
+Write-Host "  Start web: cd web; npm run start:prod"
+Write-Host "  In app -> Server connection -> http://YOUR_PC_IP:3001 -> Link"
+Write-Host ""
+
 $studio = "C:\Program Files\Android\Android Studio\bin\studio64.exe"
-
-Write-Host ""
-Write-Host "Android project is ready." -ForegroundColor Green
-Write-Host "In Android Studio:" -ForegroundColor Yellow
-Write-Host "  Build -> Build Bundle(s) / APK(s) -> Build APK(s)"
-Write-Host ""
-Write-Host "APK output:" -ForegroundColor Yellow
-Write-Host "  android\app\build\outputs\apk\debug\app-debug.apk"
-Write-Host "  (or run android\repack-apk.ps1 after cap:sync if Gradle SSL fails)"
-Write-Host ""
-Write-Host "On your phone (same Wi-Fi as this PC):" -ForegroundColor Yellow
-Write-Host "  1. Install the APK"
-Write-Host "  2. Start web backend: cd web; npm run dev -- -p 3001 -H 0.0.0.0"
-Write-Host "  3. In app -> Server Network Config -> http://YOUR_PC_IP:3001 -> Link"
-Write-Host ""
-
 if (Test-Path $studio) {
-  Start-Process $studio -ArgumentList "`"$androidDir`""
-} else {
-  Write-Host "Open Android Studio manually and select: $androidDir" -ForegroundColor DarkYellow
+  Write-Host "Android Studio project: $androidDir" -ForegroundColor DarkGray
 }

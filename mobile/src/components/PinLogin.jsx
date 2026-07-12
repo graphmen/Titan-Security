@@ -1,15 +1,27 @@
 import { useState } from 'react';
-import { Shield, Delete, Sun, Moon } from 'lucide-react';
-import { findGuardByPinLocal, guardInitials } from '../utils/auth';
+import { Shield, Delete, Sun, Moon, Wifi, WifiOff, Settings } from 'lucide-react';
 import { playPinKey, playPinError, playLoginSuccess } from '../utils/sounds';
+import { APP_VERSION } from '../config';
 
 const PIN_LENGTH = 6;
 
-export default function PinLogin({ guards, tenantId, apiBase, tenantName, isDark, onToggleTheme, onLogin }) {
+export default function PinLogin({
+  tenantId,
+  apiBase,
+  tenantName,
+  isDark,
+  onToggleTheme,
+  onLogin,
+  serverUrl,
+  onServerUrlChange,
+  onLinkServer,
+  serverOnline,
+}) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showServer, setShowServer] = useState(!apiBase);
 
   const appendDigit = (d) => {
     if (pin.length >= PIN_LENGTH || submitting) return;
@@ -35,16 +47,21 @@ export default function PinLogin({ guards, tenantId, apiBase, tenantName, isDark
     const code = nextPin ?? pin;
     if (code.length !== PIN_LENGTH || submitting) return;
 
+    if (!apiBase) {
+      setError('Set your Titan server URL below first');
+      setShowServer(true);
+      return;
+    }
+
     setSubmitting(true);
     setError('');
 
     try {
-      const base = (apiBase || '').replace(/\/$/, '');
-      const res = await fetch(`${base}/api/state`, {
+      const res = await fetch(`${apiBase}/api/state`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'GUARD_LOGIN', tenantId, pin: code }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(15000),
       });
       const json = await res.json().catch(() => ({}));
 
@@ -54,28 +71,15 @@ export default function PinLogin({ guards, tenantId, apiBase, tenantName, isDark
         return;
       }
 
-      // Offline fallback when server unreachable
-      const local = findGuardByPinLocal(guards, code);
-      if (local) {
-        playLoginSuccess();
-        onLogin(local, { mustChangePin: !!local.pinMustChange, currentPin: code });
-        return;
-      }
-
       playPinError();
       setError(json.error || 'Invalid PIN — check your email for your 6-digit code');
       setShake(true);
       setPin('');
       setTimeout(() => setShake(false), 500);
     } catch {
-      const local = findGuardByPinLocal(guards, code);
-      if (local) {
-        playLoginSuccess();
-        onLogin(local, { mustChangePin: !!local.pinMustChange, currentPin: code });
-        return;
-      }
       playPinError();
-      setError('Cannot reach server — connect in settings or try again');
+      setError('Cannot reach server — check Server URL below and your connection');
+      setShowServer(true);
       setPin('');
     } finally {
       setSubmitting(false);
@@ -97,8 +101,16 @@ export default function PinLogin({ guards, tenantId, apiBase, tenantName, isDark
         </button>
       </div>
 
+      <div className={`pin-server-status ${serverOnline ? 'online' : 'offline'}`}>
+        {serverOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
+        <span>{serverOnline ? 'Connected to Titan' : 'Server not reachable'}</span>
+        <span className="pin-version">v{APP_VERSION}</span>
+      </div>
+
       <h2 className="pin-login-heading">Enter your PIN</h2>
-      <p className="pin-login-sub">Your 6-digit code was sent to your email when you were registered. Check your inbox and spam folder.</p>
+      <p className="pin-login-sub">
+        Your 6-digit login code was emailed when you were registered. Check inbox and spam folder.
+      </p>
 
       <div className={`pin-dots pin-dots-6 ${shake ? 'pin-shake' : ''}`}>
         {Array.from({ length: PIN_LENGTH }).map((_, i) => (
@@ -129,15 +141,33 @@ export default function PinLogin({ guards, tenantId, apiBase, tenantName, isDark
       <button
         type="button"
         className="pin-submit-btn"
-        disabled={pin.length !== PIN_LENGTH || submitting}
+        disabled={pin.length !== PIN_LENGTH || submitting || !apiBase}
         onClick={() => submitPin()}
       >
         {submitting ? 'Signing in…' : 'Sign In'}
       </button>
 
-      <p className="pin-demo-hint">Forgot PIN? Ask your supervisor to reset it — a new code will be sent to your email.</p>
+      <details className="pin-server-details" open={showServer}>
+        <summary><Settings size={14} /> Server connection</summary>
+        <p className="pin-server-hint">Use Vercel URL on mobile data, or your PC IP on office Wi-Fi.</p>
+        <div className="pin-server-row">
+          <input
+            type="url"
+            className="mob-input pin-server-input"
+            value={serverUrl}
+            onChange={(e) => onServerUrlChange(e.target.value)}
+            placeholder="https://titan-security.vercel.app"
+          />
+          <button type="button" className="mob-btn pin-server-link" onClick={onLinkServer}>
+            Link
+          </button>
+        </div>
+        {apiBase && (
+          <p className="pin-server-active">Active: {apiBase}</p>
+        )}
+      </details>
+
+      <p className="pin-demo-hint">Forgot PIN? Ask your supervisor to reset it — a new code will be emailed to you.</p>
     </div>
   );
 }
-
-export { guardInitials };

@@ -37,7 +37,8 @@ import SplashScreen from './components/SplashScreen';
 import PinLogin from './components/PinLogin';
 import ChangePin from './components/ChangePin';
 import { useTheme } from './hooks/useTheme';
-import { getAuthSession, setAuthSession, clearAuthSession, guardInitials, DEMO_FALLBACK_GUARDS } from './utils/auth';
+import { getAuthSession, setAuthSession, clearAuthSession, guardInitials } from './utils/auth';
+import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS } from './config';
 import {
   playNfcScan,
   playNfcSuccess,
@@ -48,8 +49,9 @@ import {
 export default function App() {
   const [activeTab, setActiveTab] = useState('patrol'); // patrol, incidents, checklists, access
   const [serverUrl, setServerUrl] = useState(() =>
-    localStorage.getItem('titan_server_url') || import.meta.env.VITE_API_URL || ''
+    localStorage.getItem('titan_server_url') || DEFAULT_API_URL
   );
+  const [serverReachable, setServerReachable] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [toast, setToast] = useState(null);
   
@@ -63,7 +65,7 @@ export default function App() {
   
   // App state from API
   const [state, setState] = useState(null);
-  const [tenantId, setTenantId] = useState(() => localStorage.getItem('titan_tenant_id') || 'titan');
+  const [tenantId, setTenantId] = useState(() => localStorage.getItem('titan_tenant_id') || DEFAULT_TENANT_ID);
   const [premiseId, setPremiseId] = useState(() => localStorage.getItem('titan_premise_id') || '');
   const authSession = getAuthSession();
   const [isAuthenticated, setIsAuthenticated] = useState(!!authSession);
@@ -71,7 +73,7 @@ export default function App() {
   const [loginPinUsed, setLoginPinUsed] = useState('');
   const [pendingGuard, setPendingGuard] = useState(null);
   const [guardId, setGuardId] = useState(
-    () => authSession?.guardId || localStorage.getItem('titan_guard_id') || 'GRD-001'
+    () => authSession?.guardId || localStorage.getItem('titan_guard_id') || ''
   );
   
   // SOS Alert State
@@ -139,32 +141,48 @@ export default function App() {
     localStorage.setItem('titan_offline_queue', JSON.stringify(newQueue));
   };
 
+  const linkServer = () => {
+    const trimmed = serverUrl.trim().replace(/\/$/, '');
+    if (!trimmed) return;
+    localStorage.setItem('titan_server_url', trimmed);
+    setServerUrl(trimmed);
+    setIsOnline(true);
+    fetchState();
+  };
+
   // Pull state from server API
   const fetchState = async () => {
-    if (!isOnline) return;
+    if (!apiBase) {
+      setServerReachable(false);
+      return;
+    }
     try {
       const res = await fetch(apiUrl('/api/state'), {
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: { 'Cache-Control': 'no-cache' },
+        signal: AbortSignal.timeout(15000),
       });
       if (res.ok) {
         const data = await res.json();
         setState(data);
-        // Sync active SOS status
+        setServerReachable(true);
+        setIsOnline(true);
         const activeSos = data.activeSosAlerts[tenantId];
         setSosActive(!!activeSos);
+      } else {
+        setServerReachable(false);
       }
     } catch (e) {
-      console.warn('API connection failed. Auto switching to Offline mode.');
-      setIsOnline(false);
+      console.warn('API connection failed:', e.message);
+      setServerReachable(false);
+      if (isOnline) setIsOnline(false);
     }
   };
 
-  // Poll state
   useEffect(() => {
     fetchState();
-    const interval = setInterval(fetchState, 1500);
+    const interval = setInterval(fetchState, STATE_POLL_MS);
     return () => clearInterval(interval);
-  }, [serverUrl, isOnline, tenantId]);
+  }, [serverUrl, tenantId]);
 
   // Auto-select first premise when tenant changes
   useEffect(() => {
@@ -877,13 +895,16 @@ export default function App() {
 
       {!splashVisible && !isAuthenticated && !mustChangePin && (
         <PinLogin
-          guards={allGuards.length > 0 ? allGuards : DEMO_FALLBACK_GUARDS}
           tenantId={tenantId}
           apiBase={apiBase}
           tenantName={activeTenant.name}
           isDark={isDark}
           onToggleTheme={toggleTheme}
           onLogin={(guard, opts) => handleLogin(guard, opts)}
+          serverUrl={serverUrl}
+          onServerUrlChange={setServerUrl}
+          onLinkServer={linkServer}
+          serverOnline={serverReachable}
         />
       )}
 
@@ -1018,13 +1039,9 @@ export default function App() {
                 value={serverUrl} 
                 onChange={(e) => setServerUrl(e.target.value)} 
                 style={{ padding: '0.3rem', marginBottom: 0, fontSize: '0.75rem', borderRadius: '6px' }} 
-                placeholder="e.g. http://172.30.2.113:3001" 
+                placeholder="https://titan-security.vercel.app" 
               />
-              <button className="mob-btn" onClick={() => {
-                localStorage.setItem('titan_server_url', serverUrl.trim());
-                setIsOnline(true);
-                fetchState();
-              }} style={{ padding: '0.3rem 0.6rem', width: 'auto', fontSize: '0.75rem', borderRadius: '6px' }}>
+              <button className="mob-btn" onClick={linkServer} style={{ padding: '0.3rem 0.6rem', width: 'auto', fontSize: '0.75rem', borderRadius: '6px' }}>
                 Link
               </button>
             </div>

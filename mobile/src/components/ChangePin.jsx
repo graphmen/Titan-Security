@@ -93,7 +93,7 @@ export default function ChangePin({ guard, tenantId, apiBase, currentPin, onComp
       </div>
 
       <h2 className="pin-login-heading">{step === 'new' ? 'Choose a new 6-digit PIN' : 'Confirm your PIN'}</h2>
-      <p className="pin-login-sub">Replace the temporary code from WhatsApp with your own private PIN.</p>
+      <p className="pin-login-sub">Replace the temporary code from your email with your own private PIN.</p>
 
       <div className={`pin-dots pin-dots-6 ${error ? 'pin-shake' : ''}`}>
         {Array.from({ length: PIN_LENGTH }).map((_, i) => (

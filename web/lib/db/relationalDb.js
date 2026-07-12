@@ -1,4 +1,4 @@
-import { supabase } from '../../app/supabase';
+import { supabaseAdmin } from '../../app/supabase';
 import { DEFAULT_SYSTEM_SETTINGS, TITAN_TENANT_ID } from '../systemSettings';
 import {
   tenantToRow,
@@ -28,16 +28,31 @@ import {
   rowToWa,
 } from './mappers';
 
+/** Server-side DB client — service role when configured, otherwise anon. */
+const db = supabaseAdmin;
+
+async function requireDbOk(result, context) {
+  if (result?.error) {
+    throw new Error(`${context}: ${result.error.message}`);
+  }
+  return result;
+}
+
+export function isDestructiveDbAction(action) {
+  return action === 'CLEAR_TENANT_DEMO_DATA'
+    || (typeof action === 'string' && action.startsWith('DELETE_'));
+}
+
 /** Probe that relational tables exist and are reachable. */
 export async function probeRelationalDb() {
-  const { error } = await supabase.from('guards').select('id').limit(1);
+  const { error } = await db.from('guards').select('id').limit(1);
   if (error) throw error;
   return true;
 }
 
 /** Count guards in DB — used to detect empty vs seeded DB. */
 export async function countGuardsInDb() {
-  const { count, error } = await supabase.from('guards').select('id', { count: 'exact', head: true });
+  const { count, error } = await db.from('guards').select('id', { count: 'exact', head: true });
   if (error) throw error;
   return count || 0;
 }
@@ -89,27 +104,27 @@ export async function loadAppStateFromRelationalDb() {
     subRowsRes,
     sosRowsRes,
   ] = await Promise.all([
-    supabase.from('tenants').select('*'),
-    supabase.from('app_settings').select('key, value').in('key', ['active_tenant_id', 'system_settings']),
-    supabase.from('territories').select('*'),
-    supabase.from('territory_suburbs').select('*'),
-    supabase.from('supervisors').select('*'),
-    supabase.from('supervisor_territories').select('*'),
-    supabase.from('premises').select('*'),
-    supabase.from('places').select('*'),
-    supabase.from('guards').select('*'),
-    supabase.from('guard_premises').select('*'),
-    supabase.from('shifts').select('*'),
-    supabase.from('guard_attendance').select('*'),
-    supabase.from('checkpoints').select('*'),
-    supabase.from('guard_alerts').select('*'),
-    supabase.from('shift_swap_requests').select('*'),
-    supabase.from('whatsapp_outbox').select('*'),
-    supabase.from('occurrence_book').select('*').order('timestamp', { ascending: false }),
-    supabase.from('visitors').select('*').order('check_in_time', { ascending: false }),
-    supabase.from('checklist_templates').select('*'),
-    supabase.from('checklist_submissions').select('*').order('timestamp', { ascending: false }),
-    supabase.from('active_sos_alerts').select('*'),
+    db.from('tenants').select('*'),
+    db.from('app_settings').select('key, value').in('key', ['active_tenant_id', 'system_settings']),
+    db.from('territories').select('*'),
+    db.from('territory_suburbs').select('*'),
+    db.from('supervisors').select('*'),
+    db.from('supervisor_territories').select('*'),
+    db.from('premises').select('*'),
+    db.from('places').select('*'),
+    db.from('guards').select('*'),
+    db.from('guard_premises').select('*'),
+    db.from('shifts').select('*'),
+    db.from('guard_attendance').select('*'),
+    db.from('checkpoints').select('*'),
+    db.from('guard_alerts').select('*'),
+    db.from('shift_swap_requests').select('*'),
+    db.from('whatsapp_outbox').select('*'),
+    db.from('occurrence_book').select('*').order('timestamp', { ascending: false }),
+    db.from('visitors').select('*').order('check_in_time', { ascending: false }),
+    db.from('checklist_templates').select('*'),
+    db.from('checklist_submissions').select('*').order('timestamp', { ascending: false }),
+    db.from('active_sos_alerts').select('*'),
   ]);
 
   if (tenantsRes.error) throw tenantsRes.error;
@@ -297,32 +312,32 @@ export async function loadAppStateFromRelationalDb() {
 }
 
 async function deleteMissing(table, tenantColumn, tenantId, keepIds) {
-  const { data: existing, error: selErr } = await supabase
+  const { data: existing, error: selErr } = await db
     .from(table)
     .select('id')
     .eq(tenantColumn, tenantId);
-  if (selErr) throw selErr;
+  if (selErr) throw new Error(`${table} select: ${selErr.message}`);
   const keep = new Set(keepIds);
   const toDelete = (existing || []).map((r) => r.id).filter((id) => !keep.has(id));
   if (toDelete.length === 0) return;
-  const { error } = await supabase.from(table).delete().in('id', toDelete);
-  if (error) throw error;
+  await requireDbOk(await db.from(table).delete().in('id', toDelete), `${table} delete`);
 }
 
 /** Remove DB rows that reference a guard before the guard row is deleted. */
 async function deleteGuardDependenciesFromDb(guardId, tenantId) {
-  await supabase.from('guard_alerts').delete().eq('guard_id', guardId);
-  await supabase.from('guard_attendance').delete().eq('guard_id', guardId);
+  await requireDbOk(await db.from('guard_alerts').delete().eq('guard_id', guardId), 'guard_alerts');
+  await requireDbOk(await db.from('guard_attendance').delete().eq('guard_id', guardId), 'guard_attendance');
 
-  const { data: shifts } = await supabase.from('shifts').select('id').eq('guard_id', guardId).eq('tenant_id', tenantId);
+  const { data: shifts, error: shiftSelErr } = await db.from('shifts').select('id').eq('guard_id', guardId).eq('tenant_id', tenantId);
+  if (shiftSelErr) throw new Error(`shifts select: ${shiftSelErr.message}`);
   const shiftIds = (shifts || []).map((s) => s.id);
   if (shiftIds.length) {
-    await supabase.from('shift_swap_requests').delete().in('shift_id', shiftIds);
+    await requireDbOk(await db.from('shift_swap_requests').delete().in('shift_id', shiftIds), 'shift_swap_requests');
   }
-  await supabase.from('shift_swap_requests').delete().eq('requester_guard_id', guardId);
-  await supabase.from('shift_swap_requests').delete().eq('target_guard_id', guardId);
-  await supabase.from('shifts').delete().eq('guard_id', guardId).eq('tenant_id', tenantId);
-  await supabase.from('guard_premises').delete().eq('guard_id', guardId);
+  await requireDbOk(await db.from('shift_swap_requests').delete().eq('requester_guard_id', guardId), 'shift_swap_requests requester');
+  await requireDbOk(await db.from('shift_swap_requests').delete().eq('target_guard_id', guardId), 'shift_swap_requests target');
+  await requireDbOk(await db.from('shifts').delete().eq('guard_id', guardId).eq('tenant_id', tenantId), 'shifts');
+  await requireDbOk(await db.from('guard_premises').delete().eq('guard_id', guardId), 'guard_premises');
 }
 
 /** Immediate row delete for DELETE_* actions — ensures DB rows are removed even if sync diff fails. */
@@ -331,48 +346,48 @@ export async function applyDirectRowDelete(action, payload, tenantId) {
     case 'DELETE_GUARD': {
       const { guardId } = payload;
       await deleteGuardDependenciesFromDb(guardId, tenantId);
-      const { error } = await supabase.from('guards').delete().eq('id', guardId).eq('tenant_id', tenantId);
+      const { error } = await db.from('guards').delete().eq('id', guardId).eq('tenant_id', tenantId);
       if (error) throw error;
       break;
     }
     case 'DELETE_PREMISE': {
       const { premiseId } = payload;
-      const { data: placeRows } = await supabase.from('places').select('id').eq('premise_id', premiseId);
+      const { data: placeRows } = await db.from('places').select('id').eq('premise_id', premiseId);
       const placeIds = (placeRows || []).map((p) => p.id);
       if (placeIds.length) {
-        await supabase.from('checkpoints').delete().in('place_id', placeIds);
-        await supabase.from('places').delete().in('id', placeIds);
+        await db.from('checkpoints').delete().in('place_id', placeIds);
+        await db.from('places').delete().in('id', placeIds);
       }
-      await supabase.from('guard_premises').delete().eq('premise_id', premiseId);
-      const { error } = await supabase.from('premises').delete().eq('id', premiseId).eq('tenant_id', tenantId);
+      await db.from('guard_premises').delete().eq('premise_id', premiseId);
+      const { error } = await db.from('premises').delete().eq('id', premiseId).eq('tenant_id', tenantId);
       if (error) throw error;
       break;
     }
     case 'DELETE_PLACE': {
       const { placeId } = payload;
-      await supabase.from('checkpoints').delete().eq('place_id', placeId);
-      const { error } = await supabase.from('places').delete().eq('id', placeId);
+      await db.from('checkpoints').delete().eq('place_id', placeId);
+      const { error } = await db.from('places').delete().eq('id', placeId);
       if (error) throw error;
       break;
     }
     case 'DELETE_TERRITORY': {
       const { territoryId } = payload;
-      await supabase.from('territory_suburbs').delete().eq('territory_id', territoryId);
-      await supabase.from('supervisor_territories').delete().eq('territory_id', territoryId);
-      const { error } = await supabase.from('territories').delete().eq('id', territoryId).eq('tenant_id', tenantId);
+      await db.from('territory_suburbs').delete().eq('territory_id', territoryId);
+      await db.from('supervisor_territories').delete().eq('territory_id', territoryId);
+      const { error } = await db.from('territories').delete().eq('id', territoryId).eq('tenant_id', tenantId);
       if (error) throw error;
       break;
     }
     case 'DELETE_SUPERVISOR': {
       const { supervisorId } = payload;
-      await supabase.from('supervisor_territories').delete().eq('supervisor_id', supervisorId);
-      const { error } = await supabase.from('supervisors').delete().eq('id', supervisorId).eq('tenant_id', tenantId);
+      await db.from('supervisor_territories').delete().eq('supervisor_id', supervisorId);
+      const { error } = await db.from('supervisors').delete().eq('id', supervisorId).eq('tenant_id', tenantId);
       if (error) throw error;
       break;
     }
     case 'DELETE_SHIFT': {
       const { shiftId } = payload;
-      const { error } = await supabase.from('shifts').delete().eq('id', shiftId).eq('tenant_id', tenantId);
+      const { error } = await db.from('shifts').delete().eq('id', shiftId).eq('tenant_id', tenantId);
       if (error) throw error;
       break;
     }
@@ -386,7 +401,7 @@ async function syncTenantEntities(state, tenantId) {
   const territoryIds = territories.map((t) => t.id);
 
   if (territories.length) {
-    const { error } = await supabase.from('territories').upsert(territories.map((t) => territoryToRow(t, tenantId)));
+    const { error } = await db.from('territories').upsert(territories.map((t) => territoryToRow(t, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('territories', 'tenant_id', tenantId, territoryIds);
@@ -396,11 +411,11 @@ async function syncTenantEntities(state, tenantId) {
     (t.suburbs || []).forEach((s) => suburbRows.push(suburbToRow(s, t.id)));
   });
   if (suburbRows.length) {
-    const { error } = await supabase.from('territory_suburbs').upsert(suburbRows);
+    const { error } = await db.from('territory_suburbs').upsert(suburbRows);
     if (error) throw error;
   }
   if (territoryIds.length) {
-    const { data: allSuburbs, error: subSelErr } = await supabase
+    const { data: allSuburbs, error: subSelErr } = await db
       .from('territory_suburbs')
       .select('id, territory_id');
     if (subSelErr && subSelErr.code !== 'PGRST116') throw subSelErr;
@@ -409,7 +424,7 @@ async function syncTenantEntities(state, tenantId) {
       .filter((s) => !keepTerritories.has(s.territory_id))
       .map((s) => s.id);
     if (deleteSuburbIds.length) {
-      const { error } = await supabase.from('territory_suburbs').delete().in('id', deleteSuburbIds);
+      const { error } = await db.from('territory_suburbs').delete().in('id', deleteSuburbIds);
       if (error && error.code !== 'PGRST116') throw error;
     }
   }
@@ -417,13 +432,13 @@ async function syncTenantEntities(state, tenantId) {
   const supervisors = state.supervisors?.[tenantId] || [];
   const supervisorIds = supervisors.map((s) => s.id);
   if (supervisors.length) {
-    const { error } = await supabase.from('supervisors').upsert(supervisors.map((s) => supervisorToRow(s, tenantId)));
+    const { error } = await db.from('supervisors').upsert(supervisors.map((s) => supervisorToRow(s, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('supervisors', 'tenant_id', tenantId, supervisorIds);
 
   if (supervisorIds.length) {
-    await supabase.from('supervisor_territories').delete().in('supervisor_id', supervisorIds);
+    await db.from('supervisor_territories').delete().in('supervisor_id', supervisorIds);
   }
   const stRows = [];
   supervisors.forEach((s) => {
@@ -432,14 +447,14 @@ async function syncTenantEntities(state, tenantId) {
     });
   });
   if (stRows.length) {
-    const { error } = await supabase.from('supervisor_territories').upsert(stRows);
+    const { error } = await db.from('supervisor_territories').upsert(stRows);
     if (error) throw error;
   }
 
   const premises = state.premises?.[tenantId] || [];
   const premiseIds = premises.map((p) => p.id);
   if (premises.length) {
-    const { error } = await supabase.from('premises').upsert(premises.map((p) => premiseToRow(p, tenantId)));
+    const { error } = await db.from('premises').upsert(premises.map((p) => premiseToRow(p, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('premises', 'tenant_id', tenantId, premiseIds);
@@ -450,11 +465,11 @@ async function syncTenantEntities(state, tenantId) {
   });
   const placeIds = placeRows.map((p) => p.id);
   if (placeRows.length) {
-    const { error } = await supabase.from('places').upsert(placeRows);
+    const { error } = await db.from('places').upsert(placeRows);
     if (error) throw error;
   }
   if (placeIds.length > 0) {
-    const { data: existingPlaces, error: plSelErr } = await supabase
+    const { data: existingPlaces, error: plSelErr } = await db
       .from('places')
       .select('id')
       .eq('tenant_id', tenantId);
@@ -462,16 +477,16 @@ async function syncTenantEntities(state, tenantId) {
     const keepPlaces = new Set(placeIds);
     const deletePlaceIds = (existingPlaces || []).map((r) => r.id).filter((id) => !keepPlaces.has(id));
     if (deletePlaceIds.length) {
-      await supabase.from('checkpoints').delete().in('place_id', deletePlaceIds);
-      const { error } = await supabase.from('places').delete().in('id', deletePlaceIds);
+      await db.from('checkpoints').delete().in('place_id', deletePlaceIds);
+      const { error } = await db.from('places').delete().in('id', deletePlaceIds);
       if (error) throw error;
     }
   } else {
-    const { data: tenantPlaces } = await supabase.from('places').select('id').eq('tenant_id', tenantId);
+    const { data: tenantPlaces } = await db.from('places').select('id').eq('tenant_id', tenantId);
     const allPlaceIds = (tenantPlaces || []).map((p) => p.id);
     if (allPlaceIds.length) {
-      await supabase.from('checkpoints').delete().in('place_id', allPlaceIds);
-      await supabase.from('places').delete().in('id', allPlaceIds);
+      await db.from('checkpoints').delete().in('place_id', allPlaceIds);
+      await db.from('places').delete().in('id', allPlaceIds);
     }
   }
 
@@ -480,7 +495,7 @@ async function syncTenantEntities(state, tenantId) {
   const guardIdSet = new Set(guardIds);
   const shiftIdsSet = new Set((state.shifts?.[tenantId] || []).map((s) => s.id));
   if (guards.length) {
-    const { error } = await supabase.from('guards').upsert(guards.map((g) => guardToRow(g, tenantId)));
+    const { error } = await db.from('guards').upsert(guards.map((g) => guardToRow(g, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('guards', 'tenant_id', tenantId, guardIds);
@@ -492,17 +507,17 @@ async function syncTenantEntities(state, tenantId) {
     });
   });
   if (premiseIds.length) {
-    await supabase.from('guard_premises').delete().in('premise_id', premiseIds);
+    await db.from('guard_premises').delete().in('premise_id', premiseIds);
   }
   if (gpRows.length) {
-    const { error } = await supabase.from('guard_premises').upsert(gpRows);
+    const { error } = await db.from('guard_premises').upsert(gpRows);
     if (error) throw error;
   }
 
   const shifts = (state.shifts?.[tenantId] || []).filter((s) => guardIdSet.has(s.guardId));
   const shiftIds = shifts.map((s) => s.id);
   if (shifts.length) {
-    const { error } = await supabase.from('shifts').upsert(shifts.map((s) => shiftToRow(s, tenantId)));
+    const { error } = await db.from('shifts').upsert(shifts.map((s) => shiftToRow(s, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('shifts', 'tenant_id', tenantId, shiftIds);
@@ -510,7 +525,7 @@ async function syncTenantEntities(state, tenantId) {
   const attendance = (state.attendance?.[tenantId] || []).filter((a) => !a.guardId || guardIdSet.has(a.guardId));
   const attIds = attendance.map((a) => a.id);
   if (attendance.length) {
-    const { error } = await supabase.from('guard_attendance').upsert(attendance.map((a) => attendanceToRow(a, tenantId)));
+    const { error } = await db.from('guard_attendance').upsert(attendance.map((a) => attendanceToRow(a, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('guard_attendance', 'tenant_id', tenantId, attIds);
@@ -518,7 +533,7 @@ async function syncTenantEntities(state, tenantId) {
   const checkpoints = state.checkpoints?.[tenantId] || [];
   const cpIds = checkpoints.map((c) => c.id);
   if (checkpoints.length) {
-    const { error } = await supabase.from('checkpoints').upsert(checkpoints.map((c) => checkpointToRow(c, tenantId)));
+    const { error } = await db.from('checkpoints').upsert(checkpoints.map((c) => checkpointToRow(c, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('checkpoints', 'tenant_id', tenantId, cpIds);
@@ -526,7 +541,7 @@ async function syncTenantEntities(state, tenantId) {
   const alerts = (state.guardAlerts?.[tenantId] || []).filter((a) => !a.guardId || guardIdSet.has(a.guardId));
   const alertIds = alerts.map((a) => a.id);
   if (alerts.length) {
-    const { error } = await supabase.from('guard_alerts').upsert(alerts.map((a) => alertToRow(a, tenantId)));
+    const { error } = await db.from('guard_alerts').upsert(alerts.map((a) => alertToRow(a, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('guard_alerts', 'tenant_id', tenantId, alertIds);
@@ -539,7 +554,7 @@ async function syncTenantEntities(state, tenantId) {
   });
   const swapIds = swaps.map((s) => s.id);
   if (swaps.length) {
-    const { error } = await supabase.from('shift_swap_requests').upsert(swaps.map((s) => swapToRow(s, tenantId)));
+    const { error } = await db.from('shift_swap_requests').upsert(swaps.map((s) => swapToRow(s, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('shift_swap_requests', 'tenant_id', tenantId, swapIds);
@@ -547,7 +562,7 @@ async function syncTenantEntities(state, tenantId) {
   const wa = state.whatsappOutbox?.[tenantId] || [];
   const waIds = wa.map((w) => w.id);
   if (wa.length) {
-    const { error } = await supabase.from('whatsapp_outbox').upsert(wa.map((w) => waToRow(w, tenantId)));
+    const { error } = await db.from('whatsapp_outbox').upsert(wa.map((w) => waToRow(w, tenantId)));
     if (error) throw error;
   }
   await deleteMissing('whatsapp_outbox', 'tenant_id', tenantId, waIds);
@@ -557,11 +572,11 @@ async function syncTenantEntities(state, tenantId) {
 export async function saveAppStateToRelationalDb(state) {
   const tenantList = Object.values(state.tenants || {});
   if (tenantList.length) {
-    const { error } = await supabase.from('tenants').upsert(tenantList.map(tenantToRow));
+    const { error } = await db.from('tenants').upsert(tenantList.map(tenantToRow));
     if (error) throw error;
   }
 
-  await supabase.from('app_settings').upsert([
+  await db.from('app_settings').upsert([
     { key: 'active_tenant_id', value: TITAN_TENANT_ID },
     { key: 'system_settings', value: state.systemSettings || DEFAULT_SYSTEM_SETTINGS },
   ]);
@@ -573,54 +588,61 @@ export async function saveAppStateToRelationalDb(state) {
 
 /** Remove all operational records for a tenant (guards, premises, territories, etc.). */
 export async function clearTenantOperationalData(tenantId) {
-  await supabase.from('shift_swap_requests').delete().eq('tenant_id', tenantId);
-  await supabase.from('guard_alerts').delete().eq('tenant_id', tenantId);
-  await supabase.from('whatsapp_outbox').delete().eq('tenant_id', tenantId);
-  await supabase.from('guard_attendance').delete().eq('tenant_id', tenantId);
-  await supabase.from('shifts').delete().eq('tenant_id', tenantId);
-  await supabase.from('checkpoints').delete().eq('tenant_id', tenantId);
+  await requireDbOk(await db.from('shift_swap_requests').delete().eq('tenant_id', tenantId), 'shift_swap_requests');
+  await requireDbOk(await db.from('guard_alerts').delete().eq('tenant_id', tenantId), 'guard_alerts');
+  await requireDbOk(await db.from('whatsapp_outbox').delete().eq('tenant_id', tenantId), 'whatsapp_outbox');
+  await requireDbOk(await db.from('guard_attendance').delete().eq('tenant_id', tenantId), 'guard_attendance');
+  await requireDbOk(await db.from('shifts').delete().eq('tenant_id', tenantId), 'shifts');
+  await requireDbOk(await db.from('checkpoints').delete().eq('tenant_id', tenantId), 'checkpoints');
 
-  const { data: guards } = await supabase.from('guards').select('id').eq('tenant_id', tenantId);
-  const guardIds = (guards || []).map((g) => g.id);
+  const { data: guardRows, error: guardSelErr } = await db.from('guards').select('id').eq('tenant_id', tenantId);
+  if (guardSelErr) throw new Error(`guards select: ${guardSelErr.message}`);
+  const guardIds = (guardRows || []).map((g) => g.id);
   if (guardIds.length) {
-    await supabase.from('guard_premises').delete().in('guard_id', guardIds);
-    await supabase.from('guards').delete().in('id', guardIds);
+    await requireDbOk(await db.from('guard_premises').delete().in('guard_id', guardIds), 'guard_premises');
+    await requireDbOk(await db.from('guards').delete().in('id', guardIds), 'guards');
   }
 
-  const { data: premises } = await supabase.from('premises').select('id').eq('tenant_id', tenantId);
-  const premiseIds = (premises || []).map((p) => p.id);
+  const { data: premRows, error: premSelErr } = await db.from('premises').select('id').eq('tenant_id', tenantId);
+  if (premSelErr) throw new Error(`premises select: ${premSelErr.message}`);
+  const premiseIds = (premRows || []).map((p) => p.id);
   if (premiseIds.length) {
-    const { data: places } = await supabase.from('places').select('id').in('premise_id', premiseIds);
-    const placeIds = (places || []).map((p) => p.id);
+    const { data: placeRows } = await db.from('places').select('id').in('premise_id', premiseIds);
+    const placeIds = (placeRows || []).map((p) => p.id);
     if (placeIds.length) {
-      await supabase.from('checkpoints').delete().in('place_id', placeIds);
-      await supabase.from('places').delete().in('id', placeIds);
+      await requireDbOk(await db.from('checkpoints').delete().in('place_id', placeIds), 'checkpoints by place');
+      await requireDbOk(await db.from('places').delete().in('id', placeIds), 'places');
     }
-    await supabase.from('guard_premises').delete().in('premise_id', premiseIds);
-    await supabase.from('premises').delete().in('id', premiseIds);
+    await requireDbOk(await db.from('guard_premises').delete().in('premise_id', premiseIds), 'guard_premises by premise');
+    await requireDbOk(await db.from('premises').delete().in('id', premiseIds), 'premises');
   }
 
-  const { data: supers } = await supabase.from('supervisors').select('id').eq('tenant_id', tenantId);
-  const supervisorIds = (supers || []).map((s) => s.id);
+  const { data: supRows, error: supSelErr } = await db.from('supervisors').select('id').eq('tenant_id', tenantId);
+  if (supSelErr) throw new Error(`supervisors select: ${supSelErr.message}`);
+  const supervisorIds = (supRows || []).map((s) => s.id);
   if (supervisorIds.length) {
-    await supabase.from('supervisor_territories').delete().in('supervisor_id', supervisorIds);
-    await supabase.from('supervisors').delete().in('id', supervisorIds);
+    await requireDbOk(await db.from('supervisor_territories').delete().in('supervisor_id', supervisorIds), 'supervisor_territories');
+    await requireDbOk(await db.from('supervisors').delete().in('id', supervisorIds), 'supervisors');
   }
 
-  const { data: territories } = await supabase.from('territories').select('id').eq('tenant_id', tenantId);
-  const territoryIds = (territories || []).map((t) => t.id);
+  const { data: terRows, error: terSelErr } = await db.from('territories').select('id').eq('tenant_id', tenantId);
+  if (terSelErr) throw new Error(`territories select: ${terSelErr.message}`);
+  const territoryIds = (terRows || []).map((t) => t.id);
   if (territoryIds.length) {
-    await supabase.from('territory_suburbs').delete().in('territory_id', territoryIds);
-    await supabase.from('supervisor_territories').delete().in('territory_id', territoryIds);
-    await supabase.from('territories').delete().in('id', territoryIds);
+    await requireDbOk(await db.from('territory_suburbs').delete().in('territory_id', territoryIds), 'territory_suburbs');
+    await requireDbOk(await db.from('supervisor_territories').delete().in('territory_id', territoryIds), 'supervisor_territories by territory');
+    await requireDbOk(await db.from('territories').delete().in('id', territoryIds), 'territories');
   }
+
+  await requireDbOk(await db.from('visitors').delete().eq('tenant_id', tenantId), 'visitors');
+  await requireDbOk(await db.from('active_sos_alerts').delete().eq('tenant_id', tenantId), 'active_sos_alerts');
 }
 
 /** Ensure the Titan tenant exists — never inject demo/sample records. */
 export async function ensureMinimalTenantInDb() {
-  const { data: tenant } = await supabase.from('tenants').select('id').eq('id', TITAN_TENANT_ID).maybeSingle();
+  const { data: tenant } = await db.from('tenants').select('id').eq('id', TITAN_TENANT_ID).maybeSingle();
   if (!tenant) {
-    const { error } = await supabase.from('tenants').upsert({
+    const { error } = await db.from('tenants').upsert({
       id: TITAN_TENANT_ID,
       name: 'Titan Protection',
       primary_color: '#1b4332',
@@ -630,7 +652,7 @@ export async function ensureMinimalTenantInDb() {
     });
     if (error) throw error;
   }
-  await supabase.from('app_settings').upsert({
+  await db.from('app_settings').upsert({
     key: 'initial_seed_done',
     value: true,
   });

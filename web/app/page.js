@@ -247,9 +247,11 @@ export default function DashboardPage() {
         signal: AbortSignal.timeout(30000),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not clear data');
-      setSyncMessage('All sample and operational data cleared from the database. Register your real guards and premises fresh.');
-      fetchState();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not clear data from the database.');
+      }
+      setSyncMessage('All records cleared from the database. You can register fresh guards, premises, and territories.');
+      await fetchState();
     } catch (err) {
       setSyncError(err.message || 'Could not clear data from the database.');
     }

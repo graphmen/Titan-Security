@@ -14,3 +14,12 @@ function supabaseFetch(url, options = {}) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: { fetch: supabaseFetch },
 });
+
+/** Prefer service role on the server for mutations — bypasses RLS edge cases on delete. */
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export const supabaseAdmin = serviceRoleKey
+  ? createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: supabaseFetch },
+    })
+  : supabase;

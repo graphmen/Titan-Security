@@ -6,6 +6,7 @@ import {
   ensureMinimalTenantInDb,
   applyDirectRowDelete,
   clearTenantOperationalData,
+  isDestructiveDbAction,
   getRelationalSummary,
 } from './db/relationalDb';
 import { deliverAndSummarize, getWhatsAppStatus } from './whatsapp';
@@ -141,12 +142,18 @@ export async function runSupabaseAction(payload) {
   if (result?.error) return result;
   const tenantId = payload.tenantId || getLocalState().activeTenantId || 'titan';
   const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
+  const destructive = isDestructiveDbAction(payload.action);
+
   if (payload.action === 'CLEAR_TENANT_DEMO_DATA') {
     await clearTenantOperationalData(tenantId);
-  } else if (typeof payload.action === 'string' && payload.action.startsWith('DELETE_')) {
+  } else if (destructive) {
     await applyDirectRowDelete(payload.action, payload, tenantId);
   }
-  await persistStateToSupabase();
+
+  if (!destructive) {
+    await persistStateToSupabase();
+  }
+
   invalidateSupabaseCache();
   await hydrateStateFromSupabase();
   const state = getLocalState();

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabase } from '../../supabase';
 import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from '../../../lib/localStore';
 import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary, persistStateToSupabase, hydrateStateFromSupabase } from '../../../lib/supabaseState';
-import { applyDirectRowDelete, clearTenantOperationalData } from '../../../lib/db/relationalDb';
+import { applyDirectRowDelete, clearTenantOperationalData, isDestructiveDbAction } from '../../../lib/db/relationalDb';
 import { getWhatsAppStatus } from '../../../lib/whatsapp';
 import { getEmailStatus } from '../../../lib/email';
 import { deliverPinNotifications } from '../../../lib/pinDeliveryServer';
@@ -458,13 +458,18 @@ export async function POST(req) {
     const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
     if (await isSupabaseReady()) {
       try {
-        if (typeof action === 'string' && action.startsWith('DELETE_')) {
-          await applyDirectRowDelete(action, { ...payload, tenantId }, tenantId);
-        } else if (action === 'CLEAR_TENANT_DEMO_DATA') {
-          await clearTenantOperationalData(tenantId);
+        const destructive = isDestructiveDbAction(action);
+        if (destructive) {
+          if (action === 'CLEAR_TENANT_DEMO_DATA') {
+            await clearTenantOperationalData(tenantId);
+          } else if (typeof action === 'string' && action.startsWith('DELETE_')) {
+            await applyDirectRowDelete(action, { ...payload, tenantId }, tenantId);
+          }
+          await hydrateStateFromSupabase();
+        } else {
+          await persistStateToSupabase();
+          await hydrateStateFromSupabase();
         }
-        await persistStateToSupabase();
-        await hydrateStateFromSupabase();
       } catch (err) {
         console.error('Local action persist to Supabase failed:', err.message);
         if (process.env.FORCE_SUPABASE === '1') {

@@ -230,6 +230,31 @@ export default function DashboardPage() {
     }
   };
 
+  const handleClearDemoData = async () => {
+    if (!window.confirm(
+      'Remove ALL guards, premises, territories, supervisors, and shifts from the live database?\n\nThis permanently deletes sample/demo records. You can then register your real data fresh.'
+    )) return;
+    setSyncError(null);
+    setSyncMessage(null);
+    try {
+      const res = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'CLEAR_TENANT_DEMO_DATA',
+          tenantId: state?.activeTenantId || 'titan',
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not clear data');
+      setSyncMessage('All sample and operational data cleared from the database. Register your real guards and premises fresh.');
+      fetchState();
+    } catch (err) {
+      setSyncError(err.message || 'Could not clear data from the database.');
+    }
+  };
+
   const handleUpdateSystemSettings = async (updates) => {
     try {
       await fetch('/api/state', {
@@ -924,6 +949,7 @@ export default function DashboardPage() {
                       <span className="badge badge-blue">{curShifts.length} shifts</span>
                     </div>
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
                   <button
                     type="button"
                     className="btn-primary"
@@ -933,6 +959,17 @@ export default function DashboardPage() {
                   >
                     {syncing ? <><RefreshCw size={14} className="spin" /> Saving…</> : <><Download size={14} /> Save all data to server</>}
                   </button>
+                  {(curGuards.length > 0 || curPremises.length > 0 || curTerritories.length > 0) && (
+                    <button
+                      type="button"
+                      className="btn-danger"
+                      onClick={handleClearDemoData}
+                      style={{ padding: '0.5rem 1rem', whiteSpace: 'nowrap', fontSize: '0.8rem' }}
+                    >
+                      <Trash2 size={14} /> Clear all data (remove demo records)
+                    </button>
+                  )}
+                  </div>
                 </div>
                 {syncMessage && (
                   <div style={{ marginTop: '0.75rem', padding: '0.65rem 0.85rem', background: '#d8f3dc', color: '#1b4332', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 500 }}>

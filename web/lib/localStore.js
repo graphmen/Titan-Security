@@ -96,6 +96,61 @@ export function sanitizeGuardForClient(guard) {
   return safe;
 }
 
+export function createEmptyAppState() {
+  return {
+    activeTenantId: TITAN_TENANT_ID,
+    systemSettings: { ...DEFAULT_SYSTEM_SETTINGS },
+    tenants: {
+      [TITAN_TENANT_ID]: {
+        id: TITAN_TENANT_ID,
+        name: 'Titan Protection',
+        primaryColor: '#1b4332',
+        logoText: 'TP',
+        plan: 'Growth Trial',
+        status: 'Active',
+      },
+    },
+    territories: { titan: [], alpha: [], omega: [] },
+    supervisors: { titan: [], alpha: [], omega: [] },
+    premises: { titan: [], alpha: [], omega: [] },
+    places: {},
+    guards: { titan: [], alpha: [], omega: [] },
+    shifts: { titan: [], alpha: [], omega: [] },
+    attendance: { titan: [], alpha: [], omega: [] },
+    checkpoints: { titan: [], alpha: [], omega: [] },
+    guardAlerts: { titan: [], alpha: [], omega: [] },
+    shiftSwapRequests: { titan: [], alpha: [], omega: [] },
+    whatsappOutbox: { titan: [], alpha: [], omega: [] },
+    occurrenceBook: [],
+    checklistTemplates: { titan: [], alpha: [], omega: [] },
+    checklistSubmissions: [],
+    visitors: [],
+    activeSosAlerts: {},
+  };
+}
+
+function ensureStateShape(state) {
+  if (!state.tenants || !Object.keys(state.tenants).length) {
+    state.tenants = createEmptyAppState().tenants;
+  }
+  const tenantIds = Object.keys(state.tenants);
+  const listKeys = [
+    'territories', 'supervisors', 'premises', 'guards', 'shifts', 'attendance',
+    'checkpoints', 'guardAlerts', 'shiftSwapRequests', 'whatsappOutbox', 'checklistTemplates',
+  ];
+  for (const key of listKeys) {
+    if (!state[key]) state[key] = {};
+    for (const tid of tenantIds) {
+      if (!state[key][tid]) state[key][tid] = [];
+    }
+  }
+  if (!state.places) state.places = {};
+  if (!state.occurrenceBook) state.occurrenceBook = [];
+  if (!state.checklistSubmissions) state.checklistSubmissions = [];
+  if (!state.visitors) state.visitors = [];
+  if (!state.activeSosAlerts) state.activeSosAlerts = {};
+}
+
 export function createSeedState() {
   const titanPremiseId = 'PRM-TITAN01';
   const kuwadzanaPremiseId = 'PRM-KUW01';
@@ -575,55 +630,12 @@ export function createSeedState() {
 const globalStore = globalThis;
 
 if (!globalStore.__titanState) {
-  globalStore.__titanState = createSeedState();
+  globalStore.__titanState = createEmptyAppState();
 }
 
 export function getLocalState() {
   const state = globalStore.__titanState;
-  if (!state.premises || !state.places) {
-    const seed = createSeedState();
-    state.premises = seed.premises;
-    state.places = seed.places;
-    Object.keys(seed.checkpoints).forEach((tid) => {
-      if (state.checkpoints[tid]) {
-        state.checkpoints[tid] = seed.checkpoints[tid];
-      }
-    });
-  }
-  if (!state.guards) {
-    const seed = createSeedState();
-    state.guards = seed.guards;
-    state.shifts = seed.shifts;
-    state.attendance = seed.attendance;
-  }
-  if (!state.guardAlerts || !state.shiftSwapRequests) {
-    const seed = createSeedState();
-    state.guardAlerts = seed.guardAlerts;
-    state.shiftSwapRequests = seed.shiftSwapRequests;
-  }
-  if (!state.whatsappOutbox) {
-    state.whatsappOutbox = { titan: [], alpha: [], omega: [] };
-  }
-  if (!state.territories || !state.supervisors) {
-    const seed = createSeedState();
-    if (!state.territories) state.territories = seed.territories;
-    if (!state.supervisors) state.supervisors = seed.supervisors;
-    (state.guards?.titan || []).forEach((g) => {
-      const sg = seed.guards.titan.find((x) => x.id === g.id);
-      if (sg && !g.territoryId) {
-        g.territoryId = sg.territoryId;
-        g.city = sg.city;
-        g.suburb = sg.suburb;
-      }
-    });
-    (state.premises?.titan || []).forEach((p) => {
-      const sp = seed.premises.titan.find((x) => x.id === p.id);
-      if (sp && !p.territoryId) {
-        p.territoryId = sp.territoryId;
-        p.suburb = sp.suburb;
-      }
-    });
-  }
+  ensureStateShape(state);
   Object.values(state.guards || {}).forEach((list) => {
     list.forEach((g) => {
       if (!g.documents) g.documents = [];
@@ -1485,6 +1497,29 @@ export function processLocalAction(payload) {
     }
     case 'SWITCH_TENANT': {
       state.activeTenantId = TITAN_TENANT_ID;
+      break;
+    }
+    case 'CLEAR_TENANT_DEMO_DATA': {
+      const empty = createEmptyAppState();
+      (state.premises[tenantId] || []).forEach((p) => {
+        delete state.places[p.id];
+      });
+      state.territories[tenantId] = [];
+      state.supervisors[tenantId] = [];
+      state.premises[tenantId] = [];
+      state.guards[tenantId] = [];
+      state.shifts[tenantId] = [];
+      state.attendance[tenantId] = [];
+      state.checkpoints[tenantId] = [];
+      state.guardAlerts[tenantId] = [];
+      state.shiftSwapRequests[tenantId] = [];
+      state.whatsappOutbox[tenantId] = [];
+      state.checklistTemplates[tenantId] = [];
+      state.occurrenceBook = (state.occurrenceBook || []).filter((e) => e.tenantId !== tenantId);
+      state.visitors = (state.visitors || []).filter((v) => v.tenantId !== tenantId);
+      state.checklistSubmissions = (state.checklistSubmissions || []).filter((s) => s.tenantId !== tenantId);
+      delete state.activeSosAlerts[tenantId];
+      if (!state.tenants[tenantId]) state.tenants[tenantId] = empty.tenants[tenantId];
       break;
     }
     case 'UPDATE_SYSTEM_SETTINGS': {

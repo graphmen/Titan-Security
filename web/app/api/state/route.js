@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabase } from '../../supabase';
 import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from '../../../lib/localStore';
 import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary, persistStateToSupabase, hydrateStateFromSupabase } from '../../../lib/supabaseState';
+import { applyDirectRowDelete, clearTenantOperationalData } from '../../../lib/db/relationalDb';
 import { getWhatsAppStatus } from '../../../lib/whatsapp';
 import { getEmailStatus } from '../../../lib/email';
 import { deliverPinNotifications } from '../../../lib/pinDeliveryServer';
@@ -209,6 +210,12 @@ export async function GET(req) {
         const state = await getSupabaseAppState();
         return jsonResponse(state, 200, origin, req);
       }
+      return jsonResponse(
+        { error: 'Database unavailable. Cannot load live data.' },
+        503,
+        origin,
+        req
+      );
     } else if (await checkSupabase()) {
       const state = await fetchFromSupabase();
       return jsonResponse(state, 200, origin, req);
@@ -270,6 +277,17 @@ export async function POST(req) {
         }
         return jsonResponse(result, 200, origin, req);
       } catch (err) {
+        console.error('Supabase action failed:', err.message);
+        if (process.env.FORCE_SUPABASE === '1') {
+          return jsonResponse(
+            {
+              error: `Could not save to database: ${err.message}. Nothing was deleted — please retry.`,
+            },
+            503,
+            origin,
+            req
+          );
+        }
         console.warn('Supabase action failed, using local store:', err.message);
       }
     }
@@ -440,10 +458,23 @@ export async function POST(req) {
     const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
     if (await isSupabaseReady()) {
       try {
+        if (typeof action === 'string' && action.startsWith('DELETE_')) {
+          await applyDirectRowDelete(action, { ...payload, tenantId }, tenantId);
+        } else if (action === 'CLEAR_TENANT_DEMO_DATA') {
+          await clearTenantOperationalData(tenantId);
+        }
         await persistStateToSupabase();
         await hydrateStateFromSupabase();
       } catch (err) {
-        console.warn('Local action persist to Supabase failed:', err.message);
+        console.error('Local action persist to Supabase failed:', err.message);
+        if (process.env.FORCE_SUPABASE === '1') {
+          return jsonResponse(
+            { error: `Could not save to database: ${err.message}. Please retry.` },
+            503,
+            origin,
+            req
+          );
+        }
       }
     }
     if (result.guard || result.generatedPin) {

@@ -3,7 +3,9 @@ import {
   probeRelationalDb,
   loadAppStateFromRelationalDb,
   saveAppStateToRelationalDb,
-  seedRelationalDbIfEmpty,
+  ensureMinimalTenantInDb,
+  applyDirectRowDelete,
+  clearTenantOperationalData,
   getRelationalSummary,
 } from './db/relationalDb';
 import { deliverAndSummarize, getWhatsAppStatus } from './whatsapp';
@@ -43,16 +45,12 @@ function buildAppStateResponse() {
 }
 
 async function hydrateIfNeeded() {
-  const now = Date.now();
-  if (globalThis.__titanState && now - hydrateCache.at < HYDRATE_CACHE_MS) {
-    return;
-  }
   if (hydrateCache.promise) {
     await hydrateCache.promise;
     return;
   }
   hydrateCache.promise = (async () => {
-    await seedRelationalDbIfEmpty();
+    await ensureMinimalTenantInDb();
     await hydrateStateFromSupabase();
     hydrateCache.at = Date.now();
   })();
@@ -143,6 +141,11 @@ export async function runSupabaseAction(payload) {
   if (result?.error) return result;
   const tenantId = payload.tenantId || getLocalState().activeTenantId || 'titan';
   const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
+  if (payload.action === 'CLEAR_TENANT_DEMO_DATA') {
+    await clearTenantOperationalData(tenantId);
+  } else if (typeof payload.action === 'string' && payload.action.startsWith('DELETE_')) {
+    await applyDirectRowDelete(payload.action, payload, tenantId);
+  }
   await persistStateToSupabase();
   invalidateSupabaseCache();
   await hydrateStateFromSupabase();

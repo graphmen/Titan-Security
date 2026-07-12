@@ -1,5 +1,4 @@
 import { supabase } from '../../app/supabase';
-import { createSeedState } from '../localStore';
 import { DEFAULT_SYSTEM_SETTINGS, TITAN_TENANT_ID } from '../systemSettings';
 import {
   tenantToRow,
@@ -298,12 +297,72 @@ export async function loadAppStateFromRelationalDb() {
 }
 
 async function deleteMissing(table, tenantColumn, tenantId, keepIds) {
-  let q = supabase.from(table).delete().eq(tenantColumn, tenantId);
-  if (keepIds.length > 0) {
-    q = q.not('id', 'in', `(${keepIds.map((id) => `"${id}"`).join(',')})`);
-  }
-  const { error } = await q;
+  const { data: existing, error: selErr } = await supabase
+    .from(table)
+    .select('id')
+    .eq(tenantColumn, tenantId);
+  if (selErr) throw selErr;
+  const keep = new Set(keepIds);
+  const toDelete = (existing || []).map((r) => r.id).filter((id) => !keep.has(id));
+  if (toDelete.length === 0) return;
+  const { error } = await supabase.from(table).delete().in('id', toDelete);
   if (error) throw error;
+}
+
+/** Immediate row delete for DELETE_* actions — ensures DB rows are removed even if sync diff fails. */
+export async function applyDirectRowDelete(action, payload, tenantId) {
+  switch (action) {
+    case 'DELETE_GUARD': {
+      const { guardId } = payload;
+      await supabase.from('guard_premises').delete().eq('guard_id', guardId);
+      const { error } = await supabase.from('guards').delete().eq('id', guardId).eq('tenant_id', tenantId);
+      if (error) throw error;
+      break;
+    }
+    case 'DELETE_PREMISE': {
+      const { premiseId } = payload;
+      const { data: placeRows } = await supabase.from('places').select('id').eq('premise_id', premiseId);
+      const placeIds = (placeRows || []).map((p) => p.id);
+      if (placeIds.length) {
+        await supabase.from('checkpoints').delete().in('place_id', placeIds);
+        await supabase.from('places').delete().in('id', placeIds);
+      }
+      await supabase.from('guard_premises').delete().eq('premise_id', premiseId);
+      const { error } = await supabase.from('premises').delete().eq('id', premiseId).eq('tenant_id', tenantId);
+      if (error) throw error;
+      break;
+    }
+    case 'DELETE_PLACE': {
+      const { placeId } = payload;
+      await supabase.from('checkpoints').delete().eq('place_id', placeId);
+      const { error } = await supabase.from('places').delete().eq('id', placeId);
+      if (error) throw error;
+      break;
+    }
+    case 'DELETE_TERRITORY': {
+      const { territoryId } = payload;
+      await supabase.from('territory_suburbs').delete().eq('territory_id', territoryId);
+      await supabase.from('supervisor_territories').delete().eq('territory_id', territoryId);
+      const { error } = await supabase.from('territories').delete().eq('id', territoryId).eq('tenant_id', tenantId);
+      if (error) throw error;
+      break;
+    }
+    case 'DELETE_SUPERVISOR': {
+      const { supervisorId } = payload;
+      await supabase.from('supervisor_territories').delete().eq('supervisor_id', supervisorId);
+      const { error } = await supabase.from('supervisors').delete().eq('id', supervisorId).eq('tenant_id', tenantId);
+      if (error) throw error;
+      break;
+    }
+    case 'DELETE_SHIFT': {
+      const { shiftId } = payload;
+      const { error } = await supabase.from('shifts').delete().eq('id', shiftId).eq('tenant_id', tenantId);
+      if (error) throw error;
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 async function syncTenantEntities(state, tenantId) {
@@ -325,8 +384,18 @@ async function syncTenantEntities(state, tenantId) {
     if (error) throw error;
   }
   if (territoryIds.length) {
-    const { error } = await supabase.from('territory_suburbs').delete().not('territory_id', 'in', `(${territoryIds.map((id) => `"${id}"`).join(',')})`);
-    if (error && error.code !== 'PGRST116') throw error;
+    const { data: allSuburbs, error: subSelErr } = await supabase
+      .from('territory_suburbs')
+      .select('id, territory_id');
+    if (subSelErr && subSelErr.code !== 'PGRST116') throw subSelErr;
+    const keepTerritories = new Set(territoryIds);
+    const deleteSuburbIds = (allSuburbs || [])
+      .filter((s) => !keepTerritories.has(s.territory_id))
+      .map((s) => s.id);
+    if (deleteSuburbIds.length) {
+      const { error } = await supabase.from('territory_suburbs').delete().in('id', deleteSuburbIds);
+      if (error && error.code !== 'PGRST116') throw error;
+    }
   }
 
   const supervisors = state.supervisors?.[tenantId] || [];
@@ -369,10 +438,25 @@ async function syncTenantEntities(state, tenantId) {
     if (error) throw error;
   }
   if (placeIds.length > 0) {
-    const { error } = await supabase.from('places').delete().eq('tenant_id', tenantId).not('id', 'in', `(${placeIds.map((id) => `"${id}"`).join(',')})`);
-    if (error) throw error;
+    const { data: existingPlaces, error: plSelErr } = await supabase
+      .from('places')
+      .select('id')
+      .eq('tenant_id', tenantId);
+    if (plSelErr) throw plSelErr;
+    const keepPlaces = new Set(placeIds);
+    const deletePlaceIds = (existingPlaces || []).map((r) => r.id).filter((id) => !keepPlaces.has(id));
+    if (deletePlaceIds.length) {
+      await supabase.from('checkpoints').delete().in('place_id', deletePlaceIds);
+      const { error } = await supabase.from('places').delete().in('id', deletePlaceIds);
+      if (error) throw error;
+    }
   } else {
-    await supabase.from('places').delete().eq('tenant_id', tenantId);
+    const { data: tenantPlaces } = await supabase.from('places').select('id').eq('tenant_id', tenantId);
+    const allPlaceIds = (tenantPlaces || []).map((p) => p.id);
+    if (allPlaceIds.length) {
+      await supabase.from('checkpoints').delete().in('place_id', allPlaceIds);
+      await supabase.from('places').delete().in('id', allPlaceIds);
+    }
   }
 
   const guards = state.guards?.[tenantId] || [];
@@ -464,39 +548,75 @@ export async function saveAppStateToRelationalDb(state) {
   }
 }
 
-/** Seed relational DB once on a completely empty install — never re-seed after user deletes data. */
-export async function seedRelationalDbIfEmpty() {
-  const { data: flagRow } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'initial_seed_done')
-    .maybeSingle();
+/** Remove all operational records for a tenant (guards, premises, territories, etc.). */
+export async function clearTenantOperationalData(tenantId) {
+  await supabase.from('shift_swap_requests').delete().eq('tenant_id', tenantId);
+  await supabase.from('guard_alerts').delete().eq('tenant_id', tenantId);
+  await supabase.from('whatsapp_outbox').delete().eq('tenant_id', tenantId);
+  await supabase.from('guard_attendance').delete().eq('tenant_id', tenantId);
+  await supabase.from('shifts').delete().eq('tenant_id', tenantId);
+  await supabase.from('checkpoints').delete().eq('tenant_id', tenantId);
 
-  if (flagRow?.value === true || flagRow?.value === 'true') {
-    return false;
+  const { data: guards } = await supabase.from('guards').select('id').eq('tenant_id', tenantId);
+  const guardIds = (guards || []).map((g) => g.id);
+  if (guardIds.length) {
+    await supabase.from('guard_premises').delete().in('guard_id', guardIds);
+    await supabase.from('guards').delete().in('id', guardIds);
   }
 
-  const guardCount = await countGuardsInDb();
-  const { count: tenantCount, error: tenantErr } = await supabase
-    .from('tenants')
-    .select('*', { count: 'exact', head: true });
-  if (tenantErr) throw tenantErr;
+  const { data: premises } = await supabase.from('premises').select('id').eq('tenant_id', tenantId);
+  const premiseIds = (premises || []).map((p) => p.id);
+  if (premiseIds.length) {
+    const { data: places } = await supabase.from('places').select('id').in('premise_id', premiseIds);
+    const placeIds = (places || []).map((p) => p.id);
+    if (placeIds.length) {
+      await supabase.from('checkpoints').delete().in('place_id', placeIds);
+      await supabase.from('places').delete().in('id', placeIds);
+    }
+    await supabase.from('guard_premises').delete().in('premise_id', premiseIds);
+    await supabase.from('premises').delete().in('id', premiseIds);
+  }
 
-  if (guardCount > 0 || (tenantCount ?? 0) > 0) {
-    await supabase.from('app_settings').upsert({
-      key: 'initial_seed_done',
-      value: true,
+  const { data: supers } = await supabase.from('supervisors').select('id').eq('tenant_id', tenantId);
+  const supervisorIds = (supers || []).map((s) => s.id);
+  if (supervisorIds.length) {
+    await supabase.from('supervisor_territories').delete().in('supervisor_id', supervisorIds);
+    await supabase.from('supervisors').delete().in('id', supervisorIds);
+  }
+
+  const { data: territories } = await supabase.from('territories').select('id').eq('tenant_id', tenantId);
+  const territoryIds = (territories || []).map((t) => t.id);
+  if (territoryIds.length) {
+    await supabase.from('territory_suburbs').delete().in('territory_id', territoryIds);
+    await supabase.from('supervisor_territories').delete().in('territory_id', territoryIds);
+    await supabase.from('territories').delete().in('id', territoryIds);
+  }
+}
+
+/** Ensure the Titan tenant exists — never inject demo/sample records. */
+export async function ensureMinimalTenantInDb() {
+  const { data: tenant } = await supabase.from('tenants').select('id').eq('id', TITAN_TENANT_ID).maybeSingle();
+  if (!tenant) {
+    const { error } = await supabase.from('tenants').upsert({
+      id: TITAN_TENANT_ID,
+      name: 'Titan Protection',
+      primary_color: '#1b4332',
+      logo_text: 'TP',
+      plan: 'Growth Trial',
+      status: 'Active',
     });
-    return false;
+    if (error) throw error;
   }
-
-  const seed = createSeedState();
-  await saveAppStateToRelationalDb(seed);
   await supabase.from('app_settings').upsert({
     key: 'initial_seed_done',
     value: true,
   });
-  return true;
+}
+
+/** @deprecated Demo seeding is disabled — kept as no-op alias for compatibility. */
+export async function seedRelationalDbIfEmpty() {
+  await ensureMinimalTenantInDb();
+  return false;
 }
 
 export function getRelationalSummary(state) {

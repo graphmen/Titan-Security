@@ -882,6 +882,7 @@ export function processLocalAction(payload) {
       return {
         success: true,
         generatedPin: newGuard.loginPin,
+        guard: { fullName: newGuard.fullName, phone: newGuard.phone },
         guardPhone: newGuard.phone,
         waLink: waEntry?.waLink || buildWhatsAppWebUrl(newGuard.phone, buildWelcomePinMessage(newGuard, newGuard.loginPin)),
         whatsappEntryId: state._lastWhatsAppEntryId || waEntry?.id,
@@ -898,6 +899,7 @@ export function processLocalAction(payload) {
       return {
         success: true,
         generatedPin: guard.loginPin,
+        guard: { fullName: guard.fullName, phone: guard.phone },
         guardPhone: guard.phone,
         waLink: waEntry?.waLink || buildWhatsAppWebUrl(guard.phone, buildPinResetMessage(guard, guard.loginPin)),
         whatsappEntryId: state._lastWhatsAppEntryId || waEntry?.id,

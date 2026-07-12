@@ -57,8 +57,15 @@ export const MESSAGING_PROVIDERS = [
     steps: [
       {
         id: 'use',
-        title: 'Already active',
-        detail: 'When you register or reset a guard PIN, Titan opens wa.me with the message ready. Tap Send in WhatsApp on your phone.',
+        title: 'Already active — best for Zimbabwe',
+        detail:
+          'When you register or reset a guard PIN, Titan shows the PIN on screen and opens WhatsApp with the message ready. Tap Send on your phone, or tell the guard in person. No Meta, Twilio, or SMS verification needed.',
+      },
+      {
+        id: 'zimbabwe',
+        title: '+263 SMS codes often fail',
+        detail:
+          'International verification SMS (Meta, Twilio, etc.) frequently do not reach Zimbabwe mobile networks. Manual WhatsApp or in-person PIN delivery is the reliable path — do not wait on verification codes.',
       },
       {
         id: 'upgrade',
@@ -78,7 +85,8 @@ export const MESSAGING_PROVIDERS = [
       {
         id: 'signup',
         title: 'Create a Twilio account',
-        detail: 'Sign up at twilio.com (free trial). Verify your email — no Meta/Facebook developer account required.',
+        detail:
+          'Sign up at twilio.com using email. If phone verification SMS never arrives on +263, try the voice-call option or skip Twilio — use Manual WhatsApp in Titan instead.',
       },
       {
         id: 'number',

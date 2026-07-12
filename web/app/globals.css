@@ -1078,3 +1078,135 @@ button {
   color: var(--text-dimmed);
   line-height: 1.4;
 }
+
+/* PIN delivery modal (manual / Zimbabwe-friendly) */
+.pin-delivery-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 31, 23, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 1rem;
+}
+
+.pin-delivery-modal {
+  background: #fff;
+  border-radius: 14px;
+  max-width: 440px;
+  width: 100%;
+  padding: 1.35rem 1.5rem;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+}
+
+.pin-delivery-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.pin-delivery-header h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.pin-delivery-status {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.pin-delivery-status.is-sent {
+  color: #166534;
+}
+
+.pin-delivery-status.is-error {
+  color: #b45309;
+}
+
+.pin-delivery-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  color: var(--text-muted);
+}
+
+.pin-delivery-guard {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.pin-delivery-pin-block {
+  text-align: center;
+  background: #f0fdf4;
+  border: 2px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 1.25rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.pin-delivery-pin-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dimmed);
+  margin-bottom: 0.5rem;
+}
+
+.pin-delivery-pin {
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  color: #1b4332;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 0.85rem;
+}
+
+.pin-delivery-copy {
+  margin: 0 auto;
+}
+
+.pin-delivery-steps {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  line-height: 1.45;
+}
+
+.pin-delivery-steps ol {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.pin-delivery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.pin-delivery-wa {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pin-delivery-note {
+  margin: 1rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-dimmed);
+  line-height: 1.45;
+  border-top: 1px solid var(--border-light);
+  padding-top: 0.85rem;
+}

@@ -258,9 +258,14 @@ export default function WhatsAppSetupPanel({ compact = false }) {
         </form>
       </div>
 
+      {!compact && selectedProvider === 'manual' && (
+        <p className="wa-setup-footnote">
+          <Circle size={8} fill="currentColor" /> Verification SMS from Meta/Twilio often never reaches +263 numbers. Manual WhatsApp or in-person PIN delivery is the reliable option.
+        </p>
+      )}
       {!compact && selectedProvider === 'twilio_sms' && (
         <p className="wa-setup-footnote">
-          <Circle size={8} fill="currentColor" /> Twilio trial accounts must verify each guard number in Twilio Console → Verified Caller IDs.
+          <Circle size={8} fill="currentColor" /> Twilio trial accounts must verify each guard number in Twilio Console → Verified Caller IDs. If verification SMS never arrives on +263, use Manual mode instead.
         </p>
       )}
       {!compact && selectedProvider === 'twilio_wa' && (
@@ -270,7 +275,7 @@ export default function WhatsAppSetupPanel({ compact = false }) {
       )}
       {!compact && selectedProvider === 'meta' && (
         <p className="wa-setup-footnote">
-          <Circle size={8} fill="currentColor" /> Requires Meta developer SMS verification. If blocked in Zimbabwe, use Twilio SMS instead.
+          <Circle size={8} fill="currentColor" /> Requires Meta developer SMS verification. If blocked in Zimbabwe, use Manual WhatsApp instead.
         </p>
       )}
     </div>

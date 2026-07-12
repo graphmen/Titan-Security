@@ -27,11 +27,12 @@ import {
   RotateCw,
 } from 'lucide-react';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import PinDeliveryModal from './PinDeliveryModal';
 import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
 import WhatsAppSetupPanel from './WhatsAppSetupPanel';
 import { matchesSearch, premisesInTerritory } from '../../lib/listFilters';
 import { buildGuardProfileContext } from '../../lib/guardProfile';
-import { handleWhatsAppDeliveryResult } from '../../lib/whatsappClient';
+import { openManualWhatsAppIfNeeded, resolvePinDelivery } from '../../lib/pinDelivery';
 
 const emptyGuardForm = () => ({
   fullName: '', employeeNumber: '', idNumber: '', phone: '', email: '',
@@ -82,6 +83,7 @@ export default function GuardManagement({
   const [messageGuardId, setMessageGuardId] = useState(null);
   const [messageText, setMessageText] = useState('');
   const [messageSupervisor, setMessageSupervisor] = useState('');
+  const [pinDelivery, setPinDelivery] = useState(null);
 
   const [guardForm, setGuardForm] = useState(emptyGuardForm());
 
@@ -127,7 +129,10 @@ export default function GuardManagement({
   };
 
   const promptWhatsAppPinDelivery = (result, label = 'Guard PIN') => {
-    handleWhatsAppDeliveryResult(result, { pinLabel: label });
+    const data = resolvePinDelivery(result, label);
+    if (!data) return;
+    openManualWhatsAppIfNeeded(data);
+    setPinDelivery(data);
   };
 
   const notifyWhatsAppResult = (result, label = 'Message') => {
@@ -978,6 +983,7 @@ export default function GuardManagement({
           </div>
         </div>
       )}
+      <PinDeliveryModal open={Boolean(pinDelivery)} data={pinDelivery} onClose={() => setPinDelivery(null)} />
     </div>
   );
 }

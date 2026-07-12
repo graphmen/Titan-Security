@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../../app/supabase';
 import { DEFAULT_SYSTEM_SETTINGS, TITAN_TENANT_ID } from '../systemSettings';
-import { stripLegacyDemoEntities, filterLegacyDemoFromLoadedState, LEGACY_DEMO_GUARD_IDS } from './legacyDemo';
+import { stripLegacyDemoEntities, filterLegacyDemoFromLoadedState, LEGACY_DEMO_GUARD_IDS, getAllLegacyDemoIds } from './legacyDemo';
 import { wipeOperationalTablesDirectSql } from './directWipe';
 import {
   tenantToRow,
@@ -663,8 +663,54 @@ export async function clearTenantOperationalData(tenantId) {
   await db.from('titan_state').delete().neq('id', '');
 }
 
+/** Physically remove legacy seed rows from Supabase (not just hide them in the API). */
+export async function purgeLegacyDemoRowsFromDb() {
+  const { guardIds, premiseIds, territoryIds, supervisorIds, tenantIds } = getAllLegacyDemoIds();
+
+  for (const guardId of guardIds) {
+    try {
+      await deleteGuardDependenciesFromDb(guardId, TITAN_TENANT_ID);
+    } catch {
+      /* row may not exist */
+    }
+  }
+  if (guardIds.length) {
+    await db.from('guards').delete().in('id', guardIds);
+  }
+
+  if (premiseIds.length) {
+    const { data: placeRows } = await db.from('places').select('id').in('premise_id', premiseIds);
+    const placeIds = (placeRows || []).map((p) => p.id);
+    if (placeIds.length) {
+      await db.from('checkpoints').delete().in('place_id', placeIds);
+      await db.from('places').delete().in('id', placeIds);
+    }
+    await db.from('guard_premises').delete().in('premise_id', premiseIds);
+    await db.from('premises').delete().in('id', premiseIds);
+  }
+
+  if (supervisorIds.length) {
+    await db.from('supervisor_territories').delete().in('supervisor_id', supervisorIds);
+    await db.from('supervisors').delete().in('id', supervisorIds);
+  }
+
+  if (territoryIds.length) {
+    await db.from('territory_suburbs').delete().in('territory_id', territoryIds);
+    await db.from('supervisor_territories').delete().in('territory_id', territoryIds);
+    await db.from('territories').delete().in('id', territoryIds);
+  }
+
+  if (tenantIds.length) {
+    await db.from('checkpoints').delete().in('tenant_id', tenantIds);
+    await db.from('tenants').delete().in('id', tenantIds);
+  }
+
+  await db.from('titan_state').delete().neq('id', '');
+}
+
 /** Ensure the Titan tenant exists — never inject demo/sample records. */
 export async function ensureMinimalTenantInDb() {
+  await purgeLegacyDemoRowsFromDb();
   const { data: tenant } = await db.from('tenants').select('id').eq('id', TITAN_TENANT_ID).maybeSingle();
   if (!tenant) {
     const { error } = await db.from('tenants').upsert({

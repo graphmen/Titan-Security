@@ -60,3 +60,14 @@ export function stripLegacyDemoEntities(state) {
 export function filterLegacyDemoFromLoadedState(state) {
   return stripLegacyDemoEntities(state);
 }
+
+/** All known legacy demo IDs — for physical DB purge. */
+export function getAllLegacyDemoIds() {
+  return {
+    guardIds: [...LEGACY_DEMO_GUARD_IDS],
+    premiseIds: [...LEGACY_DEMO_PREMISE_IDS],
+    territoryIds: [...LEGACY_DEMO_TERRITORY_IDS],
+    supervisorIds: [...LEGACY_DEMO_SUPERVISOR_IDS],
+    tenantIds: [...LEGACY_DEMO_TENANT_IDS],
+  };
+}

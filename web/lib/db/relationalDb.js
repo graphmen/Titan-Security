@@ -636,6 +636,9 @@ export async function clearTenantOperationalData(tenantId) {
 
   await requireDbOk(await db.from('visitors').delete().eq('tenant_id', tenantId), 'visitors');
   await requireDbOk(await db.from('active_sos_alerts').delete().eq('tenant_id', tenantId), 'active_sos_alerts');
+
+  // Legacy blob table — can re-seed relational rows if left intact
+  await db.from('titan_state').delete().neq('id', '');
 }
 
 /** Ensure the Titan tenant exists — never inject demo/sample records. */

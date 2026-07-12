@@ -1,4 +1,4 @@
-import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from './localStore';
+import { getLocalState, processLocalAction } from './localStore';
 import {
   probeRelationalDb,
   loadAppStateFromRelationalDb,
@@ -7,19 +7,19 @@ import {
   applyDirectRowDelete,
   clearTenantOperationalData,
   isDestructiveDbAction,
+  countGuardsInDb,
   getRelationalSummary,
 } from './db/relationalDb';
-import { deliverAndSummarize, getWhatsAppStatus } from './whatsapp';
+import { evaluateAllOnDutyGuards } from './guards';
+import { getWhatsAppStatus } from './whatsapp';
 import { getEmailStatus } from './email';
 import { deliverPinNotifications } from './pinDeliveryServer';
 
 const PROBE_TIMEOUT_MS = 8000;
 const CACHE_OK_MS = 30_000;
 const CACHE_FAIL_MS = 60_000;
-const HYDRATE_CACHE_MS = 10_000;
 
 let readyCache = { ok: null, at: 0 };
-let hydrateCache = { at: 0, promise: null };
 
 function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
   return Promise.race([
@@ -32,12 +32,21 @@ function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
 
 export function invalidateSupabaseCache() {
   readyCache = { ok: null, at: 0 };
-  hydrateCache = { at: 0, promise: null };
 }
 
-function buildAppStateResponse() {
+/** Load live data from Supabase into memory for this request only. */
+export async function loadFreshStateFromDatabase() {
+  await ensureMinimalTenantInDb();
+  const state = await loadAppStateFromRelationalDb();
+  globalThis.__titanState = state;
+  globalThis.__titanFreshLoadAt = Date.now();
+  return state;
+}
+
+function buildAppStateResponse(state) {
+  evaluateAllOnDutyGuards(state, state.activeTenantId || 'titan');
   return {
-    ...getLocalStateWithMonitoring(),
+    ...state,
     dataSource: 'supabase',
     storage: 'relational',
     whatsappStatus: getWhatsAppStatus(),
@@ -45,57 +54,19 @@ function buildAppStateResponse() {
   };
 }
 
-async function hydrateIfNeeded() {
-  if (hydrateCache.promise) {
-    await hydrateCache.promise;
-    return;
-  }
-  hydrateCache.promise = (async () => {
-    await ensureMinimalTenantInDb();
-    await hydrateStateFromSupabase();
-    hydrateCache.at = Date.now();
-  })();
-  try {
-    await hydrateCache.promise;
-  } finally {
-    hydrateCache.promise = null;
-  }
-}
-
-function tenantIdOf(state) {
-  return state?.activeTenantId || 'titan';
-}
-
-function recordCount(state) {
-  if (!state || typeof state !== 'object') return 0;
-  const tid = tenantIdOf(state);
-  return (
-    (state.guards?.[tid] || []).length +
-    (state.premises?.[tid] || []).length +
-    (state.territories?.[tid] || []).length +
-    (state.supervisors?.[tid] || []).length +
-    (state.shifts?.[tid] || []).length +
-    Object.keys(state.tenants || {}).length
-  );
-}
-
 export function getStateSummary(state = getLocalState()) {
   return getRelationalSummary(state);
 }
 
-/** Load from relational DB into memory. Always prefer DB on cold start. */
-export async function hydrateStateFromSupabase() {
-  const remote = await loadAppStateFromRelationalDb();
-  globalThis.__titanState = remote;
-  return true;
-}
-
-/** Save in-memory state to relational tables. */
+/** Save in-memory state to relational tables — only after loadFreshStateFromDatabase in this request. */
 export async function persistStateToSupabase() {
+  if (!globalThis.__titanFreshLoadAt) {
+    throw new Error('Refusing to write stale server memory to the database. Reload from database first.');
+  }
   await saveAppStateToRelationalDb(getLocalState());
 }
 
-/** Push current in-memory state to Supabase relational tables. */
+/** Pull latest data from Supabase (never pushes in-memory demo/stale data). */
 export async function syncLocalToSupabase() {
   invalidateSupabaseCache();
   const ready = await isSupabaseReady();
@@ -104,13 +75,22 @@ export async function syncLocalToSupabase() {
       'Could not reach the server database. Contact your system administrator.'
     );
   }
-  const summary = getStateSummary();
-  await persistStateToSupabase();
+  const state = await loadFreshStateFromDatabase();
+  const summary = getRelationalSummary(state);
   readyCache = { ok: true, at: Date.now() };
-  return { summary, syncedAt: new Date().toISOString(), storage: 'relational' };
+  return {
+    summary,
+    syncedAt: new Date().toISOString(),
+    storage: 'relational',
+    direction: 'pull',
+  };
 }
 
-/** Probe relational tables (guards table must exist). */
+export async function hydrateStateFromSupabase() {
+  await loadFreshStateFromDatabase();
+  return true;
+}
+
 export async function isSupabaseReady() {
   if (process.env.FORCE_SUPABASE !== '1') return false;
 
@@ -130,33 +110,66 @@ export async function isSupabaseReady() {
   }
 }
 
-export async function getSupabaseAppState() {
-  await hydrateIfNeeded();
-  return buildAppStateResponse();
+export async function getDbGuardCount() {
+  try {
+    return await countGuardsInDb();
+  } catch {
+    return null;
+  }
 }
+
+/** Every read loads directly from Supabase — no stale server memory. */
+export async function getSupabaseAppState() {
+  const state = await loadFreshStateFromDatabase();
+  const dbGuardCount = await getDbGuardCount();
+  return {
+    ...buildAppStateResponse(state),
+    dbGuardCount,
+  };
+}
+
+const READ_ONLY_ACTIONS = new Set(['GUARD_LOGIN', 'SWITCH_TENANT']);
+
+/** Actions that change guards/premises/etc. and need a relational write after memory update. */
+const RELATIONAL_WRITE_ACTIONS = new Set([
+  'CREATE_GUARD', 'UPDATE_GUARD', 'RESET_GUARD_PIN', 'CHANGE_GUARD_PIN',
+  'CREATE_SHIFT', 'UPDATE_SHIFT',
+  'CREATE_PREMISE', 'UPDATE_PREMISE', 'CREATE_PLACE', 'UPDATE_PLACE',
+  'CREATE_TERRITORY', 'UPDATE_TERRITORY', 'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR',
+  'GUARD_CLOCK_IN', 'GUARD_CLOCK_OUT', 'GUARD_HEARTBEAT', 'GUARD_MOVEMENT_ACK',
+  'ADD_GUARD_DOCUMENT', 'ADD_GUARD_TRAINING', 'UPDATE_GUARD_PHOTO',
+  'REQUEST_SHIFT_SWAP', 'RESOLVE_SHIFT_SWAP', 'DISMISS_GUARD_ALERT',
+  'SEND_GUARD_WHATSAPP', 'RESEND_WHATSAPP', 'UPDATE_SYSTEM_SETTINGS',
+  'TAP_NFC', 'LOG_INCIDENT', 'UPDATE_INCIDENT_STATUS', 'SUBMIT_CHECKLIST',
+  'REGISTER_VISITOR', 'CHECKOUT_VISITOR', 'TRIGGER_SOS', 'CLEAR_SOS',
+  'CREATE_TENANT', 'CREATE_CHECKLIST_TEMPLATE', 'RESET_STATE',
+]);
 
 export async function runSupabaseAction(payload) {
   invalidateSupabaseCache();
-  await hydrateIfNeeded();
+  await loadFreshStateFromDatabase();
+
   const result = processLocalAction(payload);
   if (result?.error) return result;
+
   const tenantId = payload.tenantId || getLocalState().activeTenantId || 'titan';
   const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
   const destructive = isDestructiveDbAction(payload.action);
+  const action = payload.action;
 
-  if (payload.action === 'CLEAR_TENANT_DEMO_DATA') {
+  if (action === 'CLEAR_TENANT_DEMO_DATA') {
     await clearTenantOperationalData(tenantId);
   } else if (destructive) {
-    await applyDirectRowDelete(payload.action, payload, tenantId);
-  }
-
-  if (!destructive) {
+    await applyDirectRowDelete(action, payload, tenantId);
+  } else if (!READ_ONLY_ACTIONS.has(action) && RELATIONAL_WRITE_ACTIONS.has(action)) {
     await persistStateToSupabase();
   }
 
-  invalidateSupabaseCache();
-  await hydrateStateFromSupabase();
-  const state = getLocalState();
+  globalThis.__titanFreshLoadAt = null;
+  const state = await loadAppStateFromRelationalDb();
+  globalThis.__titanState = state;
+  globalThis.__titanFreshLoadAt = Date.now();
+
   if (result?.guard) return { ...result, whatsapp, email, state };
   if (result?.generatedPin) return { ...result, whatsapp, email, state };
   if (result?.waLink) return { ...result, whatsapp, email, state };

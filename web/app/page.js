@@ -220,11 +220,11 @@ export default function DashboardPage() {
       }
       const s = data.summary;
       setSyncMessage(
-        `Saved to server: ${s.guards} guards, ${s.premises} premises, ${s.territories} territories, ${s.supervisors} supervisors, ${s.shifts} shifts.`
+        `Reloaded from database: ${s.guards} guards, ${s.premises} premises, ${s.territories} territories, ${s.supervisors} supervisors, ${s.shifts} shifts.`
       );
       fetchState();
     } catch (err) {
-      setSyncError('Could not save to the server. Check your connection and try again.');
+      setSyncError('Could not reload from the database. Check your connection and try again.');
     } finally {
       setSyncing(false);
     }
@@ -941,7 +941,12 @@ export default function DashboardPage() {
                       {state?.dataSource === 'supabase' ? 'Connected to Server' : 'Demo Mode — data is in memory only'}
                     </h3>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '640px' }}>
-                      Guards, premises, territories, supervisors, and shifts are stored on the server. Every save writes your records automatically.
+                      All records live in Supabase. The dashboard reads from the database on every refresh — it never pushes cached demo data back.
+                      {typeof state?.dbGuardCount === 'number' && (
+                        <span style={{ display: 'block', marginTop: '0.35rem', fontWeight: 600, color: 'var(--color-primary)' }}>
+                          Database right now: {state.dbGuardCount} guard{state.dbGuardCount === 1 ? '' : 's'} in Supabase
+                        </span>
+                      )}
                     </p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', fontSize: '0.8rem' }}>
                       <span className="badge badge-blue">{curGuards.length} guards</span>
@@ -959,7 +964,7 @@ export default function DashboardPage() {
                     disabled={syncing}
                     style={{ padding: '0.65rem 1.25rem', whiteSpace: 'nowrap' }}
                   >
-                    {syncing ? <><RefreshCw size={14} className="spin" /> Saving…</> : <><Download size={14} /> Save all data to server</>}
+                    {syncing ? <><RefreshCw size={14} className="spin" /> Reloading…</> : <><RefreshCw size={14} /> Reload from database</>}
                   </button>
                   {(curGuards.length > 0 || curPremises.length > 0 || curTerritories.length > 0) && (
                     <button
@@ -975,7 +980,7 @@ export default function DashboardPage() {
                 </div>
                 {syncMessage && (
                   <div style={{ marginTop: '0.75rem', padding: '0.65rem 0.85rem', background: '#d8f3dc', color: '#1b4332', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 500 }}>
-                    {syncMessage} Your records are stored on the server.
+                    {syncMessage} Counts above match what is stored in Supabase.
                   </div>
                 )}
                 {syncError && (

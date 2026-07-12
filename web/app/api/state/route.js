@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../supabase';
 import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from '../../../lib/localStore';
-import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary, persistStateToSupabase, hydrateStateFromSupabase } from '../../../lib/supabaseState';
+import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary, persistStateToSupabase, hydrateStateFromSupabase, loadFreshStateFromDatabase } from '../../../lib/supabaseState';
 import { applyDirectRowDelete, clearTenantOperationalData, isDestructiveDbAction } from '../../../lib/db/relationalDb';
 import { getWhatsAppStatus } from '../../../lib/whatsapp';
 import { getEmailStatus } from '../../../lib/email';
@@ -451,13 +451,14 @@ export async function POST(req) {
       return jsonResponse({ success: true }, 200, origin);
     }
 
-    const result = processLocalAction({ ...payload, tenantId });
-    if (result.error) {
-      return jsonResponse({ error: result.error }, result.status || 400, origin);
-    }
-    const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
     if (await isSupabaseReady()) {
       try {
+        await loadFreshStateFromDatabase();
+        const result = processLocalAction({ ...payload, tenantId });
+        if (result.error) {
+          return jsonResponse({ error: result.error }, result.status || 400, origin);
+        }
+        const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
         const destructive = isDestructiveDbAction(action);
         if (destructive) {
           if (action === 'CLEAR_TENANT_DEMO_DATA') {
@@ -465,11 +466,14 @@ export async function POST(req) {
           } else if (typeof action === 'string' && action.startsWith('DELETE_')) {
             await applyDirectRowDelete(action, { ...payload, tenantId }, tenantId);
           }
-          await hydrateStateFromSupabase();
-        } else {
+        } else if (action !== 'GUARD_LOGIN' && action !== 'SWITCH_TENANT') {
           await persistStateToSupabase();
-          await hydrateStateFromSupabase();
         }
+        await loadFreshStateFromDatabase();
+        if (result.guard || result.generatedPin) {
+          return jsonResponse({ ...result, whatsapp, email }, 200, origin, req);
+        }
+        return jsonResponse({ ...result, whatsapp, email, state: getLocalState() }, 200, origin, req);
       } catch (err) {
         console.error('Local action persist to Supabase failed:', err.message);
         if (process.env.FORCE_SUPABASE === '1') {
@@ -482,6 +486,12 @@ export async function POST(req) {
         }
       }
     }
+
+    const result = processLocalAction({ ...payload, tenantId });
+    if (result.error) {
+      return jsonResponse({ error: result.error }, result.status || 400, origin);
+    }
+    const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
     if (result.guard || result.generatedPin) {
       return jsonResponse({ ...result, whatsapp, email }, 200, origin, req);
     }

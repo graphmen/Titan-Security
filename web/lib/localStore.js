@@ -43,6 +43,7 @@ import {
   getGeofenceRadius,
   TITAN_TENANT_ID,
 } from './systemSettings';
+import { isValidEmailAddress } from './email';
 
 function getPremiseName(state, tenantId, premiseId) {
   const p = (state.premises[tenantId] || []).find((x) => x.id === premiseId);
@@ -850,6 +851,12 @@ export function processLocalAction(payload) {
       if (!fullName || !idNumber || !phone) {
         return { error: 'Name, ID number and phone are required', status: 400 };
       }
+      if (!email?.trim()) {
+        return { error: 'Email is required — login PINs are sent by email for the mobile app', status: 400 };
+      }
+      if (!isValidEmailAddress(email)) {
+        return { error: 'Enter a valid email address for the guard', status: 400 };
+      }
       if (!state.guards[tenantId]) state.guards[tenantId] = [];
       const newGuard = {
         id: generateGuardId(),
@@ -882,7 +889,7 @@ export function processLocalAction(payload) {
       return {
         success: true,
         generatedPin: newGuard.loginPin,
-        guard: { fullName: newGuard.fullName, phone: newGuard.phone },
+        guard: { fullName: newGuard.fullName, phone: newGuard.phone, email: newGuard.email },
         guardPhone: newGuard.phone,
         waLink: waEntry?.waLink || buildWhatsAppWebUrl(newGuard.phone, buildWelcomePinMessage(newGuard, newGuard.loginPin)),
         whatsappEntryId: state._lastWhatsAppEntryId || waEntry?.id,
@@ -893,13 +900,14 @@ export function processLocalAction(payload) {
       const guard = (state.guards[tenantId] || []).find((g) => g.id === guardId);
       if (!guard) return { error: 'Guard not found', status: 404 };
       if (!guard.phone) return { error: 'Guard has no phone number for WhatsApp', status: 400 };
+      if (!guard.email?.trim()) return { error: 'Guard has no email — add an email before resetting PIN', status: 400 };
       issueGuardPin(state, tenantId, guard, { reset: true });
       refreshGuardScores(state, tenantId);
       const waEntry = (state.whatsappOutbox?.[tenantId] || [])[0];
       return {
         success: true,
         generatedPin: guard.loginPin,
-        guard: { fullName: guard.fullName, phone: guard.phone },
+        guard: { fullName: guard.fullName, phone: guard.phone, email: guard.email },
         guardPhone: guard.phone,
         waLink: waEntry?.waLink || buildWhatsAppWebUrl(guard.phone, buildPinResetMessage(guard, guard.loginPin)),
         whatsappEntryId: state._lastWhatsAppEntryId || waEntry?.id,
@@ -926,7 +934,7 @@ export function processLocalAction(payload) {
     case 'GUARD_LOGIN': {
       const { pin } = payload;
       const guard = findGuardByPin(state.guards[tenantId] || [], pin);
-      if (!guard) return { error: 'Invalid PIN — check WhatsApp for your login code', status: 401 };
+      if (!guard) return { error: 'Invalid PIN — check your email for your login code', status: 401 };
       return {
         success: true,
         guard: sanitizeGuardForClient(guard),

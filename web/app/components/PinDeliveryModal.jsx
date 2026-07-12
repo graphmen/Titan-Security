@@ -1,15 +1,27 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Copy, Check, MessageCircle, User } from 'lucide-react';
+import { X, Copy, Check, MessageCircle, User, Mail } from 'lucide-react';
 
 export default function PinDeliveryModal({ open, data, onClose }) {
   const [copied, setCopied] = useState(false);
 
   if (!open || !data?.pin) return null;
 
-  const { pin, label, guardName, phone, waLink, sent, channel, error } = data;
-  const channelLabel = channel === 'sms' ? 'SMS' : 'WhatsApp';
+  const {
+    pin,
+    label,
+    guardName,
+    phone,
+    email,
+    waLink,
+    sent,
+    emailSent,
+    waSent,
+    channel,
+    error,
+    emailNote,
+  } = data;
 
   const copyPin = async () => {
     try {
@@ -19,6 +31,14 @@ export default function PinDeliveryModal({ open, data, onClose }) {
     } catch {
       window.prompt('Copy this PIN:', pin);
     }
+  };
+
+  const statusLine = () => {
+    if (emailSent) return `PIN emailed to ${email}`;
+    if (waSent) return `PIN sent via ${channel === 'sms' ? 'SMS' : 'WhatsApp'} to ${phone}`;
+    if (error && emailNote) return emailNote;
+    if (error) return 'Auto-send failed — share the PIN manually below';
+    return 'Share this PIN with the guard for mobile app login';
   };
 
   return (
@@ -33,25 +53,21 @@ export default function PinDeliveryModal({ open, data, onClose }) {
         <div className="pin-delivery-header">
           <div>
             <h3 id="pin-delivery-title">{label || 'Guard login PIN'}</h3>
-            {sent ? (
-              <p className="pin-delivery-status is-sent">Delivered via {channelLabel} to {phone}</p>
-            ) : error ? (
-              <p className="pin-delivery-status is-error">Auto-send failed — use manual delivery below</p>
-            ) : (
-              <p className="pin-delivery-status">Share this PIN with the guard — no SMS API required</p>
-            )}
+            <p className={`pin-delivery-status ${sent ? 'is-sent' : error ? 'is-error' : ''}`}>
+              {statusLine()}
+            </p>
           </div>
           <button type="button" className="pin-delivery-close" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
-        {(guardName || phone) && (
+        {(guardName || email || phone) && (
           <div className="pin-delivery-guard">
             <User size={14} />
             <span>
               {guardName || 'Guard'}
-              {phone ? ` · ${phone}` : ''}
+              {email ? ` · ${email}` : phone ? ` · ${phone}` : ''}
             </span>
           </div>
         )}
@@ -64,38 +80,44 @@ export default function PinDeliveryModal({ open, data, onClose }) {
           </button>
         </div>
 
-        {!sent && (
+        {!emailSent && (
           <div className="pin-delivery-steps">
-            <strong>How to deliver (works in Zimbabwe)</strong>
+            <strong>How to deliver</strong>
             <ol>
-              <li>WhatsApp should have opened with the PIN message — tap <em>Send</em> on your phone.</li>
-              <li>Or tell the guard the PIN in person / phone call.</li>
-              <li>Guard opens Titan Monitor app and enters this PIN on first login.</li>
+              {email && !emailSent && (
+                <li>Configure Resend in the Email tab if the PIN email did not arrive.</li>
+              )}
+              {waLink && !waSent && (
+                <li>WhatsApp may have opened — tap <em>Send</em>, or use the button below.</li>
+              )}
+              <li>Guard opens <strong>Titan Monitor</strong> and enters this PIN.</li>
+              <li>On first login they choose a new PIN.</li>
             </ol>
           </div>
         )}
 
+        {emailSent && (
+          <div className="pin-delivery-email-sent">
+            <Mail size={16} />
+            <span>Check the guard&apos;s inbox (and spam folder) for the PIN email.</span>
+          </div>
+        )}
+
         <div className="pin-delivery-actions">
-          {waLink && !sent && (
+          {waLink && !waSent && (
             <a
               href={waLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-primary pin-delivery-wa"
+              className="btn-secondary pin-delivery-wa"
             >
-              <MessageCircle size={14} /> Open WhatsApp again
+              <MessageCircle size={14} /> Open WhatsApp
             </a>
           )}
-          <button type="button" className="btn-secondary" onClick={onClose}>
+          <button type="button" className="btn-primary" onClick={onClose}>
             Done
           </button>
         </div>
-
-        {!sent && (
-          <p className="pin-delivery-note">
-            Meta and Twilio SMS codes often do not reach +263 numbers. Manual WhatsApp or in-person PIN delivery is the reliable path for now.
-          </p>
-        )}
       </div>
     </div>
   );

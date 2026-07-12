@@ -63,7 +63,7 @@ export default function PinLogin({ guards, tenantId, apiBase, tenantName, isDark
       }
 
       playPinError();
-      setError(json.error || 'Invalid PIN — check WhatsApp for your 6-digit code');
+      setError(json.error || 'Invalid PIN — check your email for your 6-digit code');
       setShake(true);
       setPin('');
       setTimeout(() => setShake(false), 500);
@@ -98,7 +98,7 @@ export default function PinLogin({ guards, tenantId, apiBase, tenantName, isDark
       </div>
 
       <h2 className="pin-login-heading">Enter your PIN</h2>
-      <p className="pin-login-sub">Your 6-digit code was sent to your WhatsApp when you were registered.</p>
+      <p className="pin-login-sub">Your 6-digit code was sent to your email when you were registered. Check your inbox and spam folder.</p>
 
       <div className={`pin-dots pin-dots-6 ${shake ? 'pin-shake' : ''}`}>
         {Array.from({ length: PIN_LENGTH }).map((_, i) => (
@@ -135,7 +135,7 @@ export default function PinLogin({ guards, tenantId, apiBase, tenantName, isDark
         {submitting ? 'Signing in…' : 'Sign In'}
       </button>
 
-      <p className="pin-demo-hint">Forgot PIN? Ask your supervisor to reset it — a new code will be sent to your WhatsApp.</p>
+      <p className="pin-demo-hint">Forgot PIN? Ask your supervisor to reset it — a new code will be sent to your email.</p>
     </div>
   );
 }

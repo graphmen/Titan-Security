@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { supabase } from '../../supabase';
 import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from '../../../lib/localStore';
 import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary } from '../../../lib/supabaseState';
-import { deliverAndSummarize, getWhatsAppStatus } from '../../../lib/whatsapp';
+import { getWhatsAppStatus } from '../../../lib/whatsapp';
+import { getEmailStatus } from '../../../lib/email';
+import { deliverPinNotifications } from '../../../lib/pinDeliveryServer';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -205,7 +207,12 @@ export async function GET(req) {
     console.warn('Supabase unavailable, using local store:', err.message);
   }
 
-  const state = { ...getLocalStateWithMonitoring(), dataSource: 'local', whatsappStatus: getWhatsAppStatus() };
+  const state = {
+    ...getLocalStateWithMonitoring(),
+    dataSource: 'local',
+    whatsappStatus: getWhatsAppStatus(),
+    emailStatus: getEmailStatus(),
+  };
   return jsonResponse(state, 200, origin);
 }
 
@@ -420,11 +427,11 @@ export async function POST(req) {
     if (result.error) {
       return jsonResponse({ error: result.error }, result.status || 400, origin);
     }
-    const whatsapp = await deliverAndSummarize(getLocalState(), tenantId, result.whatsappEntryId);
-    if (result.guard) {
-      return jsonResponse({ ...result, whatsapp }, 200, origin);
+    const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
+    if (result.guard || result.generatedPin) {
+      return jsonResponse({ ...result, whatsapp, email }, 200, origin);
     }
-    return jsonResponse({ ...result, whatsapp, state: getLocalState() }, 200, origin);
+    return jsonResponse({ ...result, whatsapp, email, state: getLocalState() }, 200, origin);
   } catch (err) {
     console.error('POST api state error:', err);
     return jsonResponse({ error: err.message }, 500, origin);

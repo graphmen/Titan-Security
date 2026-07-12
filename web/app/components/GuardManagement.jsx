@@ -25,10 +25,12 @@ import {
   MessageCircle,
   Send,
   RotateCw,
+  Mail,
 } from 'lucide-react';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import PinDeliveryModal from './PinDeliveryModal';
 import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
+import EmailSetupPanel from './EmailSetupPanel';
 import WhatsAppSetupPanel from './WhatsAppSetupPanel';
 import { matchesSearch, premisesInTerritory } from '../../lib/listFilters';
 import { buildGuardProfileContext } from '../../lib/guardProfile';
@@ -445,7 +447,7 @@ export default function GuardManagement({
           { id: 'alerts', label: 'Supervisor Alerts', icon: Bell },
           { id: 'performance', label: 'Performance', icon: TrendingUp },
           { id: 'swaps', label: 'Shift Swaps', icon: ArrowLeftRight },
-          { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+          { id: 'whatsapp', label: 'Messaging', icon: Mail },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -469,7 +471,7 @@ export default function GuardManagement({
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                 <div>
                   <h3 style={{ fontSize: '1.1rem' }}>Guard Profiles</h3>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Photos, documents, training records, premises assignment, and WhatsApp login PIN delivery.</p>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Photos, documents, training records, premises assignment, and email PIN delivery for the mobile app.</p>
                 </div>
                 <button type="button" className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => { resetGuardForm(); setShowGuardForm(true); }}>
                   <UserPlus size={14} /> Register Guard
@@ -488,9 +490,13 @@ export default function GuardManagement({
                   <div className="input-group" style={{ marginBottom: 0 }}>
                     <label>Phone (WhatsApp) *</label>
                     <input className="form-input" value={guardForm.phone} onChange={(e) => setGuardForm({ ...guardForm, phone: e.target.value })} placeholder="+263 77 123 4567" required />
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>6-digit login PIN is sent to this WhatsApp number on registration.</span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Used for optional WhatsApp messages.</span>
                   </div>
-                  <div className="input-group" style={{ marginBottom: 0 }}><label>Email</label><input className="form-input" type="email" value={guardForm.email} onChange={(e) => setGuardForm({ ...guardForm, email: e.target.value })} /></div>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>Email *</label>
+                    <input className="form-input" type="email" value={guardForm.email} onChange={(e) => setGuardForm({ ...guardForm, email: e.target.value })} placeholder="guard@example.com" required />
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Login PIN is emailed here for Titan Monitor mobile app sign-in.</span>
+                  </div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>PSIRA / License No.</label><input className="form-input" value={guardForm.licenseNumber} onChange={(e) => setGuardForm({ ...guardForm, licenseNumber: e.target.value })} /></div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>License Expiry</label><input className="form-input" type="date" value={guardForm.licenseExpiry} onChange={(e) => setGuardForm({ ...guardForm, licenseExpiry: e.target.value })} /></div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Next of Kin — Name</label><input className="form-input" value={guardForm.nextOfKinName} onChange={(e) => setGuardForm({ ...guardForm, nextOfKinName: e.target.value })} placeholder="e.g. Grace Dube" /></div>
@@ -905,6 +911,9 @@ export default function GuardManagement({
 
       {tab === 'whatsapp' && (
         <div className="dashboard-grid">
+          <div className="col-12">
+            <EmailSetupPanel />
+          </div>
           <div className="col-12">
             <WhatsAppSetupPanel />
           </div>

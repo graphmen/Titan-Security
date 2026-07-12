@@ -7,6 +7,8 @@ import {
   getRelationalSummary,
 } from './db/relationalDb';
 import { deliverAndSummarize, getWhatsAppStatus } from './whatsapp';
+import { getEmailStatus } from './email';
+import { deliverPinNotifications } from './pinDeliveryServer';
 
 const PROBE_TIMEOUT_MS = 8000;
 const CACHE_OK_MS = 30_000;
@@ -36,6 +38,7 @@ function buildAppStateResponse() {
     dataSource: 'supabase',
     storage: 'relational',
     whatsappStatus: getWhatsAppStatus(),
+    emailStatus: getEmailStatus(),
   };
 }
 
@@ -142,11 +145,11 @@ export async function runSupabaseAction(payload) {
   const result = processLocalAction(payload);
   if (result?.error) return result;
   const tenantId = payload.tenantId || getLocalState().activeTenantId || 'titan';
-  const whatsapp = await deliverAndSummarize(getLocalState(), tenantId, result.whatsappEntryId);
+  const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
   await persistStateToSupabase();
   invalidateSupabaseCache();
-  if (result?.guard) return { ...result, whatsapp };
-  if (result?.generatedPin) return { ...result, whatsapp };
-  if (result?.waLink) return { ...result, whatsapp };
-  return { success: true, whatsapp, state: getLocalState() };
+  if (result?.guard) return { ...result, whatsapp, email };
+  if (result?.generatedPin) return { ...result, whatsapp, email };
+  if (result?.waLink) return { ...result, whatsapp, email };
+  return { success: true, whatsapp, email, state: getLocalState() };
 }

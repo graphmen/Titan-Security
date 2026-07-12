@@ -103,13 +103,13 @@ export default function ChangePin({ guard, tenantId, apiBase, currentPin, onComp
 
       {error && <p className="pin-error">{error}</p>}
 
-      <div className="pin-numpad">
+      <div className="pin-numpad pin-numpad-large">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map((key) => {
           if (key === '') return <span key="spacer" className="pin-key spacer" />;
           if (key === 'del') {
             return (
               <button key="del" type="button" className="pin-key action" onClick={backspace} disabled={saving}>
-                <Delete size={20} />
+                <Delete size={26} />
               </button>
             );
           }

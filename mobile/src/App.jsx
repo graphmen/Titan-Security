@@ -901,10 +901,6 @@ export default function App() {
           isDark={isDark}
           onToggleTheme={toggleTheme}
           onLogin={(guard, opts) => handleLogin(guard, opts)}
-          serverUrl={serverUrl}
-          onServerUrlChange={setServerUrl}
-          onLinkServer={linkServer}
-          serverOnline={serverReachable}
         />
       )}
 
@@ -1448,32 +1444,91 @@ export default function App() {
           </div>
         )}
 
-        {/* ================= TAB: MY DUTY PROFILE ================= */}
+        {/* ================= TAB: GUARD PROFILE ================= */}
         {activeTab === 'profile' && (
           <div className="mob-tab-panel" key={`profile-${tabKey}`}>
             <h3 className="mob-section-title">
               <span className="mob-section-icon profile"><UserCheck size={16} /></span>
-              My Duty Profile
+              Guard Profile
             </h3>
 
             {activeGuard && (
               <div className="mob-card mob-profile-hero">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', position: 'relative', zIndex: 1 }}>
-                  <div className="mob-avatar">{guardInitials(activeGuard.fullName)}</div>
-                  <div>
+                <div className="mob-profile-hero-row">
+                  <div className="mob-avatar mob-avatar-lg">{guardInitials(activeGuard.fullName)}</div>
+                  <div className="mob-profile-hero-text">
                     <strong>{activeGuard.fullName}</strong>
-                    <div className="sub">
-                      {activeGuard.employeeNumber} · Grade {activeGuard.grade}
-                      {activeGuard.phone && <span> · {activeGuard.phone}</span>}
-                    </div>
-                    {(activeGuard.suburb || activeGuard.city || guardProfile?.territory) && (
-                      <div className="sub" style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <MapPin size={12} /> {[activeGuard.suburb, activeGuard.city].filter(Boolean).join(', ')}
-                        {guardProfile?.territory && <span> · {guardProfile.territory.name}</span>}
-                      </div>
+                    <div className="sub">{activeGuard.employeeNumber} · Grade {activeGuard.grade || '—'}</div>
+                    {activeGuard.status && (
+                      <span className="mob-profile-status">{activeGuard.status}</span>
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {activeGuard && (
+              <div className="mob-card mob-profile-details">
+                {activeGuard.email && (
+                  <div className="mob-profile-detail">
+                    <Mail size={15} />
+                    <div>
+                      <span className="mob-profile-detail-label">Email</span>
+                      <strong>{activeGuard.email}</strong>
+                    </div>
+                  </div>
+                )}
+                {activeGuard.phone && (
+                  <div className="mob-profile-detail">
+                    <Phone size={15} />
+                    <div>
+                      <span className="mob-profile-detail-label">Phone</span>
+                      <a href={`tel:${activeGuard.phone.replace(/\s/g, '')}`} className="mob-profile-link">{activeGuard.phone}</a>
+                    </div>
+                  </div>
+                )}
+                {activeGuard.idNumber && (
+                  <div className="mob-profile-detail">
+                    <Shield size={15} />
+                    <div>
+                      <span className="mob-profile-detail-label">ID Number</span>
+                      <strong>{activeGuard.idNumber}</strong>
+                    </div>
+                  </div>
+                )}
+                {(activeGuard.suburb || activeGuard.city || guardProfile?.territory) && (
+                  <div className="mob-profile-detail">
+                    <MapPin size={15} />
+                    <div>
+                      <span className="mob-profile-detail-label">Area</span>
+                      <strong>
+                        {[activeGuard.suburb, activeGuard.city].filter(Boolean).join(', ')}
+                        {guardProfile?.territory ? ` · ${guardProfile.territory.name}` : ''}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+                {(activeGuard.licenseNumber || activeGuard.licenseExpiry) && (
+                  <div className="mob-profile-detail">
+                    <BadgeCheck size={15} />
+                    <div>
+                      <span className="mob-profile-detail-label">PSIRA / License</span>
+                      <strong>
+                        {activeGuard.licenseNumber || '—'}
+                        {activeGuard.licenseExpiry ? ` · exp. ${activeGuard.licenseExpiry}` : ''}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+                {activeGuard.performanceScore?.composite != null && (
+                  <div className="mob-profile-detail">
+                    <TrendingUp size={15} />
+                    <div>
+                      <span className="mob-profile-detail-label">Performance</span>
+                      <strong>{activeGuard.performanceScore.composite}% composite score</strong>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1637,7 +1692,7 @@ export default function App() {
         </button>
         <button className={`mob-nav-item ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => switchTab('profile')}>
           <span className="mob-nav-icon-wrap"><UserCheck size={18} /></span>
-          <span>My Duty</span>
+          <span>My Profile</span>
         </button>
         <button className={`mob-nav-item ${activeTab === 'access' ? 'active' : ''}`} onClick={() => switchTab('access')}>
           <span className="mob-nav-icon-wrap"><Users size={18} /></span>

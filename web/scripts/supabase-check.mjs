@@ -3,6 +3,12 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
+import { Agent, fetch as undiciFetch } from 'undici';
+
+const tlsAgent = new Agent({ connect: { rejectUnauthorized: false } });
+function supabaseFetch(url, options = {}) {
+  return undiciFetch(url, { ...options, dispatcher: tlsAgent });
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const envPath = resolve(__dirname, '../.env.local');
@@ -24,7 +30,7 @@ if (!url || !anon) {
   process.exit(1);
 }
 
-const db = createClient(url, service || anon);
+const db = createClient(url, service || anon, { global: { fetch: supabaseFetch } });
 console.log('Using key:', service ? 'service_role' : 'anon (no SUPABASE_SERVICE_ROLE_KEY)');
 
 const tables = ['guards', 'premises', 'territories', 'supervisors', 'tenants', 'titan_state'];

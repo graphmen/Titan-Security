@@ -5,6 +5,8 @@ import {
   saveAppStateToRelationalDb,
   ensureMinimalTenantInDb,
   applyDirectRowDelete,
+  applyDirectRowUpsert,
+  usesDirectRowUpsert,
   clearTenantOperationalData,
   wipeEntireOperationalDatabase,
   isDestructiveDbAction,
@@ -159,6 +161,7 @@ export async function runSupabaseAction(payload) {
   const action = payload.action;
 
   if (action === 'CLEAR_TENANT_DEMO_DATA') {
+    globalThis.__titanLegacyPurgeAt = 0;
     const wipeResult = await wipeEntireOperationalDatabase();
     await ensureMinimalTenantInDb();
     return {
@@ -172,7 +175,11 @@ export async function runSupabaseAction(payload) {
   } else if (destructive) {
     await applyDirectRowDelete(action, payload, tenantId);
   } else if (!READ_ONLY_ACTIONS.has(action) && RELATIONAL_WRITE_ACTIONS.has(action)) {
-    await persistStateToSupabase();
+    if (usesDirectRowUpsert(action)) {
+      await applyDirectRowUpsert(action, payload, tenantId, getLocalState());
+    } else {
+      await persistStateToSupabase();
+    }
   }
 
   globalThis.__titanFreshLoadAt = null;

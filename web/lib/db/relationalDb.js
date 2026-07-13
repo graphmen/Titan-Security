@@ -344,6 +344,25 @@ async function deleteMissing(table, tenantColumn, tenantId, keepIds) {
   await requireDbOk(await db.from(table).delete().in('id', toDelete), `${table} delete`);
 }
 
+/** Sync suburbs for one territory — scoped to that territory only. */
+async function syncSuburbsForTerritory(territoryId, suburbs = []) {
+  const suburbList = suburbs || [];
+  const keepIds = new Set(suburbList.map((s) => s.id));
+  const { data: existing, error: selErr } = await db
+    .from('territory_suburbs')
+    .select('id')
+    .eq('territory_id', territoryId);
+  if (selErr) throw new Error(`territory_suburbs select: ${selErr.message}`);
+  const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
+  if (suburbList.length) {
+    const { error } = await db.from('territory_suburbs').upsert(suburbList.map((s) => suburbToRow(s, territoryId)));
+    if (error) throw error;
+  }
+  if (toDelete.length) {
+    await requireDbOk(await db.from('territory_suburbs').delete().in('id', toDelete), 'territory_suburbs delete');
+  }
+}
+
 /** Remove DB rows that reference a guard before the guard row is deleted. */
 async function deleteGuardDependenciesFromDb(guardId, tenantId) {
   await requireDbOk(await db.from('guard_alerts').delete().eq('guard_id', guardId), 'guard_alerts');
@@ -417,7 +436,122 @@ export async function applyDirectRowDelete(action, payload, tenantId) {
   }
 }
 
-async function syncTenantEntities(state, tenantId) {
+/** Upsert rows changed by a single create/update action — avoids full-state diff deletes. */
+export async function applyDirectRowUpsert(action, payload, tenantId, state) {
+  switch (action) {
+    case 'CREATE_TERRITORY':
+    case 'UPDATE_TERRITORY': {
+      const territoryId = payload.territoryId
+        || (state.territories?.[tenantId] || []).slice(-1)[0]?.id;
+      const territory = (state.territories?.[tenantId] || []).find((t) => t.id === territoryId);
+      if (!territory) throw new Error('Territory not found in memory after save');
+      await requireDbOk(
+        await db.from('territories').upsert(territoryToRow(territory, tenantId)),
+        'territories upsert'
+      );
+      await syncSuburbsForTerritory(territory.id, territory.suburbs || []);
+      break;
+    }
+    case 'CREATE_SUPERVISOR':
+    case 'UPDATE_SUPERVISOR': {
+      const supervisorId = payload.supervisorId
+        || (state.supervisors?.[tenantId] || []).slice(-1)[0]?.id;
+      const supervisor = (state.supervisors?.[tenantId] || []).find((s) => s.id === supervisorId);
+      if (!supervisor) throw new Error('Supervisor not found in memory after save');
+      await requireDbOk(
+        await db.from('supervisors').upsert(supervisorToRow(supervisor, tenantId)),
+        'supervisors upsert'
+      );
+      await requireDbOk(
+        await db.from('supervisor_territories').delete().eq('supervisor_id', supervisor.id),
+        'supervisor_territories clear'
+      );
+      const stRows = (supervisor.assignedTerritoryIds || []).map((tid) => ({
+        supervisor_id: supervisor.id,
+        territory_id: tid,
+      }));
+      if (stRows.length) {
+        await requireDbOk(await db.from('supervisor_territories').upsert(stRows), 'supervisor_territories upsert');
+      }
+      break;
+    }
+    case 'CREATE_GUARD':
+    case 'UPDATE_GUARD':
+    case 'UPDATE_GUARD_PHOTO':
+    case 'ADD_GUARD_DOCUMENT':
+    case 'ADD_GUARD_TRAINING':
+    case 'RESET_GUARD_PIN':
+    case 'CHANGE_GUARD_PIN': {
+      const guardId = payload.guardId
+        || (state.guards?.[tenantId] || []).slice(-1)[0]?.id;
+      const guard = (state.guards?.[tenantId] || []).find((g) => g.id === guardId);
+      if (!guard) throw new Error('Guard not found in memory after save');
+      await requireDbOk(await db.from('guards').upsert(guardToRow(guard, tenantId)), 'guards upsert');
+      await requireDbOk(await db.from('guard_premises').delete().eq('guard_id', guard.id), 'guard_premises clear');
+      const gpRows = (guard.assignedPremiseIds || []).map((pid) => ({
+        guard_id: guard.id,
+        premise_id: pid,
+      }));
+      if (gpRows.length) {
+        await requireDbOk(await db.from('guard_premises').upsert(gpRows), 'guard_premises upsert');
+      }
+      const wa = state.whatsappOutbox?.[tenantId] || [];
+      if (wa.length) {
+        await requireDbOk(
+          await db.from('whatsapp_outbox').upsert(wa.map((w) => waToRow(w, tenantId))),
+          'whatsapp_outbox upsert'
+        );
+      }
+      break;
+    }
+    case 'CREATE_PREMISE':
+    case 'UPDATE_PREMISE': {
+      const premiseId = payload.premiseId
+        || (state.premises?.[tenantId] || []).slice(-1)[0]?.id;
+      const premise = (state.premises?.[tenantId] || []).find((p) => p.id === premiseId);
+      if (!premise) throw new Error('Premise not found in memory after save');
+      await requireDbOk(await db.from('premises').upsert(premiseToRow(premise, tenantId)), 'premises upsert');
+      break;
+    }
+    case 'CREATE_PLACE':
+    case 'UPDATE_PLACE': {
+      const premiseId = payload.premiseId;
+      const placeId = payload.placeId
+        || (state.places?.[premiseId] || []).slice(-1)[0]?.id;
+      const place = (state.places?.[premiseId] || []).find((p) => p.id === placeId);
+      if (!place) throw new Error('Place not found in memory after save');
+      await requireDbOk(await db.from('places').upsert(placeToRow(place, tenantId)), 'places upsert');
+      break;
+    }
+    case 'CREATE_SHIFT':
+    case 'UPDATE_SHIFT': {
+      const shiftId = payload.shiftId
+        || (state.shifts?.[tenantId] || []).slice(-1)[0]?.id;
+      const shift = (state.shifts?.[tenantId] || []).find((s) => s.id === shiftId);
+      if (!shift) throw new Error('Shift not found in memory after save');
+      await requireDbOk(await db.from('shifts').upsert(shiftToRow(shift, tenantId)), 'shifts upsert');
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+const DIRECT_UPSERT_ACTIONS = new Set([
+  'CREATE_TERRITORY', 'UPDATE_TERRITORY',
+  'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR',
+  'CREATE_GUARD', 'UPDATE_GUARD', 'UPDATE_GUARD_PHOTO', 'ADD_GUARD_DOCUMENT', 'ADD_GUARD_TRAINING',
+  'RESET_GUARD_PIN', 'CHANGE_GUARD_PIN',
+  'CREATE_PREMISE', 'UPDATE_PREMISE',
+  'CREATE_PLACE', 'UPDATE_PLACE',
+  'CREATE_SHIFT', 'UPDATE_SHIFT',
+]);
+
+export function usesDirectRowUpsert(action) {
+  return DIRECT_UPSERT_ACTIONS.has(action);
+}
+
+async function syncTenantEntities(state, tenantId, { allowDiffDeletes = false } = {}) {
   const territories = state.territories?.[tenantId] || [];
   const territoryIds = territories.map((t) => t.id);
 
@@ -425,29 +559,12 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('territories').upsert(territories.map((t) => territoryToRow(t, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('territories', 'tenant_id', tenantId, territoryIds);
-
-  const suburbRows = [];
-  territories.forEach((t) => {
-    (t.suburbs || []).forEach((s) => suburbRows.push(suburbToRow(s, t.id)));
-  });
-  if (suburbRows.length) {
-    const { error } = await db.from('territory_suburbs').upsert(suburbRows);
-    if (error) throw error;
+  if (allowDiffDeletes) {
+    await deleteMissing('territories', 'tenant_id', tenantId, territoryIds);
   }
-  if (territoryIds.length) {
-    const { data: allSuburbs, error: subSelErr } = await db
-      .from('territory_suburbs')
-      .select('id, territory_id');
-    if (subSelErr && subSelErr.code !== 'PGRST116') throw subSelErr;
-    const keepTerritories = new Set(territoryIds);
-    const deleteSuburbIds = (allSuburbs || [])
-      .filter((s) => !keepTerritories.has(s.territory_id))
-      .map((s) => s.id);
-    if (deleteSuburbIds.length) {
-      const { error } = await db.from('territory_suburbs').delete().in('id', deleteSuburbIds);
-      if (error && error.code !== 'PGRST116') throw error;
-    }
+
+  for (const territory of territories) {
+    await syncSuburbsForTerritory(territory.id, territory.suburbs || []);
   }
 
   const supervisors = state.supervisors?.[tenantId] || [];
@@ -456,7 +573,9 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('supervisors').upsert(supervisors.map((s) => supervisorToRow(s, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('supervisors', 'tenant_id', tenantId, supervisorIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('supervisors', 'tenant_id', tenantId, supervisorIds);
+  }
 
   if (supervisorIds.length) {
     await db.from('supervisor_territories').delete().in('supervisor_id', supervisorIds);
@@ -478,7 +597,9 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('premises').upsert(premises.map((p) => premiseToRow(p, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('premises', 'tenant_id', tenantId, premiseIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('premises', 'tenant_id', tenantId, premiseIds);
+  }
 
   const placeRows = [];
   premiseIds.forEach((pid) => {
@@ -489,7 +610,7 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('places').upsert(placeRows);
     if (error) throw error;
   }
-  if (placeIds.length > 0) {
+  if (allowDiffDeletes && placeIds.length > 0) {
     const { data: existingPlaces, error: plSelErr } = await db
       .from('places')
       .select('id')
@@ -502,13 +623,6 @@ async function syncTenantEntities(state, tenantId) {
       const { error } = await db.from('places').delete().in('id', deletePlaceIds);
       if (error) throw error;
     }
-  } else {
-    const { data: tenantPlaces } = await db.from('places').select('id').eq('tenant_id', tenantId);
-    const allPlaceIds = (tenantPlaces || []).map((p) => p.id);
-    if (allPlaceIds.length) {
-      await db.from('checkpoints').delete().in('place_id', allPlaceIds);
-      await db.from('places').delete().in('id', allPlaceIds);
-    }
   }
 
   const guards = state.guards?.[tenantId] || [];
@@ -519,7 +633,9 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('guards').upsert(guards.map((g) => guardToRow(g, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('guards', 'tenant_id', tenantId, guardIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('guards', 'tenant_id', tenantId, guardIds);
+  }
 
   const gpRows = [];
   guards.forEach((g) => {
@@ -527,8 +643,8 @@ async function syncTenantEntities(state, tenantId) {
       gpRows.push({ guard_id: g.id, premise_id: pid });
     });
   });
-  if (premiseIds.length) {
-    await db.from('guard_premises').delete().in('premise_id', premiseIds);
+  if (guardIds.length) {
+    await db.from('guard_premises').delete().in('guard_id', guardIds);
   }
   if (gpRows.length) {
     const { error } = await db.from('guard_premises').upsert(gpRows);
@@ -541,7 +657,9 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('shifts').upsert(shifts.map((s) => shiftToRow(s, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('shifts', 'tenant_id', tenantId, shiftIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('shifts', 'tenant_id', tenantId, shiftIds);
+  }
 
   const attendance = (state.attendance?.[tenantId] || []).filter((a) => !a.guardId || guardIdSet.has(a.guardId));
   const attIds = attendance.map((a) => a.id);
@@ -549,7 +667,9 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('guard_attendance').upsert(attendance.map((a) => attendanceToRow(a, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('guard_attendance', 'tenant_id', tenantId, attIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('guard_attendance', 'tenant_id', tenantId, attIds);
+  }
 
   const checkpoints = state.checkpoints?.[tenantId] || [];
   const cpIds = checkpoints.map((c) => c.id);
@@ -557,7 +677,9 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('checkpoints').upsert(checkpoints.map((c) => checkpointToRow(c, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('checkpoints', 'tenant_id', tenantId, cpIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('checkpoints', 'tenant_id', tenantId, cpIds);
+  }
 
   const alerts = (state.guardAlerts?.[tenantId] || []).filter((a) => !a.guardId || guardIdSet.has(a.guardId));
   const alertIds = alerts.map((a) => a.id);
@@ -565,7 +687,9 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('guard_alerts').upsert(alerts.map((a) => alertToRow(a, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('guard_alerts', 'tenant_id', tenantId, alertIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('guard_alerts', 'tenant_id', tenantId, alertIds);
+  }
 
   const swaps = (state.shiftSwapRequests?.[tenantId] || []).filter((s) => {
     const requesterId = s.requestingGuardId || s.requesterGuardId;
@@ -578,7 +702,9 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('shift_swap_requests').upsert(swaps.map((s) => swapToRow(s, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('shift_swap_requests', 'tenant_id', tenantId, swapIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('shift_swap_requests', 'tenant_id', tenantId, swapIds);
+  }
 
   const wa = state.whatsappOutbox?.[tenantId] || [];
   const waIds = wa.map((w) => w.id);
@@ -586,11 +712,13 @@ async function syncTenantEntities(state, tenantId) {
     const { error } = await db.from('whatsapp_outbox').upsert(wa.map((w) => waToRow(w, tenantId)));
     if (error) throw error;
   }
-  await deleteMissing('whatsapp_outbox', 'tenant_id', tenantId, waIds);
+  if (allowDiffDeletes) {
+    await deleteMissing('whatsapp_outbox', 'tenant_id', tenantId, waIds);
+  }
 }
 
-/** Persist full in-memory state to relational tables. */
-export async function saveAppStateToRelationalDb(state) {
+/** Persist full in-memory state to relational tables (upsert-only by default — deletes use applyDirectRowDelete). */
+export async function saveAppStateToRelationalDb(state, { allowDiffDeletes = false } = {}) {
   const clean = stripLegacyDemoEntities(state);
   const tenantList = Object.values(clean.tenants || {});
   if (tenantList.length) {
@@ -604,7 +732,7 @@ export async function saveAppStateToRelationalDb(state) {
   ]);
 
   for (const tenantId of Object.keys(clean.tenants || {})) {
-    await syncTenantEntities(clean, tenantId);
+    await syncTenantEntities(clean, tenantId, { allowDiffDeletes });
   }
 }
 
@@ -710,7 +838,12 @@ export async function purgeLegacyDemoRowsFromDb() {
 
 /** Ensure the Titan tenant exists — never inject demo/sample records. */
 export async function ensureMinimalTenantInDb() {
-  await purgeLegacyDemoRowsFromDb();
+  const now = Date.now();
+  const lastPurge = globalThis.__titanLegacyPurgeAt || 0;
+  if (now - lastPurge > 5 * 60 * 1000) {
+    await purgeLegacyDemoRowsFromDb();
+    globalThis.__titanLegacyPurgeAt = now;
+  }
   const { data: tenant } = await db.from('tenants').select('id').eq('id', TITAN_TENANT_ID).maybeSingle();
   if (!tenant) {
     const { error } = await db.from('tenants').upsert({

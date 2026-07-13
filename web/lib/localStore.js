@@ -302,14 +302,15 @@ export function processLocalAction(payload) {
       break;
     }
     case 'TRIGGER_SOS': {
-      const { guardName: rawName, guardId, alertMessage = 'SOS Panic Triggered!' } = payload;
+      const { guardName: rawName, guardId, alertMessage = 'SOS Panic Triggered!', lat, lng } = payload;
       const { guardName } = resolveGuard(guardId, rawName);
+      const gpsNote = lat && lng ? ` Location: ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}` : '';
       state.activeSosAlerts[tenantId] = {
         active: true,
         guardName,
         guardId: guardId || null,
         timestamp: new Date().toISOString(),
-        message: alertMessage,
+        message: `${alertMessage}${gpsNote}`,
       };
       state.occurrenceBook.unshift({
         id: `ob-sos-${Date.now()}`,

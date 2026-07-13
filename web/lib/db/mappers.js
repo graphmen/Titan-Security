@@ -254,6 +254,7 @@ export function rowToShift(r) {
 }
 
 export function attendanceToRow(a, tenantId) {
+  const coords = a.lastCoords || a.clockInCoords || a.clockOutCoords || a.coordinates;
   return {
     id: a.id,
     tenant_id: tenantId,
@@ -263,9 +264,9 @@ export function attendanceToRow(a, tenantId) {
     clock_in: a.clockIn || null,
     clock_out: a.clockOut || null,
     status: a.status || null,
-    lat: a.coordinates?.lat ?? a.lat ?? null,
-    lng: a.coordinates?.lng ?? a.lng ?? null,
-    last_heartbeat: a.lastHeartbeat || null,
+    lat: coords?.lat ?? a.lat ?? null,
+    lng: coords?.lng ?? a.lng ?? null,
+    last_heartbeat: a.lastMovementAt || a.lastHeartbeat || null,
     created_at: a.createdAt || new Date().toISOString(),
   };
 }
@@ -400,5 +401,21 @@ export function rowToWa(r) {
     status: r.status,
     createdAt: r.created_at,
     meta: r.meta || {},
+  };
+}
+
+export function occurrenceToRow(item, tenantId) {
+  const photo = item.attachments?.photo ?? item.photo ?? null;
+  const voice = item.attachments?.voice ?? item.voice ?? null;
+  return {
+    id: item.id,
+    tenant_id: tenantId,
+    timestamp: item.timestamp || new Date().toISOString(),
+    guard_name: item.guardName,
+    type: item.type,
+    description: item.description,
+    status: item.status || 'Unassigned',
+    photo_url: photo,
+    voice_url: voice,
   };
 }

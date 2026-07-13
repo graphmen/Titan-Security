@@ -1,8 +1,8 @@
-# Titan Monitor — sync web assets and build APK.
+# Titan Monitor - sync web assets and build APK.
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "Building mobile web assets (v1.0.4)..." -ForegroundColor Cyan
+Write-Host "Building mobile web assets (v1.0.6)..." -ForegroundColor Cyan
 npm run build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -22,19 +22,25 @@ $sslScript = Join-Path $androidDir "setup-gradle-ssl.ps1"
 Write-Host "Building debug APK..." -ForegroundColor Cyan
 Push-Location $androidDir
 try {
+  $ErrorActionPreference = "Continue"
+  Remove-Item Env:GRADLE_OPTS -ErrorAction SilentlyContinue
   if (Test-Path $sslScript) { . $sslScript }
-  & .\gradlew.bat assembleDebug --no-daemon 2>&1 | Out-Host
-  if ($LASTEXITCODE -eq 0 -and (Test-Path $apkOut)) {
+  cmd /c ".\gradlew.bat assembleDebug --no-daemon"
+  $gradleExit = $LASTEXITCODE
+  $Error.Clear()
+
+  if ($gradleExit -eq 0 -and (Test-Path $apkOut)) {
     $size = [math]::Round((Get-Item $apkOut).Length / 1MB, 2)
     Write-Host ""
     Write-Host "APK ready (Gradle): $apkOut ($size MB)" -ForegroundColor Green
   } elseif (Test-Path $repackScript) {
-    Write-Host "Gradle unavailable — using fixed repack-apk.ps1..." -ForegroundColor Yellow
+    Write-Host "Gradle unavailable - using repack-apk.ps1..." -ForegroundColor Yellow
     & $repackScript
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   } else {
     throw "Could not build APK."
   }
+  $ErrorActionPreference = "Stop"
 } finally {
   Pop-Location
 }
@@ -42,13 +48,13 @@ try {
 Write-Host ""
 Write-Host "Install on phone:" -ForegroundColor Yellow
 Write-Host "  1. Copy app-debug.apk to your phone and install"
-Write-Host "  2. Default server: https://titan-security.vercel.app (works on mobile data)"
+Write-Host "  2. Default server: https://titan-security.vercel.app"
 Write-Host "  3. Register a guard on the web dashboard with YOUR email"
-Write-Host "  4. Check email for 6-digit PIN -> enter in Titan Monitor app"
+Write-Host "  4. Check email for 6-digit PIN, then enter in Titan Monitor app"
 Write-Host ""
 Write-Host "LAN testing (office Wi-Fi):" -ForegroundColor Yellow
 Write-Host "  Start web: cd web; npm run start:prod"
-Write-Host "  In app -> Server connection -> http://YOUR_PC_IP:3001 -> Link"
+Write-Host '  In app: Server connection, then http://YOUR_PC_IP:3001, then Link'
 Write-Host ""
 
 $studio = "C:\Program Files\Android\Android Studio\bin\studio64.exe"

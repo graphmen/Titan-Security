@@ -14,7 +14,6 @@ import {
   Plus, 
   Check, 
   UserCheck, 
-  Settings,
   HelpCircle,
   Play,
   Volume2,
@@ -41,6 +40,9 @@ import ChangePin from './components/ChangePin';
 import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, guardInitials } from './utils/auth';
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS } from './config';
+import { postStateAction } from './utils/api';
+import { captureIncidentPhoto } from './utils/camera';
+import { startVoiceMemo } from './utils/voice';
 import {
   playNfcScan,
   playNfcSuccess,
@@ -50,16 +52,11 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('patrol'); // patrol, incidents, checklists, access
-  const [serverUrl, setServerUrl] = useState(() =>
-    localStorage.getItem('titan_server_url') || DEFAULT_API_URL
-  );
-  const [serverReachable, setServerReachable] = useState(false);
+  const apiBase = DEFAULT_API_URL.replace(/\/$/, '');
+  const apiUrl = (path) => `${apiBase}${path}`;
   const [isOnline, setIsOnline] = useState(true);
   const [toast, setToast] = useState(null);
   
-  const apiBase = serverUrl.replace(/\/$/, '');
-  const apiUrl = (path) => `${apiBase}${path}`;
-
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3200);
@@ -118,6 +115,7 @@ export default function App() {
 
   const [swapForm, setSwapForm] = useState({ shiftId: '', targetGuardId: '', reason: '' });
   const movementAlertPlayed = useRef(false);
+  const voiceRecorderRef = useRef(null);
   const { theme, toggleTheme, isDark } = useTheme();
   const [splashVisible, setSplashVisible] = useState(true);
   const [splashExiting, setSplashExiting] = useState(false);
@@ -151,21 +149,8 @@ export default function App() {
     localStorage.setItem('titan_offline_queue', JSON.stringify(newQueue));
   };
 
-  const linkServer = () => {
-    const trimmed = serverUrl.trim().replace(/\/$/, '');
-    if (!trimmed) return;
-    localStorage.setItem('titan_server_url', trimmed);
-    setServerUrl(trimmed);
-    setIsOnline(true);
-    fetchState();
-  };
-
   // Pull state from server API
   const fetchState = async () => {
-    if (!apiBase) {
-      setServerReachable(false);
-      return;
-    }
     try {
       const res = await fetch(apiUrl('/api/state'), {
         headers: { 'Cache-Control': 'no-cache' },
@@ -174,25 +159,27 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setState(data);
-        setServerReachable(true);
         setIsOnline(true);
-        const activeSos = data.activeSosAlerts[tenantId];
-        setSosActive(!!activeSos);
-      } else {
-        setServerReachable(false);
+        const activeSos = data.activeSosAlerts?.[tenantId];
+        const myName = loggedInGuard?.fullName || allGuardsFromState(data)?.find((g) => g.id === guardId)?.fullName;
+        const isMySos = activeSos && myName && activeSos.guardName === myName;
+        setSosActive(!!isMySos);
       }
     } catch (e) {
       console.warn('API connection failed:', e.message);
-      setServerReachable(false);
       if (isOnline) setIsOnline(false);
     }
   };
+
+  function allGuardsFromState(data) {
+    return data?.guards?.[tenantId] || [];
+  }
 
   useEffect(() => {
     fetchState();
     const interval = setInterval(fetchState, STATE_POLL_MS);
     return () => clearInterval(interval);
-  }, [serverUrl, tenantId]);
+  }, [tenantId, guardId]);
 
   // Keep logged-in guard profile in sync with server state (PIN never included in API)
   useEffect(() => {
@@ -236,19 +223,33 @@ export default function App() {
   });
 
   const handleClockIn = async () => {
-    if (!guardId || !premiseId) {
-      showToast('Select your guard profile and premises first', 'error');
+    if (!guardId) {
+      showToast('Sign in again to clock in', 'error');
       return;
+    }
+    const targetPremise =
+      premiseId ||
+      guardProfile?.currentShift?.premiseId ||
+      guardProfile?.focusShift?.premiseId ||
+      myPremises[0]?.id;
+    if (!targetPremise) {
+      showToast('No premises assigned — contact your supervisor', 'error');
+      return;
+    }
+    if (targetPremise !== premiseId) {
+      setPremiseId(targetPremise);
+      localStorage.setItem('titan_premise_id', targetPremise);
     }
     try {
       const { lat, lng } = await getLocation();
-      const res = await fetch(apiUrl('/api/state'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'GUARD_CLOCK_IN', guardId, premiseId, tenantId, lat, lng }),
+      await postStateAction(apiBase, {
+        action: 'GUARD_CLOCK_IN',
+        guardId,
+        premiseId: targetPremise,
+        tenantId,
+        lat,
+        lng,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Clock-in failed');
       showToast('Shift started — you are on duty');
       fetchState();
     } catch (e) {
@@ -260,13 +261,13 @@ export default function App() {
     if (!guardId) return;
     try {
       const { lat, lng } = await getLocation();
-      const res = await fetch(apiUrl('/api/state'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'GUARD_CLOCK_OUT', guardId, tenantId, lat, lng }),
+      await postStateAction(apiBase, {
+        action: 'GUARD_CLOCK_OUT',
+        guardId,
+        tenantId,
+        lat,
+        lng,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Clock-out failed');
       showToast('Shift ended — clocked out');
       movementAlertPlayed.current = false;
       fetchState();
@@ -279,13 +280,13 @@ export default function App() {
     if (!guardId) return;
     try {
       const { lat, lng } = await getLocation();
-      const res = await fetch(apiUrl('/api/state'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'GUARD_MOVEMENT_ACK', guardId, tenantId, lat, lng }),
+      await postStateAction(apiBase, {
+        action: 'GUARD_MOVEMENT_ACK',
+        guardId,
+        tenantId,
+        lat,
+        lng,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Ack failed');
       movementAlertPlayed.current = false;
       showToast('Patrol status confirmed — supervisor notified');
       fetchState();
@@ -301,20 +302,14 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch(apiUrl('/api/state'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'REQUEST_SHIFT_SWAP',
-          tenantId,
-          shiftId: swapForm.shiftId,
-          requestingGuardId: guardId,
-          targetGuardId: swapForm.targetGuardId || null,
-          reason: swapForm.reason,
-        }),
+      await postStateAction(apiBase, {
+        action: 'REQUEST_SHIFT_SWAP',
+        tenantId,
+        shiftId: swapForm.shiftId,
+        requestingGuardId: guardId,
+        targetGuardId: swapForm.targetGuardId || null,
+        reason: swapForm.reason,
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Request failed');
       showToast('Shift swap request sent to supervisor');
       setSwapForm({ shiftId: '', targetGuardId: '', reason: '' });
       fetchState();
@@ -394,27 +389,45 @@ export default function App() {
   // Trigger SOS Panic
   const handleTriggerSos = async () => {
     const nextSosState = !sosActive;
-    setSosActive(nextSosState);
-    
-    if (isOnline) {
+
+    if (nextSosState) {
       try {
-        await fetch(apiUrl('/api/state'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            action: nextSosState ? 'TRIGGER_SOS' : 'CLEAR_SOS', 
+        const { lat, lng } = await getLocation();
+        setSosActive(true);
+        if (isOnline) {
+          await postStateAction(apiBase, {
+            action: 'TRIGGER_SOS',
             guardId,
-            guardName, 
+            guardName,
             tenantId,
-            alertMessage: `Emergency Panic Button pushed by Guard: ${guardName}` 
-          })
-        });
-        fetchState();
-      } catch (err) {
-        console.error(err);
+            lat,
+            lng,
+            alertMessage: `Emergency panic by ${guardName}`,
+          });
+          fetchState();
+          showToast('SOS sent to Command Centre', 'error');
+        } else {
+          setSosActive(false);
+          showToast('SOS requires internet — move to an area with signal', 'error');
+        }
+      } catch (e) {
+        setSosActive(false);
+        showToast(e.message || 'Could not send SOS', 'error');
       }
-    } else {
-      showToast(nextSosState ? 'PANIC ALARM (offline cache)' : 'Alarm cleared locally', nextSosState ? 'error' : 'info');
+      return;
+    }
+
+    setSosActive(false);
+    if (!isOnline) {
+      showToast('Alarm cleared on device', 'info');
+      return;
+    }
+    try {
+      await postStateAction(apiBase, { action: 'CLEAR_SOS', guardId, guardName, tenantId });
+      fetchState();
+      showToast('Distress alarm cancelled');
+    } catch (e) {
+      showToast(e.message || 'Could not clear alarm', 'error');
     }
   };
 
@@ -463,32 +476,28 @@ export default function App() {
   // Log Incident
   const handleLogIncident = async (e) => {
     e.preventDefault();
-    if (!incDesc) return;
+    if (!incDesc.trim()) return;
 
     const payload = {
       tenantId,
       guardId,
       guardName,
       type: incType,
-      description: incDesc,
+      description: incDesc.trim(),
       photo: incPhoto,
-      voice: incVoice
+      voice: incVoice,
     };
 
     if (isOnline) {
       try {
-        await fetch(apiUrl('/api/state'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'LOG_INCIDENT', ...payload })
-        });
+        await postStateAction(apiBase, { action: 'LOG_INCIDENT', ...payload });
         showToast('Incident reported to Command Centre');
         setIncDesc('');
         setIncPhoto(null);
         setIncVoice(null);
         fetchState();
       } catch (err) {
-        showToast('Queued offline — will sync later', 'error');
+        showToast(err.message || 'Could not report incident', 'error');
         queueIncident(payload);
       }
     } else {
@@ -506,24 +515,45 @@ export default function App() {
     setIncVoice(null);
   };
 
-  // Dynamic Incident mock attachments
-  const attachMockPhoto = (num) => {
-    const photos = [
-      'https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=500&auto=format&fit=crop&q=60',
-      'https://images.unsplash.com/photo-1508962914676-134849a727f0?w=500&auto=format&fit=crop&q=60',
-      'https://images.unsplash.com/photo-1618042164219-62c820f10723?w=500&auto=format&fit=crop&q=60'
-    ];
-    setIncPhoto(photos[num]);
-    playSuccessBeep();
+  const handleCapturePhoto = async () => {
+    try {
+      const dataUrl = await captureIncidentPhoto();
+      if (!dataUrl) return;
+      if (dataUrl.length > 600000) {
+        showToast('Photo too large — move closer and try again', 'error');
+        return;
+      }
+      setIncPhoto(dataUrl);
+      playSuccessBeep();
+    } catch (e) {
+      showToast(e.message || 'Could not open camera', 'error');
+    }
   };
 
-  const toggleMockVoice = () => {
-    if (isRecording) {
+  const handleVoiceToggle = async () => {
+    if (isRecording && voiceRecorderRef.current) {
       setIsRecording(false);
-      setIncVoice('AUDIO_RECORDING_MOCK.mp3');
-      playSuccessBeep();
-    } else {
+      try {
+        const dataUrl = await voiceRecorderRef.current.stop();
+        voiceRecorderRef.current = null;
+        if (dataUrl) {
+          if (dataUrl.length > 400000) {
+            showToast('Recording too long — keep under 30 seconds', 'error');
+            return;
+          }
+          setIncVoice(dataUrl);
+          playSuccessBeep();
+        }
+      } catch (e) {
+        showToast(e.message || 'Could not save recording', 'error');
+      }
+      return;
+    }
+    try {
+      voiceRecorderRef.current = await startVoiceMemo();
       setIsRecording(true);
+    } catch (e) {
+      showToast(e.message || 'Microphone permission required', 'error');
     }
   };
 
@@ -1058,134 +1088,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Settings */}
-      <div className="mob-settings-strip">
-        <details style={{ fontSize: '0.75rem', color: 'var(--mob-text-muted)' }}>
-          <summary>
-            <span><Settings size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '0.25rem' }} /> Server Network Config</span>
-            <span>({serverUrl || 'Auto via proxy'})</span>
-          </summary>
-          <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input 
-                type="text" 
-                className="mob-input" 
-                value={serverUrl} 
-                onChange={(e) => setServerUrl(e.target.value)} 
-                style={{ padding: '0.3rem', marginBottom: 0, fontSize: '0.75rem', borderRadius: '6px' }} 
-                placeholder="https://titan-security.vercel.app" 
-              />
-              <button className="mob-btn" onClick={linkServer} style={{ padding: '0.3rem 0.6rem', width: 'auto', fontSize: '0.75rem', borderRadius: '6px' }}>
-                Link
-              </button>
-            </div>
-            
-            {/* Device Tenant context switcher */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-              <span>Security Provider:</span>
-              <select 
-                className="mob-select" 
-                value={tenantId} 
-                onChange={e => {
-                  const id = e.target.value;
-                  setTenantId(id);
-                  localStorage.setItem('titan_tenant_id', id);
-                  setState(null);
-                }} 
-                style={{ padding: '0.2rem', width: '130px', marginBottom: 0, fontSize: '0.75rem', borderRadius: '6px', background: '#ffffff', color: 'var(--mob-text)', border: '1px solid var(--mob-border)' }}
-              >
-                {state?.tenants ? Object.values(state.tenants).map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                )) : (
-                  <>
-                    <option value="titan">Titan Protection</option>
-                    <option value="alpha">Alpha Guard</option>
-                    <option value="omega">Omega Watchmen</option>
-                  </>
-                )}
-              </select>
-            </div>
-            {/* Premises selector — links to web registration */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>On-Duty Premises:</span>
-              <select 
-                className="mob-select" 
-                value={premiseId} 
-                onChange={e => {
-                  setPremiseId(e.target.value);
-                  localStorage.setItem('titan_premise_id', e.target.value);
-                }} 
-                style={{ padding: '0.2rem', width: '130px', marginBottom: 0, fontSize: '0.75rem', borderRadius: '6px', background: '#ffffff', color: 'var(--mob-text)', border: '1px solid var(--mob-border)' }}
-              >
-                {myPremises.length === 0 ? (
-                  <option value="">No premises assigned to you</option>
-                ) : (
-                  myPremises.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}{p.suburb ? ` (${p.suburb})` : ''}</option>
-                  ))
-                )}
-              </select>
-            </div>
-            {activePremise && (
-              <div style={{ fontSize: '0.65rem', color: 'var(--mob-text-muted)', marginTop: '0.35rem' }}>
-                ID: {activePremise.id} · {activePremise.address}
-              </div>
-            )}
-
-            {/* Shift swap request */}
-            <details style={{ marginTop: '0.75rem' }}>
-              <summary style={{ cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <ArrowLeftRight size={12} /> Request Shift Swap
-              </summary>
-              <form onSubmit={handleRequestShiftSwap} style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <select
-                  className="mob-select"
-                  value={swapForm.shiftId}
-                  onChange={(e) => setSwapForm({ ...swapForm, shiftId: e.target.value })}
-                  style={{ fontSize: '0.75rem', padding: '0.3rem' }}
-                >
-                  <option value="">Select your shift</option>
-                  {swapableShifts.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.date} {s.startTime}–{s.endTime} ({premises.find((p) => p.id === s.premiseId)?.name || s.premiseId})
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="mob-select"
-                  value={swapForm.targetGuardId}
-                  onChange={(e) => setSwapForm({ ...swapForm, targetGuardId: e.target.value })}
-                  style={{ fontSize: '0.75rem', padding: '0.3rem' }}
-                >
-                  <option value="">Swap with (optional)</option>
-                  {assignedGuards.filter((g) => g.id !== guardId).map((g) => (
-                    <option key={g.id} value={g.id}>{g.fullName}</option>
-                  ))}
-                </select>
-                <input
-                  className="mob-input"
-                  placeholder="Reason for swap"
-                  value={swapForm.reason}
-                  onChange={(e) => setSwapForm({ ...swapForm, reason: e.target.value })}
-                  style={{ fontSize: '0.75rem', padding: '0.3rem', marginBottom: 0 }}
-                />
-                <button type="submit" className="mob-btn" style={{ padding: '0.35rem', fontSize: '0.75rem', width: 'auto' }}>
-                  Submit Swap Request
-                </button>
-                {mySwapRequests.length > 0 && (
-                  <div style={{ fontSize: '0.65rem', color: 'var(--mob-text-muted)' }}>
-                    Recent: {mySwapRequests.slice(0, 2).map((s) => `${s.status}`).join(', ')}
-                  </div>
-                )}
-              </form>
-            </details>
-            <button type="button" className="mob-btn mob-btn-secondary" style={{ marginTop: '0.65rem', fontSize: '0.72rem', padding: '0.45rem' }} onClick={handleLogout}>
-              <LogOut size={14} /> Sign Out
-            </button>
-          </div>
-        </details>
-      </div>
-
       {/* Main content viewport */}
       <div className="mob-content">
 
@@ -1353,7 +1255,7 @@ export default function App() {
                 <button 
                   type="button" 
                   className={`mob-btn mob-btn-secondary ${incPhoto ? 'mob-btn-success' : ''}`}
-                  onClick={() => attachMockPhoto(Math.floor(Math.random() * 3))}
+                  onClick={handleCapturePhoto}
                   style={{ fontSize: '0.75rem', padding: '0.55rem' }}
                 >
                   <Camera size={14} /> {incPhoto ? 'Photo Attached' : 'Capture Image'}
@@ -1361,7 +1263,7 @@ export default function App() {
                 <button 
                   type="button" 
                   className={`mob-btn mob-btn-secondary ${incVoice ? 'mob-btn-success' : ''}`}
-                  onClick={toggleMockVoice}
+                  onClick={handleVoiceToggle}
                   style={{ fontSize: '0.75rem', padding: '0.55rem', background: isRecording ? 'var(--mob-danger)' : '' }}
                 >
                   {isRecording ? (
@@ -1382,6 +1284,30 @@ export default function App() {
                 Submit Occurrence Log
               </button>
             </form>
+
+            {(state?.occurrenceBook || []).filter(
+              (i) => i.guardName === guardName && String(i.type) !== 'Patrol Tap' && String(i.type) !== 'Shift Clock-In'
+            ).slice(0, 5).length > 0 && (
+              <div className="mob-card" style={{ marginTop: '1rem' }}>
+                <div className="mob-card-label">Your Recent Reports</div>
+                {(state?.occurrenceBook || [])
+                  .filter(
+                    (i) =>
+                      i.guardName === guardName &&
+                      !['Patrol Tap', 'Shift Clock-In', 'Shift Clock-Out', 'Checklist Submission'].includes(i.type)
+                  )
+                  .slice(0, 5)
+                  .map((item) => (
+                    <div key={item.id} className="mob-list-item">
+                      <strong style={{ fontSize: '0.85rem' }}>{item.type}</strong>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--mob-text-muted)' }}>
+                        {new Date(item.timestamp).toLocaleString()} · {item.status}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', marginTop: '0.25rem' }}>{item.description}</div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1669,6 +1595,55 @@ export default function App() {
                 ))
               )}
             </div>
+
+            <div className="mob-card elevated">
+              <div className="mob-card-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <ArrowLeftRight size={14} /> Request Shift Swap
+              </div>
+              <form onSubmit={handleRequestShiftSwap} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <select
+                  className="mob-select"
+                  value={swapForm.shiftId}
+                  onChange={(e) => setSwapForm({ ...swapForm, shiftId: e.target.value })}
+                >
+                  <option value="">Select your shift</option>
+                  {swapableShifts.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.date} {s.startTime}–{s.endTime} ({premises.find((p) => p.id === s.premiseId)?.name || s.premiseId})
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="mob-select"
+                  value={swapForm.targetGuardId}
+                  onChange={(e) => setSwapForm({ ...swapForm, targetGuardId: e.target.value })}
+                >
+                  <option value="">Swap with colleague (optional)</option>
+                  {allGuards.filter((g) => g.id !== guardId && g.status === 'Active').map((g) => (
+                    <option key={g.id} value={g.id}>{g.fullName}</option>
+                  ))}
+                </select>
+                <input
+                  className="mob-input"
+                  placeholder="Reason for swap request"
+                  value={swapForm.reason}
+                  onChange={(e) => setSwapForm({ ...swapForm, reason: e.target.value })}
+                  style={{ marginBottom: 0 }}
+                />
+                <button type="submit" className="mob-btn mob-btn-secondary">
+                  Submit Swap Request
+                </button>
+                {mySwapRequests.length > 0 && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--mob-text-muted)', margin: 0 }}>
+                    Recent requests: {mySwapRequests.slice(0, 3).map((s) => s.status).join(', ')}
+                  </p>
+                )}
+              </form>
+            </div>
+
+            <button type="button" className="mob-btn mob-btn-secondary" style={{ width: '100%', marginTop: '0.25rem' }} onClick={handleLogout}>
+              <LogOut size={16} /> Sign Out
+            </button>
 
           </div>
         )}

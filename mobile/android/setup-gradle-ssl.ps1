@@ -6,7 +6,7 @@ $winCa = Join-Path $Root ".git\ssl-ca-bundle.pem"
 
 if (-not (Test-Path $winCa)) {
   if (-not (Test-Path $gitCa)) {
-    Write-Warning "Git CA bundle not found — Gradle may fail SSL on corporate network."
+    Write-Warning "Git CA bundle not found - Gradle may fail SSL on corporate network."
     return
   }
   $pem = Get-Content $gitCa -Raw
@@ -27,7 +27,6 @@ if (-not (Test-Path $trustStore) -and (Test-Path $keytool)) {
   Write-Host "Building Gradle Java trust store..." -ForegroundColor Cyan
   Copy-Item (Join-Path $javaHome "lib\security\cacerts") $trustStore -Force
   $i = 0
-  Select-String -Path $winCa -Pattern "-----BEGIN CERTIFICATE-----" -Context 0,9999 | ForEach-Object { } 
   $blocks = (Get-Content $winCa -Raw) -split "-----BEGIN CERTIFICATE-----"
   foreach ($block in $blocks) {
     if ($block -notmatch "-----END CERTIFICATE-----") { continue }
@@ -35,11 +34,11 @@ if (-not (Test-Path $trustStore) -and (Test-Path $keytool)) {
     $certPem = "-----BEGIN CERTIFICATE-----" + ($block -split "-----END CERTIFICATE-----")[0] + "-----END CERTIFICATE-----"
     $tmp = Join-Path $env:TEMP "corp-cert-$i.pem"
     Set-Content -Path $tmp -Value $certPem -NoNewline
-    & $keytool -importcert -noprompt -alias "corp$i" -file $tmp -keystore $trustStore -storepass changeit 2>$null
+    & $keytool -importcert -noprompt -alias "corp$i" -file $tmp -keystore $trustStore -storepass changeit 2>&1 | Out-Null
     Remove-Item $tmp -Force -ErrorAction SilentlyContinue
   }
 }
 
 if (Test-Path $trustStore) {
-  $env:GRADLE_OPTS = "-Djavax.net.ssl.trustStore=$trustStore -Djavax.net.ssl.trustStorePassword=changeit"
+  $env:GRADLE_OPTS = "-Djavax.net.ssl.trustStore=`"$trustStore`" -Djavax.net.ssl.trustStorePassword=changeit"
 }

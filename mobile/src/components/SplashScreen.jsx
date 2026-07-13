@@ -1,5 +1,3 @@
-import { Shield } from 'lucide-react';
-
 export default function SplashScreen({ exiting }) {
   return (
     <div className={`mob-splash ${exiting ? 'mob-splash-exit' : ''}`}>
@@ -9,7 +7,7 @@ export default function SplashScreen({ exiting }) {
         <span className="mob-splash-ring ring-3" />
       </div>
       <div className="mob-splash-logo">
-        <Shield size={52} strokeWidth={1.75} />
+        <img src="/app-icon.svg" alt="Titan Monitor" className="mob-splash-emblem" />
       </div>
       <h1 className="mob-splash-title">Titan Monitor</h1>
       <p className="mob-splash-tagline">Built to Protect</p>

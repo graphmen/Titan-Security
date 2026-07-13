@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Delete } from 'lucide-react';
+import { Delete, Loader2 } from 'lucide-react';
 import { playPinKey, playPinError, playLoginSuccess } from '../utils/sounds';
 
 const PIN_LENGTH = 6;
@@ -85,7 +85,7 @@ export default function ChangePin({ guard, tenantId, apiBase, currentPin, onComp
   return (
     <div className="pin-login">
       <div className="pin-login-brand" style={{ marginBottom: '1rem' }}>
-        <div className="pin-login-logo"><Shield size={28} /></div>
+        <div className="pin-login-logo"><img src="/app-icon.svg" alt="" className="pin-login-emblem" /></div>
         <div>
           <h1 style={{ fontSize: '1.1rem' }}>Set Your PIN</h1>
           <p>{name} · first-time setup</p>

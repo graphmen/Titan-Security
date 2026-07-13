@@ -2,8 +2,12 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "Building mobile web assets (v1.0.1)..." -ForegroundColor Cyan
+Write-Host "Building mobile web assets (v1.0.4)..." -ForegroundColor Cyan
 npm run build
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Write-Host "Generating Titan emblem launcher icons..." -ForegroundColor Cyan
+npm run icons:android
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Syncing into Android project..." -ForegroundColor Cyan

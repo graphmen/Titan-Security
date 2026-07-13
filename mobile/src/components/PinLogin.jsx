@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, Delete, Sun, Moon } from 'lucide-react';
+import { Delete, Sun, Moon, Loader2, CornerDownLeft } from 'lucide-react';
 import { playPinKey, playPinError, playLoginSuccess } from '../utils/sounds';
 
 const PIN_LENGTH = 6;
@@ -20,13 +20,7 @@ export default function PinLogin({
   const appendDigit = (d) => {
     if (pin.length >= PIN_LENGTH || submitting) return;
     playPinKey();
-    setPin((p) => {
-      const next = p + d;
-      if (next.length === PIN_LENGTH) {
-        setTimeout(() => submitPin(next), 120);
-      }
-      return next;
-    });
+    setPin((p) => (p.length >= PIN_LENGTH ? p : p + d));
     setError('');
   };
 
@@ -73,23 +67,36 @@ export default function PinLogin({
     }
   };
 
+  const canSubmit = pin.length === PIN_LENGTH && !submitting;
+
   return (
-    <div className="pin-login">
+    <div className={`pin-login ${submitting ? 'pin-login-busy' : ''}`}>
+      {submitting && (
+        <div className="pin-login-overlay" aria-live="polite" aria-busy="true">
+          <div className="pin-login-spinner-wrap">
+            <Loader2 size={44} className="pin-login-spinner" />
+            <p>Signing you in…</p>
+          </div>
+        </div>
+      )}
+
       <div className="pin-login-top">
         <div className="pin-login-brand">
-          <div className="pin-login-logo"><Shield size={32} /></div>
+          <div className="pin-login-logo">
+            <img src="/app-icon.svg" alt="" className="pin-login-emblem" />
+          </div>
           <div>
             <h1>Titan Monitor</h1>
             <p>{tenantName || 'Titan Protection'}</p>
           </div>
         </div>
-        <button type="button" className="mob-theme-btn" onClick={onToggleTheme} aria-label="Toggle theme">
+        <button type="button" className="mob-theme-btn" onClick={onToggleTheme} aria-label="Toggle theme" disabled={submitting}>
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
 
       <div className="pin-login-intro">
-        <h2 className="pin-login-heading">Enter your PIN</h2>
+        <h2 className="pin-login-heading">Enter Your PIN</h2>
         <p className="pin-login-sub">
           Your 6-digit login code was emailed when you were registered. Check inbox and spam folder.
         </p>
@@ -105,12 +112,26 @@ export default function PinLogin({
 
       <div className="pin-login-keyboard">
         <div className="pin-numpad pin-numpad-large">
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'].map((key) => {
-            if (key === '') return <span key="spacer" className="pin-key spacer" />;
+          {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'].map((key) => {
             if (key === 'del') {
               return (
                 <button key="del" type="button" className="pin-key action" onClick={backspace} aria-label="Delete" disabled={submitting}>
                   <Delete size={26} />
+                </button>
+              );
+            }
+            if (key === 'ok') {
+              return (
+                <button
+                  key="ok"
+                  type="button"
+                  className={`pin-key action pin-key-enter ${canSubmit ? 'ready' : ''}`}
+                  onClick={() => submitPin()}
+                  aria-label="Sign in"
+                  disabled={!canSubmit}
+                >
+                  <CornerDownLeft size={26} />
+                  <span className="pin-key-enter-label">OK</span>
                 </button>
               );
             }
@@ -125,10 +146,17 @@ export default function PinLogin({
         <button
           type="button"
           className="pin-submit-btn"
-          disabled={pin.length !== PIN_LENGTH || submitting}
+          disabled={!canSubmit}
           onClick={() => submitPin()}
         >
-          {submitting ? 'Signing in…' : 'Sign In'}
+          {submitting ? (
+            <>
+              <Loader2 size={18} className="pin-btn-spinner" />
+              Signing in…
+            </>
+          ) : (
+            'Sign In'
+          )}
         </button>
 
         <p className="pin-demo-hint">Forgot PIN? Ask your supervisor to reset it — a new code will be emailed to you.</p>

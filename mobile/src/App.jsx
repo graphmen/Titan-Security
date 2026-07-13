@@ -31,6 +31,8 @@ import {
   Moon,
   Sparkles,
   LogOut,
+  BadgeCheck,
+  TrendingUp,
 } from 'lucide-react';
 import { buildGuardProfileContext } from './guardProfile';
 import SplashScreen from './components/SplashScreen';
@@ -72,7 +74,14 @@ export default function App() {
   const [mustChangePin, setMustChangePin] = useState(false);
   const [loginPinUsed, setLoginPinUsed] = useState('');
   const [pendingGuard, setPendingGuard] = useState(null);
-  const [loggedInGuard, setLoggedInGuard] = useState(null);
+  const [loggedInGuard, setLoggedInGuard] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('titan_guard_profile');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
   const [guardId, setGuardId] = useState(
     () => authSession?.guardId || localStorage.getItem('titan_guard_id') || ''
   );
@@ -189,7 +198,14 @@ export default function App() {
   useEffect(() => {
     if (!isAuthenticated || !guardId || !state) return;
     const fresh = (state.guards?.[tenantId] || []).find((g) => g.id === guardId);
-    if (fresh) setLoggedInGuard(fresh);
+    if (fresh) {
+      setLoggedInGuard(fresh);
+      try {
+        sessionStorage.setItem('titan_guard_profile', JSON.stringify(fresh));
+      } catch {
+        /* ignore */
+      }
+    }
   }, [state, guardId, tenantId, isAuthenticated]);
 
   // Auto-select first premise when tenant changes
@@ -740,7 +756,11 @@ export default function App() {
   const activeGuard = loggedInGuard || allGuards.find((g) => g.id === guardId) || null;
   const guardName = activeGuard?.fullName || 'Guard';
   const premises = state?.premises?.[tenantId] || [];
-  const guardProfile = state && guardId ? buildGuardProfileContext(state, tenantId, guardId) : null;
+  const guardProfile =
+    state && guardId
+      ? buildGuardProfileContext(state, tenantId, guardId) ||
+        (activeGuard ? buildGuardProfileContext({ ...state, guards: { ...state.guards, [tenantId]: [activeGuard] } }, tenantId, guardId) : null)
+      : null;
   const myPremises = activeGuard
     ? premises.filter((p) => (activeGuard.assignedPremiseIds || []).includes(p.id))
     : premises;
@@ -819,6 +839,11 @@ export default function App() {
     setGuardId(guard.id);
     setLoggedInGuard(guard);
     localStorage.setItem('titan_guard_id', guard.id);
+    try {
+      sessionStorage.setItem('titan_guard_profile', JSON.stringify(guard));
+    } catch {
+      /* ignore quota errors */
+    }
     const assigned = guard.assignedPremiseIds || [];
     if (assigned.length && !assigned.includes(premiseId)) {
       setPremiseId(assigned[0]);
@@ -841,6 +866,15 @@ export default function App() {
   const handlePinChanged = () => {
     setMustChangePin(false);
     setLoginPinUsed('');
+    const guard = pendingGuard || loggedInGuard;
+    if (guard) {
+      setLoggedInGuard(guard);
+      try {
+        sessionStorage.setItem('titan_guard_profile', JSON.stringify(guard));
+      } catch {
+        /* ignore */
+      }
+    }
     setPendingGuard(null);
     setIsAuthenticated(true);
     showToast('PIN updated — you are signed in');
@@ -849,6 +883,7 @@ export default function App() {
 
   const handleLogout = () => {
     clearAuthSession();
+    sessionStorage.removeItem('titan_guard_profile');
     setIsAuthenticated(false);
     setMustChangePin(false);
     setLoginPinUsed('');
@@ -948,7 +983,7 @@ export default function App() {
       {/* Header */}
       <header className="mob-header mob-header-branded">
         <div>
-          <img src="/emblem-dark.jpg" alt="Titan Protection" className="mob-brand-logo" />
+          <img src="/app-icon.svg" alt="Titan Protection" className="mob-brand-logo" />
           <div className="mob-brand-tagline">Built to Protect</div>
         </div>
 
@@ -1454,6 +1489,14 @@ export default function App() {
               <span className="mob-section-icon profile"><UserCheck size={16} /></span>
               Guard Profile
             </h3>
+
+            {!activeGuard && (
+              <div className="mob-card">
+                <p style={{ fontSize: '0.85rem', color: 'var(--mob-text-muted)', margin: 0 }}>
+                  Could not load your profile. Pull down to refresh or sign out and sign in again with your PIN.
+                </p>
+              </div>
+            )}
 
             {activeGuard && (
               <div className="mob-card mob-profile-hero">

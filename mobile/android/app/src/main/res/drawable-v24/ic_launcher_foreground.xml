@@ -4,14 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Titan shield -->
+    <!-- Titan Protection shield emblem (from app-icon.svg) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,24 L74,34 V54 C74,66 54,82 54,82 C54,82 34,66 34,54 V34 Z" />
+        android:pathData="M54,20.25 L77.625,30.375 V57.375 C77.625,69.188 54,87.75 54,87.75 C54,87.75 30.375,69.188 30.375,57.375 V30.375 Z" />
     <path
         android:fillColor="#52B788"
-        android:pathData="M54,32 L68,39 V52 C68,60 54,72 54,72 C54,72 40,60 40,52 V39 Z" />
+        android:pathData="M54,27 L70.5,33.75 V48.375 C70.5,56.25 54,68.25 54,68.25 C54,68.25 37.5,56.625 37.5,48.375 V33.75 Z" />
     <path
         android:fillColor="#1B4332"
-        android:pathData="M54,42 L60,45 V52 C60,56 54,61 54,61 C54,61 48,56 48,52 V45 Z" />
+        android:pathData="M54,37.125 L62.25,40.5 V48.375 C62.25,52.875 54,57.375 54,57.375 C54,57.375 45.75,52.875 45.75,48.375 V40.5 Z" />
 </vector>

@@ -29,7 +29,9 @@ import {
   FileCheck,
   Home,
   UserCog,
-  Map
+  Map,
+  Menu,
+  X,
 } from 'lucide-react';
 import PremisesRegistration from './components/PremisesRegistration';
 import GuardManagement from './components/GuardManagement';
@@ -61,6 +63,7 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
   const [syncError, setSyncError] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // Map Canvas Ref
   const canvasRef = useRef(null);
@@ -159,6 +162,24 @@ export default function DashboardPage() {
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 900) setSidebarOpen(false);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = sidebarOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [sidebarOpen]);
+
+  const selectTab = (tab) => {
+    setActiveTab(tab);
+    setSidebarOpen(false);
+  };
 
   // Update incident status
   const handleUpdateIncidentStatus = async (incidentId, status) => {
@@ -496,11 +517,24 @@ export default function DashboardPage() {
   
   return (
     <div className="app-layout">
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close menu"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* ================= LEFT FULL-HEIGHT SIDEBAR ================= */}
-      <aside className="sidebar-wrapper">
+      <aside className={`sidebar-wrapper ${sidebarOpen ? 'is-open' : ''}`}>
         {/* Brand Header */}
         <div className="sidebar-logo">
-          <img src="/emblem-wordmark.png" alt="Titan Protection" />
+          <img src="/app-icon.svg" alt="Titan Protection" className="sidebar-logo-icon" />
+          <div className="sidebar-logo-text">
+            <strong>Titan Protection</strong>
+            <span>Built to Protect</span>
+          </div>
         </div>
 
         {/* Navigation tabs */}
@@ -508,7 +542,7 @@ export default function DashboardPage() {
           <li>
             <button 
               className={`sidebar-nav-item ${activeTab === 'supervisors' ? 'active' : ''}`}
-              onClick={() => setActiveTab('supervisors')}
+              onClick={() => selectTab('supervisors')}
             >
               <Map size={18} /> Supervisor & Territories
             </button>
@@ -516,7 +550,7 @@ export default function DashboardPage() {
           <li>
             <button 
               className={`sidebar-nav-item ${activeTab === 'guards' ? 'active' : ''}`}
-              onClick={() => setActiveTab('guards')}
+              onClick={() => selectTab('guards')}
             >
               <UserCog size={18} /> Guard Management
             </button>
@@ -524,7 +558,7 @@ export default function DashboardPage() {
           <li>
             <button 
               className={`sidebar-nav-item ${activeTab === 'premises' ? 'active' : ''}`}
-              onClick={() => setActiveTab('premises')}
+              onClick={() => selectTab('premises')}
             >
               <Home size={18} /> Register Premises
             </button>
@@ -532,7 +566,7 @@ export default function DashboardPage() {
           <li>
             <button 
               className={`sidebar-nav-item ${activeTab === 'command' ? 'active' : ''}`}
-              onClick={() => setActiveTab('command')}
+              onClick={() => selectTab('command')}
             >
               <Activity size={18} /> Command Centre
             </button>
@@ -540,7 +574,7 @@ export default function DashboardPage() {
           <li>
             <button 
               className={`sidebar-nav-item ${activeTab === 'master' ? 'active' : ''}`}
-              onClick={() => setActiveTab('master')}
+              onClick={() => selectTab('master')}
             >
               <Sliders size={18} /> Master Admin
             </button>
@@ -563,14 +597,30 @@ export default function DashboardPage() {
 
       {/* ================= RIGHT CONTENT VIEWPORT ================= */}
       <div className="main-viewport">
+        <div className="mobile-topbar">
+          <button
+            type="button"
+            className="mobile-menu-btn"
+            aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setSidebarOpen((o) => !o)}
+          >
+            {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+          <div className="mobile-topbar-title">
+            <img src="/app-icon.svg" alt="" className="mobile-topbar-icon" />
+            <span>Titan Protection</span>
+          </div>
+          <span className={`mobile-status-dot ${state?.dataSource === 'supabase' ? 'live' : ''}`} title={state?.dataSource === 'supabase' ? 'Connected' : 'Demo'} />
+        </div>
+
         {/* Top Header Bar */}
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
-          <div>
-            <h1 style={{ fontSize: '1.75rem' }}>
+        <header className="page-header">
+          <div className="page-header-main">
+            <h1 className="page-title">
               {activeTab === 'supervisors' ? 'Supervisor & Territory Management'
                 : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'command' ? 'Command Centre Operations' : 'Master Administration'}
             </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            <p className="page-subtitle">
               {activeTab === 'supervisors'
                 ? 'Manage operational territories (city & suburbs) and assign area supervisors.'
                 : activeTab === 'guards'
@@ -581,14 +631,14 @@ export default function DashboardPage() {
                 ? 'Real-time patrol monitoring, incident updates, and visitor tracking logs.' 
                 : 'Configure onboarding templates, review custom checklists, and manage server data.'}
             </p>
-            <p style={{ color: 'var(--text-dimmed)', fontSize: '0.78rem', marginTop: '0.35rem' }}>
-              <strong style={{ color: 'var(--color-primary)' }}>{systemSettings.companyName}</strong>
+            <p className="page-meta">
+              <strong>{systemSettings.companyName}</strong>
               {' · '}{curGuards.length} guards · {curPremises.length} premises · {curTerritories.length} territories · {onDutyCount} on duty
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', background: state?.dataSource === 'supabase' ? '#d8f3dc' : '#edf7f0', color: state?.dataSource === 'supabase' ? '#1b4332' : '#2d6a4f', padding: '0.35rem 0.65rem', borderRadius: '6px', fontWeight: 'bold' }}>
+          <div className="page-header-actions">
+            <span className={`connection-badge ${state?.dataSource === 'supabase' ? 'live' : ''}`}>
               <Radio size={12} style={{ animation: 'pulse 1.5s infinite' }} /> {state?.dataSource === 'supabase' ? 'Server Connected' : 'Demo Mode Active'}
             </span>
             <style>{`
@@ -667,7 +717,7 @@ export default function DashboardPage() {
           <div className="dashboard-grid animate-fade-in">
             
             {/* Top Cards Row: Statistics */}
-            <div className="col-12" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem' }}>
+            <div className="col-12 stat-cards-row">
               <div className="glass-panel" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <div style={{ background: '#d8f3dc', padding: '0.65rem', borderRadius: '8px' }}>
                   <Shield size={20} style={{ color: 'var(--color-primary)' }} />

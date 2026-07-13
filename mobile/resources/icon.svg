@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Titan Monitor">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b2818"/>
+      <stop offset="100%" stop-color="#1b4332"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <path fill="#ffffff" d="M256 96 368 144v128c0 56-56 112-112 144 0 0-56-56-56-112V144Z"/>
+  <path fill="#52b788" d="M256 128 336 160v96c0 36-36 72-80 96 0 0-40-28-40-72v-96Z"/>
+  <path fill="#1b4332" d="M256 176 296 192v64c0 20-20 40-40 52 0 0-20-16-20-40v-64Z"/>
+</svg>

@@ -13,6 +13,7 @@ import {
   isDestructiveDbAction,
   countGuardsInDb,
   getRelationalSummary,
+  persistSystemSettingsToDb,
 } from './db/relationalDb';
 import {
   usesOperationalDbWrite,
@@ -182,6 +183,8 @@ export async function runSupabaseAction(payload) {
     await applyDirectRowDelete(action, payload, tenantId);
   } else if (usesOperationalDbWrite(action)) {
     await persistOperationalActionToDb(action, payload, tenantId, getLocalState());
+  } else if (action === 'UPDATE_SYSTEM_SETTINGS') {
+    await persistSystemSettingsToDb(getLocalState().systemSettings);
   } else if (!READ_ONLY_ACTIONS.has(action) && RELATIONAL_WRITE_ACTIONS.has(action)) {
     if (usesDirectRowUpsert(action)) {
       await applyDirectRowUpsert(action, payload, tenantId, getLocalState());

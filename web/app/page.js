@@ -280,14 +280,24 @@ export default function DashboardPage() {
 
   const handleUpdateSystemSettings = async (updates) => {
     try {
-      await fetch('/api/state', {
+      const res = await fetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'UPDATE_SYSTEM_SETTINGS', updates }),
       });
-      fetchState();
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not save system settings.');
+      }
+      if (data.state) {
+        setState(data.state);
+        sirenEnabledRef.current = mergeSystemSettings(data.state.systemSettings).sirenAlertsEnabled;
+      } else {
+        await fetchState();
+      }
     } catch (err) {
       console.error('Failed updating system settings:', err);
+      setSyncError(err.message || 'Could not save system settings.');
     }
   };
 

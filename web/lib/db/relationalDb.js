@@ -130,6 +130,7 @@ export async function loadAppStateFromRelationalDb() {
   ]);
 
   if (tenantsRes.error) throw tenantsRes.error;
+  if (settingsRes.error) throw settingsRes.error;
   if (territoriesRes.error) throw territoriesRes.error;
   if (suburbsRes.error) throw suburbsRes.error;
   if (supRowsRes.error) throw supRowsRes.error;
@@ -875,11 +876,39 @@ export async function ensureMinimalTenantInDb() {
     });
     if (error) throw error;
   }
-  await db.from('app_settings').upsert([
-    { key: 'active_tenant_id', value: TITAN_TENANT_ID },
-    { key: 'initial_seed_done', value: true },
-    { key: 'system_settings', value: DEFAULT_SYSTEM_SETTINGS },
-  ]);
+
+  const { data: existingRows, error: settingsErr } = await db
+    .from('app_settings')
+    .select('key')
+    .in('key', ['active_tenant_id', 'initial_seed_done', 'system_settings']);
+  if (settingsErr) throw settingsErr;
+
+  const existingKeys = new Set((existingRows || []).map((row) => row.key));
+  const seeds = [];
+  if (!existingKeys.has('active_tenant_id')) {
+    seeds.push({ key: 'active_tenant_id', value: TITAN_TENANT_ID });
+  }
+  if (!existingKeys.has('initial_seed_done')) {
+    seeds.push({ key: 'initial_seed_done', value: true });
+  }
+  if (!existingKeys.has('system_settings')) {
+    seeds.push({ key: 'system_settings', value: DEFAULT_SYSTEM_SETTINGS });
+  }
+  if (seeds.length) {
+    const { error } = await db.from('app_settings').insert(seeds);
+    if (error) throw error;
+  }
+}
+
+/** Persist system settings only — used by UPDATE_SYSTEM_SETTINGS. */
+export async function persistSystemSettingsToDb(systemSettings) {
+  await requireDbOk(
+    await db.from('app_settings').upsert({
+      key: 'system_settings',
+      value: systemSettings || DEFAULT_SYSTEM_SETTINGS,
+    }),
+    'app_settings system_settings'
+  );
 }
 
 /** @deprecated Demo seeding is disabled — kept as no-op alias for compatibility. */

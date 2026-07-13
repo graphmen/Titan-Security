@@ -451,43 +451,6 @@ export async function POST(req) {
       return jsonResponse({ success: true }, 200, origin);
     }
 
-    if (await isSupabaseReady()) {
-      try {
-        await loadFreshStateFromDatabase();
-        const result = processLocalAction({ ...payload, tenantId });
-        if (result.error) {
-          return jsonResponse({ error: result.error }, result.status || 400, origin);
-        }
-        const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
-        const destructive = isDestructiveDbAction(action);
-        if (destructive) {
-          if (action === 'CLEAR_TENANT_DEMO_DATA') {
-            await wipeEntireOperationalDatabase();
-            await ensureMinimalTenantInDb();
-          } else if (typeof action === 'string' && action.startsWith('DELETE_')) {
-            await applyDirectRowDelete(action, { ...payload, tenantId }, tenantId);
-          }
-        } else if (action !== 'GUARD_LOGIN' && action !== 'SWITCH_TENANT') {
-          await persistStateToSupabase();
-        }
-        await loadFreshStateFromDatabase();
-        if (result.guard || result.generatedPin) {
-          return jsonResponse({ ...result, whatsapp, email }, 200, origin, req);
-        }
-        return jsonResponse({ ...result, whatsapp, email, state: getLocalState() }, 200, origin, req);
-      } catch (err) {
-        console.error('Local action persist to Supabase failed:', err.message);
-        if (process.env.FORCE_SUPABASE === '1') {
-          return jsonResponse(
-            { error: `Could not save to database: ${err.message}. Please retry.` },
-            503,
-            origin,
-            req
-          );
-        }
-      }
-    }
-
     const result = processLocalAction({ ...payload, tenantId });
     if (result.error) {
       return jsonResponse({ error: result.error }, result.status || 400, origin);

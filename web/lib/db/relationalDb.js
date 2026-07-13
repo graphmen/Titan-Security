@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../../app/supabase';
 import { DEFAULT_SYSTEM_SETTINGS, TITAN_TENANT_ID } from '../systemSettings';
-import { stripLegacyDemoEntities, filterLegacyDemoFromLoadedState, LEGACY_DEMO_GUARD_IDS, getAllLegacyDemoIds } from './legacyDemo';
+import { stripLegacyDemoEntities, filterLegacyDemoFromLoadedState, LEGACY_DEMO_GUARD_IDS, getAllLegacyDemoIds, assertNoLegacyDemoRowsInState } from './legacyDemo';
 import { wipeOperationalTablesDirectSql } from './directWipe';
 import {
   tenantToRow,
@@ -320,14 +320,38 @@ export async function wipeEntireOperationalDatabase() {
     return { method: 'direct_sql' };
   }
 
-  const { data: tenants, error: tenantErr } = await db.from('tenants').select('id');
-  if (tenantErr) throw new Error(`tenants select: ${tenantErr.message}`);
-  for (const row of tenants || []) {
-    await clearTenantOperationalData(row.id);
-  }
+  // Fallback: delete every row from all operational tables (service role required on server).
+  const wipeTables = [
+    { table: 'shift_swap_requests', column: 'id' },
+    { table: 'guard_alerts', column: 'id' },
+    { table: 'whatsapp_outbox', column: 'id' },
+    { table: 'guard_attendance', column: 'id' },
+    { table: 'shifts', column: 'id' },
+    { table: 'checkpoints', column: 'id' },
+    { table: 'guard_premises', column: 'guard_id' },
+    { table: 'guards', column: 'id' },
+    { table: 'places', column: 'id' },
+    { table: 'premises', column: 'id' },
+    { table: 'supervisor_territories', column: 'supervisor_id' },
+    { table: 'supervisors', column: 'id' },
+    { table: 'territory_suburbs', column: 'id' },
+    { table: 'territories', column: 'id' },
+    { table: 'visitors', column: 'id' },
+    { table: 'active_sos_alerts', column: 'tenant_id' },
+    { table: 'occurrence_book', column: 'id' },
+    { table: 'checklist_submissions', column: 'id' },
+    { table: 'checklist_templates', column: 'id' },
+    { table: 'titan_state', column: 'id' },
+    { table: 'app_settings', column: 'key' },
+    { table: 'tenants', column: 'id' },
+  ];
 
-  await db.from('titan_state').delete().neq('id', '');
-  await db.from('tenants').delete().in('id', ['alpha', 'omega']);
+  for (const { table, column } of wipeTables) {
+    const { error } = await db.from(table).delete().not(column, 'is', null);
+    if (error && error.code !== 'PGRST116') {
+      throw new Error(`${table} wipe: ${error.message}`);
+    }
+  }
 
   return { method: 'supabase_api' };
 }
@@ -720,6 +744,7 @@ async function syncTenantEntities(state, tenantId, { allowDiffDeletes = false } 
 /** Persist full in-memory state to relational tables (upsert-only by default — deletes use applyDirectRowDelete). */
 export async function saveAppStateToRelationalDb(state, { allowDiffDeletes = false } = {}) {
   const clean = stripLegacyDemoEntities(state);
+  assertNoLegacyDemoRowsInState(clean);
   const tenantList = Object.values(clean.tenants || {});
   if (tenantList.length) {
     const { error } = await db.from('tenants').upsert(tenantList.map(tenantToRow));
@@ -838,12 +863,6 @@ export async function purgeLegacyDemoRowsFromDb() {
 
 /** Ensure the Titan tenant exists — never inject demo/sample records. */
 export async function ensureMinimalTenantInDb() {
-  const now = Date.now();
-  const lastPurge = globalThis.__titanLegacyPurgeAt || 0;
-  if (now - lastPurge > 5 * 60 * 1000) {
-    await purgeLegacyDemoRowsFromDb();
-    globalThis.__titanLegacyPurgeAt = now;
-  }
   const { data: tenant } = await db.from('tenants').select('id').eq('id', TITAN_TENANT_ID).maybeSingle();
   if (!tenant) {
     const { error } = await db.from('tenants').upsert({
@@ -856,10 +875,11 @@ export async function ensureMinimalTenantInDb() {
     });
     if (error) throw error;
   }
-  await db.from('app_settings').upsert({
-    key: 'initial_seed_done',
-    value: true,
-  });
+  await db.from('app_settings').upsert([
+    { key: 'active_tenant_id', value: TITAN_TENANT_ID },
+    { key: 'initial_seed_done', value: true },
+    { key: 'system_settings', value: DEFAULT_SYSTEM_SETTINGS },
+  ]);
 }
 
 /** @deprecated Demo seeding is disabled — kept as no-op alias for compatibility. */

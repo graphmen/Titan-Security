@@ -253,7 +253,7 @@ export default function DashboardPage() {
 
   const handleClearDemoData = async () => {
     if (!window.confirm(
-      'Remove ALL guards, premises, territories, supervisors, and shifts from the live database?\n\nThis permanently deletes sample/demo records. You can then register your real data fresh.'
+      'Remove ALL data from the live database?\n\nThis permanently deletes every guard, premise, territory, supervisor, shift, and demo record. Only the empty Titan tenant remains. You can then register your real operational data.'
     )) return;
     setSyncError(null);
     setSyncMessage(null);

@@ -9,6 +9,7 @@ import {
   usesDirectRowUpsert,
   clearTenantOperationalData,
   wipeEntireOperationalDatabase,
+  purgeLegacyDemoRowsFromDb,
   isDestructiveDbAction,
   countGuardsInDb,
   getRelationalSummary,
@@ -161,8 +162,8 @@ export async function runSupabaseAction(payload) {
   const action = payload.action;
 
   if (action === 'CLEAR_TENANT_DEMO_DATA') {
-    globalThis.__titanLegacyPurgeAt = 0;
     const wipeResult = await wipeEntireOperationalDatabase();
+    await purgeLegacyDemoRowsFromDb();
     await ensureMinimalTenantInDb();
     return {
       success: true,

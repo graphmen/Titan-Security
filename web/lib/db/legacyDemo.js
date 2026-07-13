@@ -71,3 +71,41 @@ export function getAllLegacyDemoIds() {
     tenantIds: [...LEGACY_DEMO_TENANT_IDS],
   };
 }
+
+/** Block any attempt to write demo seed IDs back to the database. */
+export function assertNoLegacyDemoRowsInState(state) {
+  const { guardIds, premiseIds, territoryIds, supervisorIds } = getAllLegacyDemoIds();
+  for (const [tid, list] of Object.entries(state?.guards || {})) {
+    for (const g of list || []) {
+      if (guardIds.includes(g.id)) {
+        throw new Error(`Refusing to save legacy demo guard ${g.id}. Run a full database wipe first.`);
+      }
+    }
+  }
+  for (const [tid, list] of Object.entries(state?.premises || {})) {
+    for (const p of list || []) {
+      if (premiseIds.includes(p.id)) {
+        throw new Error(`Refusing to save legacy demo premise ${p.id}. Run a full database wipe first.`);
+      }
+    }
+  }
+  for (const [tid, list] of Object.entries(state?.territories || {})) {
+    for (const t of list || []) {
+      if (territoryIds.includes(t.id)) {
+        throw new Error(`Refusing to save legacy demo territory ${t.id}. Run a full database wipe first.`);
+      }
+    }
+  }
+  for (const [tid, list] of Object.entries(state?.supervisors || {})) {
+    for (const s of list || []) {
+      if (supervisorIds.includes(s.id)) {
+        throw new Error(`Refusing to save legacy demo supervisor ${s.id}. Run a full database wipe first.`);
+      }
+    }
+  }
+  for (const pid of premiseIds) {
+    if (state?.places?.[pid]?.length) {
+      throw new Error(`Refusing to save legacy demo places for ${pid}. Run a full database wipe first.`);
+    }
+  }
+}

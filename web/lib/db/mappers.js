@@ -61,6 +61,9 @@ export function supervisorToRow(s, tenantId) {
     email: s.email || null,
     role: s.role || null,
     status: s.status || 'Active',
+    login_pin: s.loginPin || null,
+    pin_must_change: s.pinMustChange ?? true,
+    pin_created_at: s.pinCreatedAt || null,
     created_at: s.createdAt || new Date().toISOString(),
   };
 }
@@ -74,6 +77,9 @@ export function rowToSupervisor(r, assignedTerritoryIds = []) {
     email: r.email,
     role: r.role,
     status: r.status,
+    loginPin: r.login_pin,
+    pinMustChange: r.pin_must_change,
+    pinCreatedAt: r.pin_created_at,
     assignedTerritoryIds,
     createdAt: r.created_at,
   };

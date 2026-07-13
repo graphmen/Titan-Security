@@ -29,6 +29,8 @@ import {
 } from './guards';
 import { syncGuardTerritoryFromPremises } from './guardProfile';
 import { generateGuardPin, findGuardByPin, validatePinFormat } from './guardAuth';
+import { generateSupervisorPin, findSupervisorByPin } from './supervisorAuth';
+import { sanitizeSupervisorPublic } from './supervisorScope';
 import {
   queueWhatsApp,
   buildWelcomePinMessage,
@@ -51,8 +53,9 @@ function getPremiseName(state, tenantId, premiseId) {
 }
 
 function issueGuardPin(state, tenantId, guard, { reset = false } = {}) {
-  const list = state.guards[tenantId] || [];
-  guard.loginPin = generateGuardPin(list.filter((g) => g.id !== guard.id));
+  const guardList = state.guards[tenantId] || [];
+  const supList = state.supervisors[tenantId] || [];
+  guard.loginPin = generateSupervisorPin(guardList.filter((g) => g.id !== guard.id), supList);
   guard.pinMustChange = true;
   guard.pinCreatedAt = new Date().toISOString();
   const body = reset
@@ -67,6 +70,14 @@ function issueGuardPin(state, tenantId, guard, { reset = false } = {}) {
       body,
     })
   );
+}
+
+function issueSupervisorPin(state, tenantId, supervisor) {
+  const guardList = state.guards[tenantId] || [];
+  const supList = (state.supervisors[tenantId] || []).filter((s) => s.id !== supervisor.id);
+  supervisor.loginPin = generateSupervisorPin(guardList, supList);
+  supervisor.pinMustChange = true;
+  supervisor.pinCreatedAt = new Date().toISOString();
 }
 
 function trackWhatsAppEntry(state, entry) {
@@ -468,6 +479,63 @@ export function processLocalAction(payload) {
         success: true,
         guard: sanitizeGuardForClient(guard),
         mustChangePin: !!guard.pinMustChange,
+      };
+    }
+    case 'SUPERVISOR_LOGIN': {
+      const { pin } = payload;
+      const supervisor = findSupervisorByPin(state.supervisors[tenantId] || [], pin);
+      if (!supervisor) return { error: 'Invalid PIN — check your email for your supervisor login code', status: 401 };
+      if (!(supervisor.assignedTerritoryIds || []).length) {
+        return { error: 'No territories assigned — contact your administrator', status: 403 };
+      }
+      return {
+        success: true,
+        supervisor: sanitizeSupervisorPublic(supervisor),
+        mustChangePin: !!supervisor.pinMustChange,
+      };
+    }
+    case 'CHANGE_SUPERVISOR_PIN': {
+      const { supervisorId, currentPin, newPin } = payload;
+      if (!validatePinFormat(newPin)) {
+        return { error: 'New PIN must be exactly 6 digits', status: 400 };
+      }
+      const supervisor = (state.supervisors[tenantId] || []).find((s) => s.id === supervisorId);
+      if (!supervisor) return { error: 'Supervisor not found', status: 404 };
+      if (supervisor.loginPin !== String(currentPin).trim()) {
+        return { error: 'Current PIN is incorrect', status: 403 };
+      }
+      if (supervisor.loginPin === String(newPin).trim()) {
+        return { error: 'Choose a different PIN', status: 400 };
+      }
+      const clashGuard = findGuardByPin(state.guards[tenantId] || [], newPin);
+      const clashSup = findSupervisorByPin(
+        (state.supervisors[tenantId] || []).filter((s) => s.id !== supervisorId),
+        newPin
+      );
+      if (clashGuard || clashSup) {
+        return { error: 'PIN already in use — choose another', status: 409 };
+      }
+      supervisor.loginPin = String(newPin).trim();
+      supervisor.pinMustChange = false;
+      supervisor.pinUpdatedAt = new Date().toISOString();
+      break;
+    }
+    case 'RESET_SUPERVISOR_PIN': {
+      const { supervisorId } = payload;
+      const supervisor = (state.supervisors[tenantId] || []).find((s) => s.id === supervisorId);
+      if (!supervisor) return { error: 'Supervisor not found', status: 404 };
+      if (!supervisor.email?.trim()) {
+        return { error: 'Supervisor has no email — add an email before resetting PIN', status: 400 };
+      }
+      issueSupervisorPin(state, tenantId, supervisor);
+      return {
+        success: true,
+        generatedPin: supervisor.loginPin,
+        supervisor: {
+          fullName: supervisor.fullName,
+          phone: supervisor.phone,
+          email: supervisor.email,
+        },
       };
     }
     case 'RESEND_WHATSAPP': {
@@ -1002,8 +1070,14 @@ export function processLocalAction(payload) {
         assignedTerritoryIds = [],
       } = payload;
       if (!fullName || !phone) return { error: 'Name and phone are required', status: 400 };
+      if (!email?.trim()) {
+        return { error: 'Email is required — supervisor PINs are sent by email for the mobile app', status: 400 };
+      }
+      if (!isValidEmailAddress(email)) {
+        return { error: 'Enter a valid email address for the supervisor', status: 400 };
+      }
       if (!state.supervisors[tenantId]) state.supervisors[tenantId] = [];
-      state.supervisors[tenantId].push({
+      const newSupervisor = {
         id: generateSupervisorId(),
         employeeNumber: employeeNumber || `TS-${String(state.supervisors[tenantId].length + 1).padStart(3, '0')}`,
         fullName,
@@ -1013,8 +1087,18 @@ export function processLocalAction(payload) {
         assignedTerritoryIds: Array.isArray(assignedTerritoryIds) ? assignedTerritoryIds : [],
         status: 'Active',
         createdAt: new Date().toISOString(),
-      });
-      break;
+      };
+      issueSupervisorPin(state, tenantId, newSupervisor);
+      state.supervisors[tenantId].push(newSupervisor);
+      return {
+        success: true,
+        generatedPin: newSupervisor.loginPin,
+        supervisor: {
+          fullName: newSupervisor.fullName,
+          phone: newSupervisor.phone,
+          email: newSupervisor.email,
+        },
+      };
     }
     case 'UPDATE_SUPERVISOR': {
       const { supervisorId, updates = {} } = payload;

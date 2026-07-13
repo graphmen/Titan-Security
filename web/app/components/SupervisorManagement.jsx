@@ -212,11 +212,30 @@ export default function SupervisorManagement({ tenantId, territories = [], super
 
   const handleSaveSupervisor = async (e) => {
     e.preventDefault();
-    if (!supervisorForm.fullName || !supervisorForm.phone) return;
-    const ok = editingSupervisorId
+    if (!supervisorForm.fullName || !supervisorForm.phone || !supervisorForm.email?.trim()) return;
+    const result = editingSupervisorId
       ? await postAction('UPDATE_SUPERVISOR', { supervisorId: editingSupervisorId, updates: supervisorForm })
       : await postAction('CREATE_SUPERVISOR', supervisorForm);
-    if (ok) resetSupervisorForm();
+    if (result) {
+      if (!editingSupervisorId && result.generatedPin) {
+        const emailNote = result.email?.sent
+          ? `PIN emailed to ${result.email.to}.`
+          : result.email?.note || result.email?.error || 'Email not sent — check Resend settings.';
+        alert(`Supervisor saved. Login PIN: ${result.generatedPin}. ${emailNote}`);
+      }
+      resetSupervisorForm();
+    }
+  };
+
+  const handleResetSupervisorPin = async (supervisorId) => {
+    if (!window.confirm('Generate a new 6-digit PIN and email it to this supervisor?')) return;
+    const result = await postAction('RESET_SUPERVISOR_PIN', { supervisorId });
+    if (result?.generatedPin) {
+      const emailNote = result.email?.sent
+        ? `PIN emailed to ${result.email.to}.`
+        : result.email?.note || result.email?.error || 'Email not sent.';
+      alert(`New supervisor PIN: ${result.generatedPin}. ${emailNote}`);
+    }
   };
 
   const confirmDelete = async () => {
@@ -526,7 +545,7 @@ export default function SupervisorManagement({ tenantId, territories = [], super
                 <div className="input-group" style={{ marginBottom: 0 }}><label>Employee No.</label><input className="form-input" value={supervisorForm.employeeNumber} onChange={(e) => setSupervisorForm({ ...supervisorForm, employeeNumber: e.target.value })} placeholder="Auto" /></div>
                 <div className="input-group" style={{ marginBottom: 0 }}><label>Role</label><select className="form-select" value={supervisorForm.role} onChange={(e) => setSupervisorForm({ ...supervisorForm, role: e.target.value })}>{SUPERVISOR_ROLES.map((r) => <option key={r}>{r}</option>)}</select></div>
                 <div className="input-group" style={{ marginBottom: 0 }}><label>Phone *</label><input className="form-input" value={supervisorForm.phone} onChange={(e) => setSupervisorForm({ ...supervisorForm, phone: e.target.value })} required /></div>
-                <div className="input-group" style={{ marginBottom: 0 }}><label>Email</label><input className="form-input" type="email" value={supervisorForm.email} onChange={(e) => setSupervisorForm({ ...supervisorForm, email: e.target.value })} /></div>
+                <div className="input-group" style={{ marginBottom: 0 }}><label>Email *</label><input className="form-input" type="email" value={supervisorForm.email} onChange={(e) => setSupervisorForm({ ...supervisorForm, email: e.target.value })} required placeholder="For Titan Supervisor app PIN" /></div>
                 {editingSupervisorId && (
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Status</label><select className="form-select" value={supervisorForm.status} onChange={(e) => setSupervisorForm({ ...supervisorForm, status: e.target.value })}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select></div>
                 )}
@@ -594,6 +613,9 @@ export default function SupervisorManagement({ tenantId, territories = [], super
                     </div>
                     <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
                       <span className={`badge ${s.status === 'Active' ? 'badge-green' : 'badge-yellow'}`} style={{ fontSize: '0.65rem' }}>{s.status}</span>
+                      <button type="button" className="btn-secondary" style={{ fontSize: '0.65rem', padding: '0.25rem 0.45rem' }} onClick={() => handleResetSupervisorPin(s.id)} title="Reset mobile PIN">
+                        Reset PIN
+                      </button>
                       <button type="button" style={iconBtn()} onClick={() => startEditSupervisor(s)}><Pencil size={14} /></button>
                       <button
                         type="button"

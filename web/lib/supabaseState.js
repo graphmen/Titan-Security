@@ -136,7 +136,7 @@ export async function getSupabaseAppState() {
   };
 }
 
-const READ_ONLY_ACTIONS = new Set(['GUARD_LOGIN', 'SWITCH_TENANT']);
+const READ_ONLY_ACTIONS = new Set(['GUARD_LOGIN', 'SUPERVISOR_LOGIN', 'SWITCH_TENANT']);
 
 /** Actions that change guards/premises/etc. and need a relational write after memory update. */
 const RELATIONAL_WRITE_ACTIONS = new Set([
@@ -144,6 +144,7 @@ const RELATIONAL_WRITE_ACTIONS = new Set([
   'CREATE_SHIFT', 'UPDATE_SHIFT',
   'CREATE_PREMISE', 'UPDATE_PREMISE', 'CREATE_PLACE', 'UPDATE_PLACE',
   'CREATE_TERRITORY', 'UPDATE_TERRITORY', 'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR',
+  'RESET_SUPERVISOR_PIN', 'CHANGE_SUPERVISOR_PIN',
   'GUARD_CLOCK_IN', 'GUARD_CLOCK_OUT', 'GUARD_HEARTBEAT', 'GUARD_MOVEMENT_ACK',
   'ADD_GUARD_DOCUMENT', 'ADD_GUARD_TRAINING', 'UPDATE_GUARD_PHOTO',
   'REQUEST_SHIFT_SWAP', 'RESOLVE_SHIFT_SWAP', 'DISMISS_GUARD_ALERT',
@@ -195,6 +196,7 @@ export async function runSupabaseAction(payload) {
   globalThis.__titanFreshLoadAt = Date.now();
 
   if (result?.guard) return { ...result, whatsapp, email, state };
+  if (result?.supervisor && !result?.generatedPin) return { ...result, whatsapp, email, state };
   if (result?.generatedPin) return { ...result, whatsapp, email, state };
   if (result?.waLink) return { ...result, whatsapp, email, state };
   return { success: true, whatsapp, email, state };

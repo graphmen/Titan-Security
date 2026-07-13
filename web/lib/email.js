@@ -87,6 +87,97 @@ async function sendViaResend({ to, subject, html, text }) {
   return data;
 }
 
+function supervisorDisplayName(supervisor) {
+  return String(supervisor?.fullName || 'Supervisor');
+}
+
+export function buildSupervisorWelcomePinEmailContent(supervisor, pin) {
+  const name = supervisorDisplayName(supervisor);
+  const html = emailShell(
+    'Your Titan Supervisor login PIN',
+    `<p style="color:#334155;line-height:1.5">Hi ${name},</p>
+<p style="color:#334155;line-height:1.5">You have been registered on Titan Supervisor. Use this 6-digit PIN to sign in on the supervisor mobile app:</p>
+<p style="font-size:36px;font-weight:800;letter-spacing:8px;color:#1b4332;text-align:center;margin:24px 0">${pin}</p>
+<p style="color:#334155;line-height:1.5">Open <strong>Titan Supervisor</strong>, enter the PIN, then choose a new PIN when prompted on first login.</p>`
+  );
+  const text =
+    `Titan Protection — Supervisor Welcome\n\nHi ${name},\n\nYour Titan Supervisor login PIN is: ${pin}\n\n` +
+    `Open the Titan Supervisor app and enter this 6-digit PIN. You will be asked to choose a new PIN on first login.\n\nKeep this PIN private.`;
+  return { subject: 'Titan Protection — Your supervisor login PIN', html, text };
+}
+
+export function buildSupervisorPinResetEmailContent(supervisor, pin) {
+  const name = supervisorDisplayName(supervisor);
+  const html = emailShell(
+    'Your supervisor PIN has been reset',
+    `<p style="color:#334155;line-height:1.5">Hi ${name},</p>
+<p style="color:#334155;line-height:1.5">Your Titan Supervisor PIN has been reset. Your new login PIN is:</p>
+<p style="font-size:36px;font-weight:800;letter-spacing:8px;color:#1b4332;text-align:center;margin:24px 0">${pin}</p>
+<p style="color:#334155;line-height:1.5">If you did not request this reset, contact your administrator immediately.</p>`
+  );
+  const text =
+    `Titan Protection — Supervisor PIN Reset\n\nHi ${name},\n\nYour new Titan Supervisor PIN is: ${pin}\n\n` +
+    `If you did not request this, contact your administrator immediately.`;
+  return { subject: 'Titan Protection — Supervisor PIN reset', html, text };
+}
+
+/** Send supervisor PIN email. Does not throw — returns delivery payload. */
+export async function deliverSupervisorPinEmail(supervisor, pin, type = 'welcome_pin') {
+  const to = String(supervisor?.email || '').trim().toLowerCase();
+
+  if (!to) {
+    return {
+      status: 'skipped',
+      sent: false,
+      reason: 'no_email',
+      note: 'Supervisor has no email address.',
+    };
+  }
+
+  if (!isValidEmailAddress(to)) {
+    return {
+      status: 'failed',
+      sent: false,
+      to,
+      error: 'Invalid email address on supervisor profile.',
+    };
+  }
+
+  if (!isEmailConfigured()) {
+    return {
+      status: 'not_configured',
+      sent: false,
+      to,
+      note: 'Add RESEND_API_KEY and EMAIL_FROM to web/.env.local and Vercel, then redeploy.',
+    };
+  }
+
+  const content =
+    type === 'pin_reset'
+      ? buildSupervisorPinResetEmailContent(supervisor, pin)
+      : buildSupervisorWelcomePinEmailContent(supervisor, pin);
+
+  try {
+    const data = await sendViaResend({ to, ...content });
+    return {
+      status: 'sent',
+      sent: true,
+      to,
+      provider: 'resend',
+      messageId: data.id || null,
+      deliveredAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    return {
+      status: 'failed',
+      sent: false,
+      to,
+      provider: 'resend',
+      error: err.message,
+    };
+  }
+}
+
 /** Send guard PIN email. Does not throw — returns delivery payload. */
 export async function deliverGuardPinEmail(guard, pin, type = 'welcome_pin') {
   const to = String(guard?.email || '').trim().toLowerCase();

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Titan Protection shield emblem (from app-icon.svg) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,20.25 L77.625,30.375 V57.375 C77.625,69.188 54,87.75 54,87.75 C54,87.75 30.375,69.188 30.375,57.375 V30.375 Z" />
+    <path
+        android:fillColor="#52B788"
+        android:pathData="M54,27 L70.5,33.75 V48.375 C70.5,56.25 54,68.25 54,68.25 C54,68.25 37.5,56.625 37.5,48.375 V33.75 Z" />
+    <path
+        android:fillColor="#1B4332"
+        android:pathData="M54,37.125 L62.25,40.5 V48.375 C62.25,52.875 54,57.375 54,57.375 C54,57.375 45.75,52.875 45.75,48.375 V40.5 Z" />
+</vector>

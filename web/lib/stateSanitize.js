@@ -1,14 +1,22 @@
 import { sanitizeGuardForClient } from './localStore';
+import { sanitizeSupervisorPublic } from './supervisorScope';
 
 /** Strip login PINs from API payloads unless the web dashboard explicitly requests them. */
-export function sanitizeStateForClient(state, { includeGuardPins = false } = {}) {
-  if (!state || includeGuardPins) return state;
+export function sanitizeStateForClient(state, { includeGuardPins = false, includeSupervisorPins = false } = {}) {
+  if (!state) return state;
+  if (includeGuardPins && includeSupervisorPins) return state;
 
   const next = { ...state };
-  if (state.guards) {
+  if (state.guards && !includeGuardPins) {
     next.guards = {};
     for (const [tid, list] of Object.entries(state.guards)) {
       next.guards[tid] = (list || []).map((g) => sanitizeGuardForClient(g));
+    }
+  }
+  if (state.supervisors && !includeSupervisorPins) {
+    next.supervisors = {};
+    for (const [tid, list] of Object.entries(state.supervisors)) {
+      next.supervisors[tid] = (list || []).map((s) => sanitizeSupervisorPublic(s));
     }
   }
   return next;

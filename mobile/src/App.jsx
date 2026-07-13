@@ -983,7 +983,7 @@ export default function App() {
       {/* Header */}
       <header className="mob-header mob-header-branded">
         <div>
-          <img src="/app-icon.svg" alt="Titan Protection" className="mob-brand-logo" />
+          <img src="/emblem-dark.jpg" alt="Titan Protection" className="mob-brand-logo" />
           <div className="mob-brand-tagline">Built to Protect</div>
         </div>
 

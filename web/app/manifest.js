@@ -31,9 +31,9 @@ export default function manifest() {
         purpose: 'maskable',
       },
       {
-        src: '/app-icon.svg',
+        src: '/emblem-light.jpg',
         sizes: 'any',
-        type: 'image/svg+xml',
+        type: 'image/jpeg',
         purpose: 'any',
       },
     ],

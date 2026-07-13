@@ -530,11 +530,7 @@ export default function DashboardPage() {
       <aside className={`sidebar-wrapper ${sidebarOpen ? 'is-open' : ''}`}>
         {/* Brand Header */}
         <div className="sidebar-logo">
-          <img src="/app-icon.svg" alt="Titan Protection" className="sidebar-logo-icon" />
-          <div className="sidebar-logo-text">
-            <strong>Titan Protection</strong>
-            <span>Built to Protect</span>
-          </div>
+          <img src="/emblem-wordmark.png" alt="Titan Protection" />
         </div>
 
         {/* Navigation tabs */}
@@ -607,8 +603,7 @@ export default function DashboardPage() {
             {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
           <div className="mobile-topbar-title">
-            <img src="/app-icon.svg" alt="" className="mobile-topbar-icon" />
-            <span>Titan Protection</span>
+            <img src="/emblem-wordmark.png" alt="" className="mobile-topbar-logo" />
           </div>
           <span className={`mobile-status-dot ${state?.dataSource === 'supabase' ? 'live' : ''}`} title={state?.dataSource === 'supabase' ? 'Connected' : 'Demo'} />
         </div>

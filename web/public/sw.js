@@ -1,6 +1,6 @@
 /** Titan Protection — lightweight service worker (offline shell + static cache). */
 const CACHE = 'titan-pwa-v1';
-const PRECACHE = ['/', '/app-icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
+const PRECACHE = ['/', '/emblem-wordmark.png', '/emblem-light.jpg', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

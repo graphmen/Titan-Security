@@ -1429,6 +1429,15 @@ button {
     flex: 1;
   }
 
+  .mobile-topbar-logo {
+    height: 28px;
+    width: auto;
+    max-width: min(200px, 55vw);
+    object-fit: contain;
+    object-position: left center;
+    flex-shrink: 1;
+  }
+
   .mobile-topbar-icon {
     width: 28px;
     height: 28px;

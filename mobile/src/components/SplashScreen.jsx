@@ -6,10 +6,7 @@ export default function SplashScreen({ exiting }) {
         <span className="mob-splash-ring ring-2" />
         <span className="mob-splash-ring ring-3" />
       </div>
-      <div className="mob-splash-logo">
-        <img src="/app-icon.svg" alt="Titan Monitor" className="mob-splash-emblem" />
-      </div>
-      <h1 className="mob-splash-title">Titan Monitor</h1>
+      <img src="/emblem-dark.jpg" alt="Titan Protection" className="mob-splash-wordmark" />
       <p className="mob-splash-tagline">Built to Protect</p>
       <div className="mob-splash-loader">
         <span /><span /><span />

@@ -12,6 +12,8 @@ export default function PinDeliveryModal({ open, data, onClose }) {
     pin,
     label,
     guardName,
+    personName,
+    appName = 'Titan Monitor',
     phone,
     email,
     waLink,
@@ -22,6 +24,8 @@ export default function PinDeliveryModal({ open, data, onClose }) {
     error,
     emailNote,
   } = data;
+
+  const displayName = personName || guardName;
 
   const copyPin = async () => {
     try {
@@ -38,7 +42,7 @@ export default function PinDeliveryModal({ open, data, onClose }) {
     if (waSent) return `PIN sent via ${channel === 'sms' ? 'SMS' : 'WhatsApp'} to ${phone}`;
     if (error && emailNote) return emailNote;
     if (error) return 'Auto-send failed — share the PIN manually below';
-    return 'Share this PIN with the guard for mobile app login';
+    return `Share this PIN for ${appName} login`;
   };
 
   return (
@@ -62,11 +66,11 @@ export default function PinDeliveryModal({ open, data, onClose }) {
           </button>
         </div>
 
-        {(guardName || email || phone) && (
+        {(displayName || email || phone) && (
           <div className="pin-delivery-guard">
             <User size={14} />
             <span>
-              {guardName || 'Guard'}
+              {displayName || 'User'}
               {email ? ` · ${email}` : phone ? ` · ${phone}` : ''}
             </span>
           </div>
@@ -90,7 +94,7 @@ export default function PinDeliveryModal({ open, data, onClose }) {
               {waLink && !waSent && (
                 <li>WhatsApp may have opened — tap <em>Send</em>, or use the button below.</li>
               )}
-              <li>Guard opens <strong>Titan Monitor</strong> and enters this PIN.</li>
+              <li>Open <strong>{appName}</strong> and enter this PIN.</li>
               <li>On first login they choose a new PIN.</li>
             </ol>
           </div>
@@ -99,7 +103,7 @@ export default function PinDeliveryModal({ open, data, onClose }) {
         {emailSent && (
           <div className="pin-delivery-email-sent">
             <Mail size={16} />
-            <span>Check the guard&apos;s inbox (and spam folder) for the PIN email.</span>
+            <span>Check their inbox (and spam folder) for the PIN email.</span>
           </div>
         )}
 

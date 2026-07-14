@@ -1,7 +1,9 @@
-/** Build modal payload from a CREATE_GUARD / RESET_GUARD_PIN API result. */
-export function resolvePinDelivery(result, pinLabel = 'Guard PIN') {
+/** Build modal payload from guard/supervisor register or PIN reset API results. */
+export function resolvePinDelivery(result, pinLabel = 'Login PIN') {
   if (!result?.generatedPin) return null;
 
+  const person = result.guard || result.supervisor;
+  const isSupervisor = Boolean(result.supervisor && !result.guard);
   const wa = result.whatsapp;
   const email = result.email;
   const waLink = wa?.waLink || result.waLink;
@@ -11,9 +13,11 @@ export function resolvePinDelivery(result, pinLabel = 'Guard PIN') {
   return {
     pin: result.generatedPin,
     label: pinLabel,
-    guardName: result.guard?.fullName || null,
-    phone: wa?.to || result.guard?.phone || null,
-    email: email?.to || result.guard?.email || null,
+    personName: person?.fullName || null,
+    guardName: person?.fullName || null,
+    appName: isSupervisor ? 'Titan Supervisor' : 'Titan Monitor',
+    phone: wa?.to || person?.phone || null,
+    email: email?.to || person?.email || null,
     waLink,
     sent: emailSent || waSent,
     emailSent,

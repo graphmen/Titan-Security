@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS public.supervisors (
   email text,
   role text,
   status text DEFAULT 'Active',
+  login_pin text,
+  pin_must_change boolean DEFAULT true,
+  pin_created_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_supervisors_tenant ON public.supervisors(tenant_id);

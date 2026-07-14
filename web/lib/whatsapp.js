@@ -20,18 +20,8 @@ export function buildWhatsAppWebUrl(phone, text) {
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
 }
 
-/** Which auto-send backend is configured (meta recommended over Twilio). */
+/** Manual WhatsApp only — Twilio/Meta auto-send disabled for Titan deployments. */
 export function getWhatsAppProvider() {
-  if (process.env.WHATSAPP_CLOUD_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID) {
-    return 'meta';
-  }
-  if (
-    process.env.TWILIO_ACCOUNT_SID &&
-    process.env.TWILIO_AUTH_TOKEN &&
-    process.env.TWILIO_WHATSAPP_FROM
-  ) {
-    return 'twilio';
-  }
   return 'manual';
 }
 
@@ -84,6 +74,26 @@ export function buildPinResetMessage(guard, pin) {
     `Hi ${name}, your Titan Monitor PIN has been reset.\n\n` +
     `New PIN: *${pin}*\n\n` +
     `If you did not request this, contact your supervisor immediately.`
+  );
+}
+
+export function buildSupervisorWelcomePinMessage(supervisor, pin) {
+  return (
+    `*Titan Protection — Supervisor App*\n\n` +
+    `Hi ${supervisor.fullName}, your Titan Supervisor login PIN is:\n\n` +
+    `*${pin}*\n\n` +
+    `Open the Titan Supervisor app and enter this 6-digit PIN to sign in. ` +
+    `You will be asked to choose a new PIN on first login.\n\n` +
+    `Keep this PIN private.`
+  );
+}
+
+export function buildSupervisorPinResetMessage(supervisor, pin) {
+  return (
+    `*Titan Protection — Supervisor PIN Reset*\n\n` +
+    `Hi ${supervisor.fullName}, your Titan Supervisor PIN has been reset.\n\n` +
+    `New PIN: *${pin}*\n\n` +
+    `If you did not request this, contact your administrator immediately.`
   );
 }
 
@@ -244,40 +254,10 @@ async function deliverViaTwilioWhatsApp(entry) {
   return entry;
 }
 
-/** Attempt live delivery (WhatsApp API, SMS fallback for PINs, or manual wa.me). */
+/** Manual wa.me delivery — opens WhatsApp with PIN pre-filled for staff to tap Send. */
 export async function deliverWhatsApp(entry) {
-  const provider = getWhatsAppProvider();
-
-  if (provider !== 'manual') {
-    try {
-      if (provider === 'meta') {
-        const result = await deliverViaMeta(entry);
-        result.channel = 'whatsapp';
-        return result;
-      }
-      return await deliverViaTwilioWhatsApp(entry);
-    } catch (err) {
-      entry.status = 'failed';
-      entry.error = err.message;
-      entry.provider = provider;
-      return entry;
-    }
-  }
-
-  if (isPinMessageType(entry.type) && isTwilioSmsConfigured()) {
-    try {
-      return await deliverViaTwilioSms(entry);
-    } catch (err) {
-      entry.status = 'failed';
-      entry.error = err.message;
-      entry.provider = 'twilio_sms';
-      return entry;
-    }
-  }
-
   entry.status = 'manual_send';
-  entry.note =
-    'Auto-send not configured — use Open in WhatsApp, or add Twilio SMS keys (recommended) or WhatsApp API keys in .env.local and Vercel.';
+  entry.note = 'Open WhatsApp and tap Send, or share the PIN by email.';
   return entry;
 }
 
@@ -311,12 +291,12 @@ export async function probeMetaWhatsApp() {
   };
 }
 
-/** Send a one-off test message (does not use app state outbox). */
-export async function sendWhatsAppTest(phone, message, channel = 'auto') {
+/** Send a one-off test message (manual WhatsApp — opens wa.me link). */
+export async function sendWhatsAppTest(phone, message, channel = 'whatsapp') {
   const normalized = normalizePhone(phone);
   const body =
     message ||
-    '*Titan Protection — Test*\n\nYour messaging integration is working. Guard PINs and shift messages will send automatically from Titan.';
+    '*Titan Protection — Test*\n\nYour manual WhatsApp messaging is working. Tap Send to deliver this test message.';
   const entry = {
     id: `WA-TEST-${Date.now()}`,
     to: normalized,
@@ -327,17 +307,7 @@ export async function sendWhatsAppTest(phone, message, channel = 'auto') {
     waLink: buildWhatsAppWebUrl(normalized, body),
   };
 
-  if (channel === 'sms' && isTwilioSmsConfigured()) {
-    await deliverViaTwilioSms(entry);
-  } else if (channel === 'whatsapp' && getWhatsAppProvider() !== 'manual') {
-    await deliverWhatsApp(entry);
-  } else if (channel === 'sms') {
-    entry.status = 'failed';
-    entry.error = 'Twilio SMS not configured — set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_SMS_FROM.';
-  } else {
-    await deliverWhatsApp(entry);
-  }
-
+  await deliverWhatsApp(entry);
   return buildWhatsAppDeliveryPayload(entry);
 }
 
@@ -366,33 +336,19 @@ export async function probeTwilio() {
 }
 
 export function getMessagingStatus() {
-  const whatsappProvider = getWhatsAppProvider();
-  const smsConfigured = isTwilioSmsConfigured();
-  const whatsappConfigured = whatsappProvider !== 'manual';
-
-  let label = 'Manual (wa.me links)';
-  if (whatsappProvider === 'meta') label = 'Meta WhatsApp Cloud API';
-  else if (whatsappProvider === 'twilio') label = 'Twilio WhatsApp';
-  else if (smsConfigured) label = 'Twilio SMS (PINs auto-send)';
-
   return {
-    configured: whatsappConfigured || smsConfigured,
-    provider: whatsappConfigured ? whatsappProvider : smsConfigured ? 'twilio_sms' : 'manual',
-    label,
+    configured: false,
+    provider: 'manual',
+    label: 'Manual WhatsApp (wa.me links)',
     whatsapp: {
-      provider: whatsappProvider,
-      configured: whatsappConfigured,
-      label:
-        whatsappProvider === 'meta'
-          ? 'Meta WhatsApp Cloud API'
-          : whatsappProvider === 'twilio'
-            ? 'Twilio WhatsApp'
-            : 'Manual (wa.me links)',
+      provider: 'manual',
+      configured: false,
+      label: 'Manual WhatsApp (wa.me links)',
     },
     sms: {
-      configured: smsConfigured,
-      provider: smsConfigured ? 'twilio_sms' : null,
-      label: smsConfigured ? 'Twilio SMS' : 'Not configured',
+      configured: false,
+      provider: null,
+      label: 'Not configured',
     },
   };
 }

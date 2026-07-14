@@ -18,8 +18,10 @@ import {
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
 import WhatsAppSetupPanel from './WhatsAppSetupPanel';
+import PinDeliveryModal from './PinDeliveryModal';
 import { matchesSearch } from '../../lib/listFilters';
 import { handleWhatsAppDeliveryResult } from '../../lib/whatsappClient';
+import { resolvePinDelivery, openManualWhatsAppIfNeeded } from '../../lib/pinDelivery';
 
 const SUPERVISOR_ROLES = ['Area Supervisor', 'Operations Supervisor', 'Regional Manager', 'Night Supervisor'];
 const STATUSES = ['Active', 'Suspended', 'Off Duty'];
@@ -58,6 +60,14 @@ export default function SupervisorManagement({ tenantId, territories = [], super
   const [territorySearch, setTerritorySearch] = useState('');
   const [supervisorSearch, setSupervisorSearch] = useState('');
   const [supervisorTerritoryFilter, setSupervisorTerritoryFilter] = useState('');
+  const [pinDelivery, setPinDelivery] = useState(null);
+
+  const promptPinDelivery = (result, label = 'Supervisor PIN') => {
+    const data = resolvePinDelivery(result, label);
+    if (!data) return;
+    openManualWhatsAppIfNeeded(data);
+    setPinDelivery(data);
+  };
 
   const postAction = async (action, data) => {
     setSaving(true);
@@ -218,24 +228,16 @@ export default function SupervisorManagement({ tenantId, territories = [], super
       : await postAction('CREATE_SUPERVISOR', supervisorForm);
     if (result) {
       if (!editingSupervisorId && result.generatedPin) {
-        const emailNote = result.email?.sent
-          ? `PIN emailed to ${result.email.to}.`
-          : result.email?.note || result.email?.error || 'Email not sent — check Resend settings.';
-        alert(`Supervisor saved. Login PIN: ${result.generatedPin}. ${emailNote}`);
+        promptPinDelivery(result, 'New supervisor PIN');
       }
       resetSupervisorForm();
     }
   };
 
   const handleResetSupervisorPin = async (supervisorId) => {
-    if (!window.confirm('Generate a new 6-digit PIN and email it to this supervisor?')) return;
+    if (!window.confirm('Generate a new 6-digit PIN and deliver via email and WhatsApp?')) return;
     const result = await postAction('RESET_SUPERVISOR_PIN', { supervisorId });
-    if (result?.generatedPin) {
-      const emailNote = result.email?.sent
-        ? `PIN emailed to ${result.email.to}.`
-        : result.email?.note || result.email?.error || 'Email not sent.';
-      alert(`New supervisor PIN: ${result.generatedPin}. ${emailNote}`);
-    }
+    if (result?.generatedPin) promptPinDelivery(result, 'Reset supervisor PIN');
   };
 
   const confirmDelete = async () => {
@@ -695,7 +697,8 @@ export default function SupervisorManagement({ tenantId, territories = [], super
             <div className="glass-panel" style={{ padding: '1.25rem' }}>
               <h3 style={{ fontSize: '1rem', marginBottom: '0.75rem' }}>What sends automatically</h3>
               <ul style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, paddingLeft: '1.1rem', margin: 0 }}>
-                <li><strong>Guard registration</strong> — 6-digit login PIN to their WhatsApp</li>
+                <li><strong>Guard registration</strong> — PIN emailed + WhatsApp opens for you to tap Send</li>
+                <li><strong>Supervisor registration</strong> — same PIN delivery for Titan Supervisor app</li>
                 <li><strong>PIN reset</strong> — new PIN when admin resets credentials</li>
                 <li><strong>Shift scheduling</strong> — date, time, and site when a shift is created or updated</li>
                 <li><strong>Supervisor messages</strong> — custom instructions from this tab or Guard Management</li>
@@ -704,6 +707,7 @@ export default function SupervisorManagement({ tenantId, territories = [], super
           </div>
         </div>
       )}
+      <PinDeliveryModal open={Boolean(pinDelivery)} data={pinDelivery} onClose={() => setPinDelivery(null)} />
     </div>
   );
 }

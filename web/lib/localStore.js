@@ -35,6 +35,8 @@ import {
   queueWhatsApp,
   buildWelcomePinMessage,
   buildPinResetMessage,
+  buildSupervisorWelcomePinMessage,
+  buildSupervisorPinResetMessage,
   buildShiftMessage,
   buildSupervisorMessage,
   buildWhatsAppWebUrl,
@@ -72,12 +74,26 @@ function issueGuardPin(state, tenantId, guard, { reset = false } = {}) {
   );
 }
 
-function issueSupervisorPin(state, tenantId, supervisor) {
+function issueSupervisorPin(state, tenantId, supervisor, { reset = false } = {}) {
   const guardList = state.guards[tenantId] || [];
   const supList = (state.supervisors[tenantId] || []).filter((s) => s.id !== supervisor.id);
   supervisor.loginPin = generateSupervisorPin(guardList, supList);
   supervisor.pinMustChange = true;
   supervisor.pinCreatedAt = new Date().toISOString();
+  if (!supervisor.phone) return null;
+  const body = reset
+    ? buildSupervisorPinResetMessage(supervisor, supervisor.loginPin)
+    : buildSupervisorWelcomePinMessage(supervisor, supervisor.loginPin);
+  return trackWhatsAppEntry(
+    state,
+    queueWhatsApp(state, tenantId, {
+      to: supervisor.phone,
+      guardId: null,
+      type: reset ? 'pin_reset' : 'welcome_pin',
+      body,
+      meta: { supervisorId: supervisor.id },
+    })
+  );
 }
 
 function trackWhatsAppEntry(state, entry) {
@@ -527,7 +543,8 @@ export function processLocalAction(payload) {
       if (!supervisor.email?.trim()) {
         return { error: 'Supervisor has no email — add an email before resetting PIN', status: 400 };
       }
-      issueSupervisorPin(state, tenantId, supervisor);
+      issueSupervisorPin(state, tenantId, supervisor, { reset: true });
+      const waEntry = (state.whatsappOutbox?.[tenantId] || [])[0];
       return {
         success: true,
         generatedPin: supervisor.loginPin,
@@ -536,6 +553,11 @@ export function processLocalAction(payload) {
           phone: supervisor.phone,
           email: supervisor.email,
         },
+        waLink: waEntry?.waLink || buildWhatsAppWebUrl(
+          supervisor.phone,
+          buildSupervisorPinResetMessage(supervisor, supervisor.loginPin)
+        ),
+        whatsappEntryId: state._lastWhatsAppEntryId || waEntry?.id,
       };
     }
     case 'RESEND_WHATSAPP': {
@@ -1090,6 +1112,7 @@ export function processLocalAction(payload) {
       };
       issueSupervisorPin(state, tenantId, newSupervisor);
       state.supervisors[tenantId].push(newSupervisor);
+      const waEntry = (state.whatsappOutbox?.[tenantId] || [])[0];
       return {
         success: true,
         generatedPin: newSupervisor.loginPin,
@@ -1098,6 +1121,11 @@ export function processLocalAction(payload) {
           phone: newSupervisor.phone,
           email: newSupervisor.email,
         },
+        waLink: waEntry?.waLink || buildWhatsAppWebUrl(
+          newSupervisor.phone,
+          buildSupervisorWelcomePinMessage(newSupervisor, newSupervisor.loginPin)
+        ),
+        whatsappEntryId: state._lastWhatsAppEntryId || waEntry?.id,
       };
     }
     case 'UPDATE_SUPERVISOR': {

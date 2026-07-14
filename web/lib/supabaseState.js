@@ -163,7 +163,6 @@ export async function runSupabaseAction(payload) {
   if (result?.error) return result;
 
   const tenantId = payload.tenantId || getLocalState().activeTenantId || 'titan';
-  const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
   const destructive = isDestructiveDbAction(payload.action);
   const action = payload.action;
 
@@ -171,6 +170,7 @@ export async function runSupabaseAction(payload) {
     const wipeResult = await wipeEntireOperationalDatabase();
     await purgeLegacyDemoRowsFromDb();
     await ensureMinimalTenantInDb();
+    const { whatsapp, email } = await deliverPinNotifications(result, action, tenantId);
     return {
       success: true,
       wiped: true,
@@ -192,6 +192,8 @@ export async function runSupabaseAction(payload) {
       await persistStateToSupabase();
     }
   }
+
+  const { whatsapp, email } = await deliverPinNotifications(result, action, tenantId);
 
   globalThis.__titanFreshLoadAt = null;
   const state = await loadAppStateFromRelationalDb();

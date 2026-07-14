@@ -41,3 +41,23 @@ export async function captureIncidentPhoto() {
   }
   return pickImageViaInput();
 }
+
+/** Pick or capture a profile photo (camera or gallery). Returns a data URL or null if cancelled. */
+export async function pickProfilePhoto() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 65,
+        allowEditing: true,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Prompt,
+        saveToGallery: false,
+      });
+      return photo.dataUrl || null;
+    } catch (err) {
+      if (String(err?.message || err).toLowerCase().includes('cancel')) return null;
+      throw err;
+    }
+  }
+  return pickImageViaInput();
+}

@@ -3,4 +3,4 @@ export const DEFAULT_API_URL =
 
 export const DEFAULT_TENANT_ID = 'titan';
 export const STATE_POLL_MS = 15000;
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.1.1';

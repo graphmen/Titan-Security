@@ -107,7 +107,9 @@ const SUPERVISOR_ALLOWED_ACTIONS = new Set([
   'UPDATE_PLACE',
   'CREATE_GUARD',
   'UPDATE_GUARD',
+  'UPDATE_GUARD_PHOTO',
   'RESET_GUARD_PIN',
+  'UPDATE_SUPERVISOR_PHOTO',
   'CREATE_SHIFT',
   'UPDATE_SHIFT',
   'SEND_GUARD_WHATSAPP',
@@ -165,6 +167,7 @@ export function assertSupervisorMutationAllowed(action, payload, state, tenantId
     }
     case 'CREATE_GUARD':
     case 'UPDATE_GUARD':
+    case 'UPDATE_GUARD_PHOTO':
     case 'RESET_GUARD_PIN': {
       const guardId = payload.guardId;
       if (action === 'CREATE_GUARD') {
@@ -180,6 +183,12 @@ export function assertSupervisorMutationAllowed(action, payload, state, tenantId
       const guard = (state.guards?.[tenantId] || []).find((g) => g.id === guardId);
       if (!guardInSupervisorScope(guard, territoryIds, premiseIds)) {
         return { error: 'Guard is outside your assigned territories', status: 403 };
+      }
+      break;
+    }
+    case 'UPDATE_SUPERVISOR_PHOTO': {
+      if (payload.supervisorId !== supervisorId) {
+        return { error: 'You can only update your own profile photo', status: 403 };
       }
       break;
     }

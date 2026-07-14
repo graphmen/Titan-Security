@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import {
   Users, Calendar, Clock, Bell, TrendingUp, ArrowLeftRight, MessageCircle, Plus, Send, KeyRound,
 } from 'lucide-react';
+import ProfilePhoto from '../components/ProfilePhoto';
+import { personInitials } from '../utils/auth';
+import { pickProfilePhoto } from '../utils/camera';
 import { premiseName, guardName, scoreColor, todayStr } from '../utils/formatters';
 
 const GRADES = ['A', 'B', 'C', 'D'];
@@ -43,6 +46,7 @@ export default function TeamPanel({
   });
   const [messageGuardId, setMessageGuardId] = useState('');
   const [messageText, setMessageText] = useState('');
+  const [photoGuardId, setPhotoGuardId] = useState(null);
 
   const formPremises = guardForm.territoryId
     ? premises.filter((p) => p.territoryId === guardForm.territoryId)
@@ -114,6 +118,25 @@ export default function TeamPanel({
       if (result?.generatedPin) showToast(`New PIN: ${result.generatedPin}`);
     } catch (err) {
       showToast(err.message, 'error');
+    }
+  };
+
+  const handleGuardPhoto = async (guardId) => {
+    if (photoGuardId) return;
+    setPhotoGuardId(guardId);
+    try {
+      const dataUrl = await pickProfilePhoto();
+      if (!dataUrl) return;
+      if (dataUrl.length > 500000) {
+        showToast('Photo too large — move closer and try again', 'error');
+        return;
+      }
+      await onAction('UPDATE_GUARD_PHOTO', { guardId, photoUrl: dataUrl });
+      showToast('Guard photo updated');
+    } catch (err) {
+      showToast(err.message || 'Could not update photo', 'error');
+    } finally {
+      setPhotoGuardId(null);
     }
   };
 
@@ -220,6 +243,15 @@ export default function TeamPanel({
             guards.map((g) => (
               <div key={g.id} className="mob-card mob-card-compact">
                 <div className="mob-card-row">
+                  <ProfilePhoto
+                    photoUrl={g.photoUrl}
+                    initials={personInitials(g.fullName)}
+                    name={g.fullName}
+                    size="sm"
+                    editable
+                    onEdit={() => handleGuardPhoto(g.id)}
+                    busy={photoGuardId === g.id}
+                  />
                   <div>
                     <strong>{g.fullName}</strong>
                     <div className="mob-list-meta">{g.employeeNumber} · Grade {g.grade}</div>

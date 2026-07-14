@@ -478,7 +478,8 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
       break;
     }
     case 'CREATE_SUPERVISOR':
-    case 'UPDATE_SUPERVISOR': {
+    case 'UPDATE_SUPERVISOR':
+    case 'UPDATE_SUPERVISOR_PHOTO': {
       const supervisorId = payload.supervisorId
         || (state.supervisors?.[tenantId] || []).slice(-1)[0]?.id;
       const supervisor = (state.supervisors?.[tenantId] || []).find((s) => s.id === supervisorId);
@@ -564,7 +565,7 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
 
 const DIRECT_UPSERT_ACTIONS = new Set([
   'CREATE_TERRITORY', 'UPDATE_TERRITORY',
-  'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR',
+  'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR', 'UPDATE_SUPERVISOR_PHOTO',
   'CREATE_GUARD', 'UPDATE_GUARD', 'UPDATE_GUARD_PHOTO', 'ADD_GUARD_DOCUMENT', 'ADD_GUARD_TRAINING',
   'RESET_GUARD_PIN', 'CHANGE_GUARD_PIN',
   'CREATE_PREMISE', 'UPDATE_PREMISE',

@@ -6,7 +6,7 @@ function pickImageViaInput() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.capture = 'environment';
+    input.capture = 'user';
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) {
@@ -31,6 +31,26 @@ export async function captureIncidentPhoto() {
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
         source: CameraSource.Camera,
+        saveToGallery: false,
+      });
+      return photo.dataUrl || null;
+    } catch (err) {
+      if (String(err?.message || err).toLowerCase().includes('cancel')) return null;
+      throw err;
+    }
+  }
+  return pickImageViaInput();
+}
+
+/** Pick or capture a profile photo (camera or gallery). Returns a data URL or null if cancelled. */
+export async function pickProfilePhoto() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 65,
+        allowEditing: true,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Prompt,
         saveToGallery: false,
       });
       return photo.dataUrl || null;

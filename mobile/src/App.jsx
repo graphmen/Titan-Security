@@ -37,11 +37,12 @@ import { buildGuardProfileContext } from './guardProfile';
 import SplashScreen from './components/SplashScreen';
 import PinLogin from './components/PinLogin';
 import ChangePin from './components/ChangePin';
+import ProfilePhoto from './components/ProfilePhoto';
 import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, guardInitials } from './utils/auth';
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS } from './config';
 import { postStateAction } from './utils/api';
-import { captureIncidentPhoto } from './utils/camera';
+import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
 import { startVoiceMemo } from './utils/voice';
 import {
   playNfcScan,
@@ -120,6 +121,7 @@ export default function App() {
   const [splashVisible, setSplashVisible] = useState(true);
   const [splashExiting, setSplashExiting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [tabKey, setTabKey] = useState(0);
 
   // Local Canvas Map Ref
@@ -928,6 +930,26 @@ export default function App() {
   const overdueCount = checkpoints.filter((cp) => cp.status !== 'Scanned').length;
   const patrolComplete = checkpoints.length > 0 && patrolPercent === 100;
 
+  const handleProfilePhoto = async () => {
+    if (!guardId || photoBusy) return;
+    setPhotoBusy(true);
+    try {
+      const dataUrl = await pickProfilePhoto();
+      if (!dataUrl) return;
+      if (dataUrl.length > 500000) {
+        showToast('Photo too large — move closer and try again', 'error');
+        return;
+      }
+      await postStateAction(apiBase, { action: 'UPDATE_GUARD_PHOTO', guardId, tenantId, photoUrl: dataUrl });
+      await fetchState();
+      showToast('Profile photo updated');
+    } catch (e) {
+      showToast(e.message || 'Could not update photo', 'error');
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   const switchTab = (tab) => {
     if (tab === activeTab) return;
     if (navigator.vibrate) navigator.vibrate(10);
@@ -1051,7 +1073,12 @@ export default function App() {
       <div className={`mob-guard-strip ${isOnDuty ? 'on-duty' : ''}`}>
         <div className="mob-guard-row">
           <div className="mob-guard-identity">
-            <div className={`mob-avatar ${isOnDuty ? 'on-duty' : ''}`}>{guardInitials(guardName)}</div>
+            <ProfilePhoto
+              photoUrl={activeGuard?.photoUrl}
+              initials={guardInitials(activeGuard?.fullName || guardName)}
+              name={activeGuard?.fullName || guardName}
+              onDuty={isOnDuty}
+            />
             <div className="mob-guard-select-wrap">
               <div className="mob-guard-label">On Duty</div>
               <div className="mob-guard-name">{activeGuard?.fullName || guardName}</div>
@@ -1427,7 +1454,15 @@ export default function App() {
             {activeGuard && (
               <div className="mob-card mob-profile-hero">
                 <div className="mob-profile-hero-row">
-                  <div className="mob-avatar mob-avatar-lg">{guardInitials(activeGuard.fullName)}</div>
+                  <ProfilePhoto
+                    photoUrl={activeGuard.photoUrl}
+                    initials={guardInitials(activeGuard.fullName)}
+                    name={activeGuard.fullName}
+                    size="lg"
+                    editable
+                    onEdit={handleProfilePhoto}
+                    busy={photoBusy}
+                  />
                   <div className="mob-profile-hero-text">
                     <strong>{activeGuard.fullName}</strong>
                     <div className="sub">{activeGuard.employeeNumber} · Grade {activeGuard.grade || '—'}</div>

@@ -635,6 +635,75 @@ body {
   border-radius: 18px !important;
 }
 
+.mob-avatar-sm {
+  width: 36px !important;
+  height: 36px !important;
+  font-size: 0.72rem !important;
+  border-radius: 12px !important;
+}
+
+.mob-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  display: inline-flex;
+}
+
+.mob-avatar-wrap.editable {
+  cursor: pointer;
+}
+
+.mob-avatar-wrap.editable:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.mob-avatar-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 4px 14px var(--mob-primary-glow);
+}
+
+.mob-avatar-img.on-duty {
+  animation: avatarGlow 2.5s ease-in-out infinite;
+}
+
+.mob-avatar-camera {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--mob-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mob-primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.mob-avatar-wrap.mob-avatar-lg .mob-avatar-img,
+.mob-avatar-wrap.mob-avatar-lg .mob-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+}
+
+.mob-avatar-wrap.mob-avatar-sm .mob-avatar-img,
+.mob-avatar-wrap.mob-avatar-sm .mob-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+
 .mob-profile-hero-text strong {
   font-size: 1.15rem;
 }

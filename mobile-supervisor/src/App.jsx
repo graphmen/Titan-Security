@@ -12,12 +12,14 @@ import {
 } from 'lucide-react';
 import PinLogin from './components/PinLogin';
 import ChangePin from './components/ChangePin';
+import ProfilePhoto from './components/ProfilePhoto';
 import SitesPanel from './views/SitesPanel';
 import TeamPanel from './views/TeamPanel';
 import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, personInitials } from './utils/auth';
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION } from './config';
 import { postSupervisorAction, fetchSupervisorState } from './utils/api';
+import { pickProfilePhoto } from './utils/camera';
 
 export default function App() {
   const apiBase = DEFAULT_API_URL.replace(/\/$/, '');
@@ -41,6 +43,7 @@ export default function App() {
   const [supervisorId, setSupervisorId] = useState(authSession?.supervisorId || loggedInSupervisor?.id || '');
   const [toast, setToast] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const { theme, toggleTheme, isDark } = useTheme();
 
@@ -116,6 +119,25 @@ export default function App() {
       showToast('SOS cleared');
     } catch (e) {
       showToast(e.message, 'error');
+    }
+  };
+
+  const handleProfilePhoto = async () => {
+    if (photoBusy) return;
+    setPhotoBusy(true);
+    try {
+      const dataUrl = await pickProfilePhoto();
+      if (!dataUrl) return;
+      if (dataUrl.length > 500000) {
+        showToast('Photo too large — move closer and try again', 'error');
+        return;
+      }
+      await runAction('UPDATE_SUPERVISOR_PHOTO', { photoUrl: dataUrl });
+      showToast('Profile photo updated');
+    } catch (e) {
+      showToast(e.message || 'Could not update photo', 'error');
+    } finally {
+      setPhotoBusy(false);
     }
   };
 
@@ -249,7 +271,15 @@ export default function App() {
         {activeTab === 'profile' && (
           <div className="mob-tab-panel">
             <div className="mob-card mob-profile-simple">
-              <div className="mob-avatar mob-avatar-lg">{personInitials(supervisor?.fullName)}</div>
+              <ProfilePhoto
+                photoUrl={supervisor?.photoUrl}
+                initials={personInitials(supervisor?.fullName)}
+                name={supervisor?.fullName}
+                size="lg"
+                editable
+                onEdit={handleProfilePhoto}
+                busy={photoBusy}
+              />
               <div>
                 <strong>{supervisor?.fullName}</strong>
                 <div className="mob-list-meta">{supervisor?.employeeNumber} · {supervisor?.role}</div>

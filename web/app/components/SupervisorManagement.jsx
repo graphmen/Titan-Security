@@ -14,6 +14,7 @@ import {
   X,
   MessageCircle,
   Send,
+  Camera,
 } from 'lucide-react';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
@@ -87,6 +88,18 @@ export default function SupervisorManagement({ tenantId, territories = [], super
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePhotoUpload = async (supervisorId, file) => {
+    if (!file || file.size > 400000) {
+      alert('Photo must be under 400KB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      await postAction('UPDATE_SUPERVISOR_PHOTO', { supervisorId, photoUrl: reader.result });
+    };
+    reader.readAsDataURL(file);
   };
 
   const guardsForSupervisor = (supervisorId) => {
@@ -605,8 +618,18 @@ export default function SupervisorManagement({ tenantId, territories = [], super
                 <article key={s.id} className="glass-card" style={{ padding: '1.1rem 1.15rem', border: editingSupervisorId === s.id ? '2px solid #2563eb' : '1px solid var(--border-light)', background: editingSupervisorId === s.id ? '#eff6ff' : '#fff' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
                     <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
-                      <div style={{ background: '#dbeafe', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <UserCheck size={18} style={{ color: '#2563eb' }} />
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        {s.photoUrl ? (
+                          <img src={s.photoUrl} alt={s.fullName} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', border: '2px solid #2563eb' }} />
+                        ) : (
+                          <div style={{ background: '#dbeafe', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <UserCheck size={18} style={{ color: '#2563eb' }} />
+                          </div>
+                        )}
+                        <label style={{ position: 'absolute', bottom: -4, right: -4, background: '#fff', borderRadius: '50%', padding: 4, cursor: 'pointer', border: '1px solid var(--border-light)' }}>
+                          <Camera size={12} />
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handlePhotoUpload(s.id, e.target.files?.[0])} />
+                        </label>
                       </div>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem', flexWrap: 'wrap' }}>

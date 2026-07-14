@@ -826,6 +826,14 @@ export function processLocalAction(payload) {
       guard.photoUrl = photoUrl || null;
       break;
     }
+    case 'UPDATE_SUPERVISOR_PHOTO': {
+      const { supervisorId, photoUrl } = payload;
+      const supervisor = (state.supervisors[tenantId] || []).find((s) => s.id === supervisorId);
+      if (!supervisor) return { error: 'Supervisor not found', status: 404 };
+      if (photoUrl && photoUrl.length > 500000) return { error: 'Photo too large (max ~500KB)', status: 400 };
+      supervisor.photoUrl = photoUrl || null;
+      break;
+    }
     case 'REQUEST_SHIFT_SWAP': {
       const { shiftId, requestingGuardId, targetGuardId, reason = '' } = payload;
       if (!shiftId || !requestingGuardId) return { error: 'Shift and guard required', status: 400 };
@@ -1108,6 +1116,7 @@ export function processLocalAction(payload) {
         role,
         assignedTerritoryIds: Array.isArray(assignedTerritoryIds) ? assignedTerritoryIds : [],
         status: 'Active',
+        photoUrl: null,
         createdAt: new Date().toISOString(),
       };
       issueSupervisorPin(state, tenantId, newSupervisor);

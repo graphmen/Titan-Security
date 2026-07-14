@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "Building supervisor web assets (v1.0.0)..." -ForegroundColor Cyan
+Write-Host "Building supervisor web assets (v1.1.0)..." -ForegroundColor Cyan
 npm run build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -36,7 +36,7 @@ try {
   Pop-Location
 }
 
-$distApk = Join-Path $PSScriptRoot "TitanSupervisor-v1.0.0.apk"
+$distApk = Join-Path $PSScriptRoot "TitanSupervisor-v1.1.0.apk"
 if (Test-Path $apkOut) {
   Copy-Item $apkOut $distApk -Force
   Write-Host "Copy to phone: $distApk" -ForegroundColor Green

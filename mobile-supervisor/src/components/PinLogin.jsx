@@ -81,7 +81,7 @@ export default function PinLogin({
 
       <div className="pin-login-top">
         <div className="pin-login-brand">
-          <img src="/emblem-wordmark.png" alt="Titan Protection" className="pin-login-wordmark" />
+          <span className="pin-login-title-text">Titan Supervisor</span>
         </div>
         <button type="button" className="mob-theme-btn" onClick={onToggleTheme} aria-label="Toggle theme" disabled={submitting}>
           {isDark ? <Sun size={18} /> : <Moon size={18} />}

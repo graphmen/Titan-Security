@@ -85,10 +85,9 @@ export default function ChangePin({ supervisor, tenantId, apiBase, currentPin, o
   return (
     <div className="pin-login">
       <div className="pin-login-brand" style={{ marginBottom: '1rem' }}>
-        <div className="pin-login-logo"><img src="/emblem-wordmark.png" alt="Titan Protection" className="pin-login-wordmark" /></div>
         <div>
-          <h1 style={{ fontSize: '1.1rem' }}>Set Your PIN</h1>
-          <p>{name} · first-time setup</p>
+          <h1 style={{ fontSize: '1.1rem', margin: 0 }}>Titan Supervisor</h1>
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--mob-text-muted)' }}>{name} · first-time setup</p>
         </div>
       </div>
 

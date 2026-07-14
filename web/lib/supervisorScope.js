@@ -50,6 +50,9 @@ export function filterStateForSupervisor(state, tenantId, supervisorId) {
   const shiftSwapRequests = (state.shiftSwapRequests?.[tenantId] || []).filter((s) =>
     guardIds.has(s.requestingGuardId || s.requesterGuardId)
   );
+  const whatsappOutbox = (state.whatsappOutbox?.[tenantId] || []).filter(
+    (w) => !w.guardId || guardIds.has(w.guardId)
+  );
   const checkpoints = (state.checkpoints?.[tenantId] || []).filter(
     (cp) => !cp.premiseId || premiseIds.has(cp.premiseId)
   );
@@ -77,6 +80,7 @@ export function filterStateForSupervisor(state, tenantId, supervisorId) {
     attendance: { [tenantId]: attendance },
     guardAlerts: { [tenantId]: guardAlerts },
     shiftSwapRequests: { [tenantId]: shiftSwapRequests },
+    whatsappOutbox: { [tenantId]: whatsappOutbox },
     checkpoints: { [tenantId]: checkpoints },
     occurrenceBook,
     visitors,

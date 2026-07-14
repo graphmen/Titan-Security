@@ -609,8 +609,16 @@ export default function SupervisorManagement({ tenantId, territories = [], super
                         <UserCheck size={18} style={{ color: '#2563eb' }} />
                       </div>
                       <div>
-                        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{s.fullName}</h4>
-                        <p style={{ margin: '0.15rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{s.employeeNumber}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem', flexWrap: 'wrap' }}>
+                          <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>{s.fullName}</h4>
+                          <code style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{s.employeeNumber}</code>
+                          {s.loginPin && (
+                            <code style={{ fontSize: '0.65rem', color: 'var(--color-primary)', background: '#f0fdf4', padding: '0.1rem 0.35rem', borderRadius: 4 }} title="Titan Supervisor app login PIN">
+                              PIN: {s.loginPin}
+                            </code>
+                          )}
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>{s.role}</p>
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
@@ -629,7 +637,6 @@ export default function SupervisorManagement({ tenantId, territories = [], super
                     </div>
                   </div>
                   <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '0.65rem' }}>
-                    <span className="badge badge-blue">{s.role}</span>
                     <span><Phone size={11} style={{ display: 'inline' }} /> {s.phone}</span>
                     {s.email && <span><Mail size={11} style={{ display: 'inline' }} /> {s.email}</span>}
                   </div>

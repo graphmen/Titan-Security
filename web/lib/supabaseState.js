@@ -19,7 +19,7 @@ import {
   usesOperationalDbWrite,
   persistOperationalActionToDb,
 } from './db/operationalWrites.js';
-import { evaluateAllOnDutyGuards } from './guards';
+import { evaluateLicenseExpiryAlerts } from './guards';
 import { getWhatsAppStatus } from './whatsapp';
 import { getEmailStatus } from './email';
 import { deliverPinNotifications } from './pinDeliveryServer';
@@ -53,7 +53,8 @@ export async function loadFreshStateFromDatabase() {
 }
 
 function buildAppStateResponse(state) {
-  evaluateAllOnDutyGuards(state, state.activeTenantId || 'titan');
+  const tenantId = state.activeTenantId || 'titan';
+  evaluateLicenseExpiryAlerts(state, tenantId);
   return {
     ...state,
     dataSource: 'supabase',

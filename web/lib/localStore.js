@@ -21,7 +21,7 @@ import {
   parseShiftMinutes,
   recordGuardMovement,
   evaluateGuardMonitoring,
-  evaluateAllOnDutyGuards,
+  evaluateLicenseExpiryAlerts,
   refreshGuardScores,
   pushGuardAlert,
   dismissGuardAlerts,
@@ -214,7 +214,7 @@ export function getLocalState() {
 
 export function getLocalStateWithMonitoring() {
   const state = getLocalState();
-  evaluateAllOnDutyGuards(state, state.activeTenantId);
+  evaluateLicenseExpiryAlerts(state, state.activeTenantId);
   return state;
 }
 

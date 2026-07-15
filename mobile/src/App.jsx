@@ -43,6 +43,7 @@ import { getAuthSession, setAuthSession, clearAuthSession, guardInitials } from 
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS } from './config';
 import { postStateAction } from './utils/api';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
+import { getLocation } from './utils/location';
 import { startVoiceMemo } from './utils/voice';
 import {
   playNfcScan,
@@ -211,18 +212,6 @@ export default function App() {
       localStorage.setItem('titan_premise_id', first);
     }
   }, [state, tenantId, premiseId]);
-
-  const getLocation = () => new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('GPS not available'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => reject(new Error('Could not get GPS location')),
-      { enableHighAccuracy: true, timeout: 12000 }
-    );
-  });
 
   const handleClockIn = async () => {
     if (!guardId) {

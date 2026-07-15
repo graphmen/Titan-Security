@@ -1,7 +1,7 @@
 {
   "name": "mobile",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,6 +16,7 @@
     "@capacitor/android": "^8.4.1",
     "@capacitor/camera": "^8.2.1",
     "@capacitor/core": "^8.4.1",
+    "@capacitor/geolocation": "^8.2.0",
     "@supabase/supabase-js": "^2.108.2",
     "lucide-react": "^1.22.0",
     "react": "^19.2.7",

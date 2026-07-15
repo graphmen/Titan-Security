@@ -58,7 +58,8 @@ export default function DashboardPage() {
 
   // Audio / alert preferences (synced from system settings)
   const sirenEnabledRef = useRef(true);
-  const prevAlertsCount = useRef(0);
+  const seenAlertIdsRef = useRef(new Set());
+  const seenSosKeysRef = useRef(new Set());
   const hasLoadedRef = useRef(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState(null);
@@ -96,15 +97,24 @@ export default function DashboardPage() {
       setError(null);
       pollDelayRef.current = 10000;
       hasLoadedRef.current = true;
-      
-      // Play SOS beep if a new SOS alert has arrived
-      const currentSosCount = Object.keys(data.activeSosAlerts || {}).length;
-      const guardAlertCount = (data.guardAlerts?.[data.activeTenantId] || []).filter((a) => a.status === 'Active').length;
-      if (currentSosCount > prevAlertsCount.current || guardAlertCount > (prevAlertsCount.currentGuard || 0)) {
-        playAlertSound();
+
+      const tenantId = data.activeTenantId || 'titan';
+      const activeAlerts = (data.guardAlerts?.[tenantId] || []).filter((a) => a.status === 'Active');
+      const sosKeys = Object.keys(data.activeSosAlerts || {});
+      let hasNewAlert = false;
+      for (const alert of activeAlerts) {
+        if (!seenAlertIdsRef.current.has(alert.id)) {
+          seenAlertIdsRef.current.add(alert.id);
+          hasNewAlert = true;
+        }
       }
-      prevAlertsCount.current = currentSosCount;
-      prevAlertsCount.currentGuard = guardAlertCount;
+      for (const key of sosKeys) {
+        if (!seenSosKeysRef.current.has(key)) {
+          seenSosKeysRef.current.add(key);
+          hasNewAlert = true;
+        }
+      }
+      if (hasNewAlert) playAlertSound();
     } catch (err) {
       if (hasLoadedRef.current) {
         setError('Connection lost — retrying…');
@@ -719,9 +729,7 @@ export default function DashboardPage() {
           />
         ) : activeTab === 'command' ? (
           /* ==================== COMMAND CENTRE ==================== */
-          <div className="dashboard-grid animate-fade-in">
-            
-            {/* Top Cards Row: Statistics */}
+          <div className="dashboard-grid">
             <div className="col-12 stat-cards-row">
               <div className="glass-panel" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <div style={{ background: '#d8f3dc', padding: '0.65rem', borderRadius: '8px' }}>

@@ -75,10 +75,10 @@ export function pushGuardAlert(state, tenantId, alert) {
   ensureAlertStore(state, tenantId);
   const exists = state.guardAlerts[tenantId].some(
     (a) =>
-      a.status === 'Active' &&
       a.type === alert.type &&
       a.guardId === alert.guardId &&
-      (alert.premiseId ? a.premiseId === alert.premiseId : true)
+      (alert.premiseId ? a.premiseId === alert.premiseId : true) &&
+      (a.status === 'Active' || a.status === 'Dismissed' || a.status === 'Resolved')
   );
   if (exists) return null;
   const entry = {

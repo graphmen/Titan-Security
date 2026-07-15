@@ -30,12 +30,6 @@ export default function manifest() {
         type: 'image/png',
         purpose: 'maskable',
       },
-      {
-        src: '/emblem-light.jpg',
-        sizes: 'any',
-        type: 'image/jpeg',
-        purpose: 'any',
-      },
     ],
   };
 }

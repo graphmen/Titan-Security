@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "Building mobile web assets (v1.0.6)..." -ForegroundColor Cyan
+Write-Host "Building mobile web assets..." -ForegroundColor Cyan
 npm run build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

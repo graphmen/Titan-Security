@@ -9,6 +9,11 @@ function mapWebGeoError(err) {
   return new Error('Could not get GPS location');
 }
 
+function isPluginNotImplemented(err) {
+  const msg = String(err?.message || err).toLowerCase();
+  return msg.includes('not implemented') || msg.includes('plugin is not');
+}
+
 function webGetPosition(options) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -21,6 +26,18 @@ function webGetPosition(options) {
       options
     );
   });
+}
+
+async function webGetPositionWithRetries() {
+  try {
+    return await webGetPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 });
+  } catch (firstErr) {
+    try {
+      return await webGetPosition({ enableHighAccuracy: false, timeout: 25000, maximumAge: 30000 });
+    } catch {
+      throw firstErr;
+    }
+  }
 }
 
 async function ensureNativePermissions() {
@@ -40,29 +57,36 @@ async function nativeGetPosition(highAccuracy, timeoutMs) {
   return { lat: pos.coords.latitude, lng: pos.coords.longitude };
 }
 
+async function capacitorGetPosition() {
+  await ensureNativePermissions();
+  try {
+    return await nativeGetPosition(true, 20000);
+  } catch (firstErr) {
+    if (isPluginNotImplemented(firstErr)) throw firstErr;
+    try {
+      return await nativeGetPosition(false, 25000);
+    } catch (secondErr) {
+      if (isPluginNotImplemented(secondErr)) throw secondErr;
+      if (firstErr instanceof Error) throw firstErr;
+      throw new Error('Could not get GPS location');
+    }
+  }
+}
+
+function canUseCapacitorGeolocation() {
+  return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('Geolocation');
+}
+
 /** Get current GPS coordinates. Requires permission; throws with a clear message on failure. */
 export async function getLocation() {
-  if (Capacitor.isNativePlatform()) {
-    await ensureNativePermissions();
+  if (canUseCapacitorGeolocation()) {
     try {
-      return await nativeGetPosition(true, 20000);
-    } catch (firstErr) {
-      try {
-        return await nativeGetPosition(false, 25000);
-      } catch {
-        if (firstErr instanceof Error) throw firstErr;
-        throw new Error('Could not get GPS location');
-      }
+      return await capacitorGetPosition();
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) throw err;
+      // Repacked APKs may ship without the native Geolocation plugin — use WebView GPS.
     }
   }
 
-  try {
-    return await webGetPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 });
-  } catch (firstErr) {
-    try {
-      return await webGetPosition({ enableHighAccuracy: false, timeout: 25000, maximumAge: 30000 });
-    } catch {
-      throw firstErr;
-    }
-  }
+  return webGetPositionWithRetries();
 }

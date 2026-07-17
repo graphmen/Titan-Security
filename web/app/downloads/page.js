@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { FALLBACK_MANIFEST, loadDownloadsManifest } from '../../lib/downloadsManifest';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Mobile App Downloads — Titan Protection',
@@ -60,28 +63,29 @@ async function getApkFileMeta(apkFile) {
 }
 
 async function getApps() {
+  let manifest = FALLBACK_MANIFEST;
   try {
-    const filePath = path.join(process.cwd(), 'public', 'downloads', 'versions.json');
-    const manifest = JSON.parse(await readFile(filePath, 'utf8'));
-    const keys = ['monitor', 'supervisor'];
-    const apps = await Promise.all(
-      keys.map(async (key) => {
-        const entry = manifest[key];
-        const catalog = APP_CATALOG[key];
-        const fileMeta = await getApkFileMeta(entry.apkFile);
-        return {
-          key,
-          ...entry,
-          ...catalog,
-          ...fileMeta,
-          icon: catalog.icon,
-        };
-      })
-    );
-    return { updatedAt: manifest.updatedAt, apps };
-  } catch {
-    return { updatedAt: null, apps: [] };
+    manifest = await loadDownloadsManifest();
+  } catch (err) {
+    console.error('downloads manifest read failed, using fallback:', err);
   }
+
+  const keys = ['monitor', 'supervisor'];
+  const apps = await Promise.all(
+    keys.map(async (key) => {
+      const entry = manifest[key] || FALLBACK_MANIFEST[key];
+      const catalog = APP_CATALOG[key];
+      const fileMeta = await getApkFileMeta(entry.apkFile);
+      return {
+        key,
+        ...entry,
+        ...catalog,
+        ...fileMeta,
+        icon: catalog.icon,
+      };
+    })
+  );
+  return { updatedAt: manifest.updatedAt, apps };
 }
 
 export default async function DownloadsPage() {
@@ -154,15 +158,15 @@ export default async function DownloadsPage() {
                     </dl>
 
                     {app.available ? (
-                      <a href={apkHref} className="releases-download-btn" download>
+                      <a href={apkHref} className="releases-download-btn" download={app.apkFile}>
                         <Download size={18} />
                         Download APK (v{app.version})
                       </a>
                     ) : (
-                      <div className="releases-download-pending">
-                        APK v{app.version} is listed — build and publish with{' '}
-                        <code>.\scripts\publish-mobile-apks.ps1</code>
-                      </div>
+                      <a href={apkHref} className="releases-download-btn releases-download-btn-secondary" download={app.apkFile}>
+                        <Download size={18} />
+                        Download APK (v{app.version})
+                      </a>
                     )}
 
                     {app.notes && <p className="releases-apk-notes">{app.notes}</p>}

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { FALLBACK_MANIFEST, loadDownloadsManifest } from '../../../../lib/downloadsManifest';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,9 +8,12 @@ const CACHE_HEADERS = {
 };
 
 async function loadManifest() {
-  const filePath = path.join(process.cwd(), 'public', 'downloads', 'versions.json');
-  const raw = await readFile(filePath, 'utf8');
-  return JSON.parse(raw);
+  try {
+    return await loadDownloadsManifest();
+  } catch (err) {
+    console.error('mobile/version manifest read failed, using fallback:', err);
+    return FALLBACK_MANIFEST;
+  }
 }
 
 export async function GET(req) {

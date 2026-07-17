@@ -473,6 +473,13 @@ body {
   box-shadow: 0 4px 14px rgba(132, 204, 22, 0.4);
 }
 
+.releases-download-btn-secondary {
+  background: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 100%);
+  color: #1e293b;
+  border-color: #94a3b8;
+  box-shadow: none;
+}
+
 .releases-download-pending {
   font-size: 0.82rem;
   color: var(--text-muted);

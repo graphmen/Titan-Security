@@ -45,6 +45,12 @@ try {
   Pop-Location
 }
 
+$publishScript = Join-Path (Split-Path $PSScriptRoot -Parent) "scripts\publish-mobile-apks.ps1"
+if (Test-Path $publishScript) {
+  Write-Host "Publishing APK to web downloads..." -ForegroundColor Cyan
+  & $publishScript -MonitorApk $apkOut
+}
+
 Write-Host ""
 Write-Host "Install on phone:" -ForegroundColor Yellow
 Write-Host "  1. Copy app-debug.apk to your phone and install"

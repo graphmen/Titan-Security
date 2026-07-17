@@ -7,4 +7,9 @@ export const DEFAULT_TENANT_ID = 'titan';
 /** Match web dashboard polling — avoids hammering /api/state. */
 export const STATE_POLL_MS = 10000;
 
-export const APP_VERSION = '1.0.10';
+export const APP_VERSION = '1.0.11';
+
+/** Must match android/app/build.gradle versionCode — used for OTA update checks. */
+export const APP_VERSION_CODE = 11;
+
+export const MOBILE_APP_ID = 'monitor';

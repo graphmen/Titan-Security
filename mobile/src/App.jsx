@@ -41,6 +41,7 @@ import ProfilePhoto from './components/ProfilePhoto';
 import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, guardInitials } from './utils/auth';
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS } from './config';
+import AppUpdatePanel from './components/AppUpdatePanel';
 import { postStateAction } from './utils/api';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
 import { getLocation } from './utils/location';
@@ -1029,6 +1030,9 @@ export default function App() {
         </div>
 
         <div className="mob-header-actions">
+          <div className="mob-header-update-wrap">
+            <AppUpdatePanel apiBase={apiBase} compact />
+          </div>
           {offlineCount > 0 && (
             <span className="mob-sync-badge" onClick={syncOfflineQueue} title="Click to sync offline cache">
               <RotateCw size={10} style={{ animation: 'spin 2s linear infinite' }} /> {offlineCount} Sync

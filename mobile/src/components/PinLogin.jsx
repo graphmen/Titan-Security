@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Delete, Sun, Moon, Loader2, CornerDownLeft } from 'lucide-react';
 import { playPinKey, playPinError, playLoginSuccess } from '../utils/sounds';
+import AppUpdatePanel from './AppUpdatePanel';
 
 const PIN_LENGTH = 6;
 
@@ -154,6 +155,8 @@ export default function PinLogin({
         </button>
 
         <p className="pin-demo-hint">Forgot PIN? Ask your supervisor to reset it — a new code will be emailed to you.</p>
+
+        <AppUpdatePanel apiBase={apiBase} />
       </div>
     </div>
   );

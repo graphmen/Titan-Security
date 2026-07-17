@@ -36,8 +36,14 @@ try {
   Pop-Location
 }
 
-$distApk = Join-Path $PSScriptRoot "TitanSupervisor-v1.1.0.apk"
+$distApk = Join-Path $PSScriptRoot "TitanSupervisor-v1.1.2.apk"
 if (Test-Path $apkOut) {
   Copy-Item $apkOut $distApk -Force
   Write-Host "Copy to phone: $distApk" -ForegroundColor Green
+}
+
+$publishScript = Join-Path (Split-Path $PSScriptRoot -Parent) "scripts\publish-mobile-apks.ps1"
+if (Test-Path $publishScript) {
+  Write-Host "Publishing APK to web downloads..." -ForegroundColor Cyan
+  & $publishScript -SupervisorApk $apkOut
 }

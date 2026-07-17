@@ -34,6 +34,9 @@ export default function LoginChooserPage() {
             <span className="auth-role-cta">Supervisor sign in →</span>
           </Link>
         </div>
+        <p className="auth-hint" style={{ marginTop: '1.25rem' }}>
+          Need the mobile apps? <Link href="/downloads">Download Titan Monitor &amp; Supervisor APKs</Link>
+        </p>
       </div>
     </div>
   );

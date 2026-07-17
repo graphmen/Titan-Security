@@ -18,6 +18,7 @@ import TeamPanel from './views/TeamPanel';
 import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, personInitials } from './utils/auth';
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION } from './config';
+import AppUpdatePanel from './components/AppUpdatePanel';
 import { postSupervisorAction, fetchSupervisorState } from './utils/api';
 import { pickProfilePhoto } from './utils/camera';
 
@@ -187,6 +188,9 @@ export default function App() {
           <div className="mob-header-sub">v{APP_VERSION}</div>
         </div>
         <div className="mob-header-actions">
+          <div className="mob-header-update-wrap">
+            <AppUpdatePanel apiBase={apiBase} compact />
+          </div>
           <button type="button" className="mob-theme-btn" onClick={toggleTheme} aria-label="Toggle theme">
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>

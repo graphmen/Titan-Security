@@ -373,7 +373,6 @@ body {
 .releases-apk-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
-  border-left: 4px solid var(--color-primary);
   border-radius: var(--radius-lg);
   padding: 1.35rem 1.4rem 1.4rem;
   box-shadow: none;

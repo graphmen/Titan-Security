@@ -874,7 +874,7 @@ export default function DashboardPage() {
                     </div>
                   ) : (
                     curOB.map(item => (
-                      <div key={item.id} className="glass-card" style={{ padding: '0.875rem', borderLeft: `3px solid ${item.type === 'SOS Panic Alarm' ? 'var(--color-danger)' : item.type === 'Patrol Tap' ? 'var(--color-primary)' : 'var(--color-success)'}` }}>
+                      <div key={item.id} className="glass-card" style={{ padding: '0.875rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
                           <span className={`badge ${
                             item.type === 'SOS Panic Alarm' ? 'badge-red' : 

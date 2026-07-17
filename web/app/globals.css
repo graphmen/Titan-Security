@@ -620,13 +620,13 @@ body {
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-premium);
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: none;
+  transition: border-color var(--transition-fast);
 }
 
 .glass-panel:hover {
   border-color: var(--border-hover);
-  box-shadow: 0 10px 25px -3px rgba(15, 23, 42, 0.08);
+  box-shadow: none;
 }
 
 .glass-card {
@@ -634,12 +634,13 @@ body {
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   padding: 1.25rem;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: none;
+  transition: border-color var(--transition-fast);
 }
 
 .glass-card:hover {
   border-color: var(--border-hover);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  box-shadow: none;
 }
 
 /* Typography & Headers */

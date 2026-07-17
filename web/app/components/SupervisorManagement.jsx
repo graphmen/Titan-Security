@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { apiFetch } from '../../lib/apiClient';
 import {
   Map,
   UserCheck,
@@ -73,7 +74,7 @@ export default function SupervisorManagement({ tenantId, territories = [], super
   const postAction = async (action, data) => {
     setSaving(true);
     try {
-      const res = await fetch('/api/state', {
+      const res = await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, tenantId, ...data }),

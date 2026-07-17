@@ -38,8 +38,12 @@ import GuardManagement from './components/GuardManagement';
 import SupervisorManagement from './components/SupervisorManagement';
 import SystemSettings from './components/SystemSettings';
 import { mergeSystemSettings } from '../lib/systemSettings';
+import { apiFetch } from '../lib/apiClient';
+import { useRouter } from 'next/navigation';
+import { LogOut } from 'lucide-react';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('premises'); // 'premises', 'command', or 'master'
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -88,7 +92,11 @@ export default function DashboardPage() {
     if (fetchInFlightRef.current) return;
     fetchInFlightRef.current = true;
     try {
-      const res = await fetch('/api/state?client=web', { signal: AbortSignal.timeout(30000) });
+      const res = await apiFetch('/api/state?client=web', { signal: AbortSignal.timeout(30000) });
+      if (res.status === 401) {
+        router.push('/login');
+        return;
+      }
       if (!res.ok) throw new Error('Failed to pull system data');
       const data = await res.json();
       setState(data);
@@ -191,10 +199,19 @@ export default function DashboardPage() {
     setSidebarOpen(false);
   };
 
+  const handleLogout = async () => {
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      router.push('/login');
+      router.refresh();
+    }
+  };
+
   // Update incident status
   const handleUpdateIncidentStatus = async (incidentId, status) => {
     try {
-      await fetch('/api/state', {
+      await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'UPDATE_INCIDENT_STATUS', incidentId, status })
@@ -208,7 +225,7 @@ export default function DashboardPage() {
   // Clear Active SOS panic
   const handleClearSos = async (tenantId) => {
     try {
-      await fetch('/api/state', {
+      await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'CLEAR_SOS', tenantId })
@@ -222,7 +239,7 @@ export default function DashboardPage() {
   // Reset patrols
   const handleResetPatrols = async () => {
     try {
-      await fetch('/api/state', {
+      await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'RESET_STATE' })
@@ -239,7 +256,7 @@ export default function DashboardPage() {
     setSyncMessage(null);
     setSyncError(null);
     try {
-      const res = await fetch('/api/state', {
+      const res = await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'SYNC_LOCAL_TO_SUPABASE' }),
@@ -268,7 +285,7 @@ export default function DashboardPage() {
     setSyncError(null);
     setSyncMessage(null);
     try {
-      const res = await fetch('/api/state', {
+      const res = await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -290,7 +307,7 @@ export default function DashboardPage() {
 
   const handleUpdateSystemSettings = async (updates) => {
     try {
-      const res = await fetch('/api/state', {
+      const res = await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'UPDATE_SYSTEM_SETTINGS', updates }),
@@ -316,7 +333,7 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!vName || !vIdNumber) return;
     try {
-      await fetch('/api/state', {
+      await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -341,7 +358,7 @@ export default function DashboardPage() {
   // Checkout visitor
   const handleCheckoutVisitor = async (visitorId) => {
     try {
-      await fetch('/api/state', {
+      await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'CHECKOUT_VISITOR', visitorId })
@@ -365,7 +382,7 @@ export default function DashboardPage() {
       return;
     }
     try {
-      await fetch('/api/state', {
+      await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -656,6 +673,9 @@ export default function DashboardPage() {
             <span className={`connection-badge ${state?.dataSource === 'supabase' ? 'live' : ''}`}>
               <Radio size={12} style={{ animation: 'pulse 1.5s infinite' }} /> {state?.dataSource === 'supabase' ? 'Server Connected' : 'Demo Mode Active'}
             </span>
+            <button type="button" className="btn-secondary" onClick={handleLogout} style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem' }}>
+              <LogOut size={14} /> Sign Out
+            </button>
             <style>{`
               @keyframes pulse {
                 0%, 100% { opacity: 1; }

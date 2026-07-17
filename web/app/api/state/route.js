@@ -6,8 +6,9 @@ import { applyDirectRowDelete, wipeEntireOperationalDatabase, isDestructiveDbAct
 import { getWhatsAppStatus } from '../../../lib/whatsapp';
 import { getEmailStatus } from '../../../lib/email';
 import { deliverPinNotifications } from '../../../lib/pinDeliveryServer';
-import { sanitizeStateForClient, isWebClientRequest } from '../../../lib/stateSanitize';
+import { sanitizeStateForClient, shouldIncludePinsForRequest } from '../../../lib/stateSanitize';
 import { filterStateForSupervisor, assertSupervisorMutationAllowed } from '../../../lib/supervisorScope';
+import { authorizeStateMutation, getSessionFromRequest } from '../../../lib/webAuth';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -26,10 +27,10 @@ function corsHeaders(origin) {
   };
 }
 
-function jsonResponse(data, status = 200, origin, req) {
+function jsonResponse(data, status = 200, origin, req, session = null) {
   let payload = data;
   if (req && data && typeof data === 'object') {
-    const includePins = isWebClientRequest(req);
+    const includePins = shouldIncludePinsForRequest(req, session);
     if (data.state) {
       payload = {
         ...data,
@@ -209,31 +210,54 @@ export async function GET(req) {
   const origin = req.headers.get('origin');
   const url = new URL(req.url);
   const client = url.searchParams.get('client');
-  const supervisorId = url.searchParams.get('supervisorId');
+  let supervisorId = url.searchParams.get('supervisorId');
   const tenantId = url.searchParams.get('tenantId') || 'titan';
+  const session = await getSessionFromRequest(req);
+
+  if (client === 'web' && session?.role !== 'admin') {
+    return jsonResponse({ error: 'Master Admin sign-in required' }, 401, origin, req, session);
+  }
+
+  if (client === 'supervisor') {
+    if (session?.role === 'supervisor') {
+      supervisorId = session.supervisorId;
+    } else if (!supervisorId) {
+      return jsonResponse({ error: 'Supervisor sign-in required' }, 401, origin, req, session);
+    }
+  }
+
+  const scopeSupervisor = client === 'supervisor' && supervisorId;
 
   try {
     if (process.env.FORCE_SUPABASE === '1') {
       if (await isSupabaseReady()) {
         let state = await getSupabaseAppState();
-        if (client === 'supervisor' && supervisorId) {
+        if (scopeSupervisor) {
           const scoped = filterStateForSupervisor(state, tenantId, supervisorId);
           if (!scoped) {
-            return jsonResponse({ error: 'Supervisor not found' }, 404, origin, req);
+            return jsonResponse({ error: 'Supervisor not found' }, 404, origin, req, session);
           }
           state = { ...scoped, dataSource: state.dataSource };
         }
-        return jsonResponse(state, 200, origin, req);
+        return jsonResponse(state, 200, origin, req, session);
       }
       return jsonResponse(
         { error: 'Database unavailable. Cannot load live data.' },
         503,
         origin,
-        req
+        req,
+        session
       );
     } else if (await checkSupabase()) {
-      const state = await fetchFromSupabase();
-      return jsonResponse(state, 200, origin, req);
+      let state = await fetchFromSupabase();
+      if (scopeSupervisor) {
+        const scoped = filterStateForSupervisor(state, tenantId, supervisorId);
+        if (!scoped) {
+          return jsonResponse({ error: 'Supervisor not found' }, 404, origin, req, session);
+        }
+        state = { ...scoped, dataSource: state.dataSource };
+      }
+      return jsonResponse(state, 200, origin, req, session);
     }
   } catch (err) {
     console.warn('Supabase unavailable, using local store:', err.message);
@@ -245,14 +269,14 @@ export async function GET(req) {
     whatsappStatus: getWhatsAppStatus(),
     emailStatus: getEmailStatus(),
   };
-  if (client === 'supervisor' && supervisorId) {
+  if (scopeSupervisor) {
     const scoped = filterStateForSupervisor(state, tenantId, supervisorId);
     if (!scoped) {
-      return jsonResponse({ error: 'Supervisor not found' }, 404, origin, req);
+      return jsonResponse({ error: 'Supervisor not found' }, 404, origin, req, session);
     }
-    return jsonResponse({ ...scoped, dataSource: 'local' }, 200, origin, req);
+    return jsonResponse({ ...scoped, dataSource: 'local' }, 200, origin, req, session);
   }
-  return jsonResponse(state, 200, origin, req);
+  return jsonResponse(state, 200, origin, req, session);
 }
 
 export async function POST(req) {
@@ -264,8 +288,19 @@ export async function POST(req) {
     const localState = getLocalState();
     const tenantId = payloadTenantId || localState.activeTenantId;
 
-    if (payload.supervisorId && action !== 'SUPERVISOR_LOGIN' && action !== 'CHANGE_SUPERVISOR_PIN') {
-      const scopeErr = assertSupervisorMutationAllowed(action, payload, localState, tenantId);
+    const auth = await authorizeStateMutation(req, action, payload, localState, tenantId);
+    if (!auth.ok) {
+      return jsonResponse({ error: auth.error }, auth.status || 401, origin, req);
+    }
+    const effectivePayload = auth.payload;
+
+    if (
+      effectivePayload.supervisorId &&
+      action !== 'SUPERVISOR_LOGIN' &&
+      action !== 'CHANGE_SUPERVISOR_PIN' &&
+      auth.session?.role !== 'admin'
+    ) {
+      const scopeErr = assertSupervisorMutationAllowed(action, effectivePayload, localState, tenantId);
       if (scopeErr) {
         return jsonResponse({ error: scopeErr.error }, scopeErr.status || 403, origin, req);
       }
@@ -300,7 +335,7 @@ export async function POST(req) {
 
     if (await isSupabaseReady()) {
       try {
-        const result = await runSupabaseAction({ ...payload, tenantId });
+        const result = await runSupabaseAction({ ...effectivePayload, tenantId });
         if (result?.error) {
           return jsonResponse({ error: result.error }, result.status || 400, origin);
         }
@@ -480,11 +515,11 @@ export async function POST(req) {
       return jsonResponse({ success: true }, 200, origin);
     }
 
-    const result = processLocalAction({ ...payload, tenantId });
+    const result = processLocalAction({ ...effectivePayload, tenantId });
     if (result.error) {
       return jsonResponse({ error: result.error }, result.status || 400, origin);
     }
-    const { whatsapp, email } = await deliverPinNotifications(result, payload.action, tenantId);
+    const { whatsapp, email } = await deliverPinNotifications(result, effectivePayload.action, tenantId);
     if (result.guard || result.generatedPin) {
       return jsonResponse({ ...result, whatsapp, email }, 200, origin, req);
     }

@@ -117,6 +117,8 @@ const SUPERVISOR_ALLOWED_ACTIONS = new Set([
   'RESOLVE_SHIFT_SWAP',
   'UPDATE_INCIDENT_STATUS',
   'CLEAR_SOS',
+  'REGISTER_VISITOR',
+  'CHECKOUT_VISITOR',
 ]);
 
 export function assertSupervisorMutationAllowed(action, payload, state, tenantId) {

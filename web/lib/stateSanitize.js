@@ -31,3 +31,7 @@ export function isWebClientRequest(req) {
   }
   return req.headers.get('x-titan-client') === 'web';
 }
+
+export function shouldIncludePinsForRequest(req, session) {
+  return session?.role === 'admin' && isWebClientRequest(req);
+}

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { apiFetch } from '../../lib/apiClient';
 import {
   Building2,
   MapPin,
@@ -201,7 +202,7 @@ export default function PremisesRegistration({
   const postAction = async (action, data) => {
     setSaving(true);
     try {
-      const res = await fetch('/api/state', {
+      const res = await apiFetch('/api/state', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, tenantId, ...data }),

@@ -32,6 +32,7 @@ import {
   Map,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
 import PremisesRegistration from './components/PremisesRegistration';
 import GuardManagement from './components/GuardManagement';
@@ -40,7 +41,7 @@ import SystemSettings from './components/SystemSettings';
 import { mergeSystemSettings } from '../lib/systemSettings';
 import { apiFetch } from '../lib/apiClient';
 import { useRouter } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import Link from 'next/link';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -611,6 +612,11 @@ export default function DashboardPage() {
             >
               <Sliders size={18} /> Master Admin
             </button>
+          </li>
+          <li>
+            <Link href="/downloads" className="sidebar-nav-item sidebar-nav-link">
+              <Download size={18} /> Mobile App Downloads
+            </Link>
           </li>
         </ul>
 

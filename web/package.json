@@ -8,7 +8,7 @@
     "start": "next start",
     "start:prod": "next start -H 0.0.0.0 -p 3001",
     "lint": "eslint",
-    "icons": "powershell -ExecutionPolicy Bypass -File scripts/generate-pwa-icons.ps1 && powershell -ExecutionPolicy Bypass -File scripts/generate-favicon.ps1"
+    "icons": "powershell -ExecutionPolicy Bypass -File scripts/generate-shield-icons.ps1"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "eslint": "^9",
-    "eslint-config-next": "16.2.9"
+    "eslint-config-next": "16.2.9",
+    "sharp": "^0.35.3"
   }
 }

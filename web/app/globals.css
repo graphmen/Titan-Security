@@ -377,6 +377,7 @@ body {
   border-radius: var(--radius-lg);
   padding: 1.35rem 1.4rem 1.4rem;
   box-shadow: none;
+  filter: none;
 }
 
 .releases-apk-card-head {
@@ -2240,4 +2241,23 @@ button {
   margin-top: 1rem;
   font-size: 0.8rem;
   color: var(--text-dimmed);
+}
+
+/* Downloads page — force flat cards (override global panel shadows) */
+.releases-page .releases-apk-card,
+.releases-page .releases-ecosystem-card,
+.releases-page .releases-install-steps,
+.releases-page .glass-panel,
+.releases-page .glass-card {
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+.releases-page .releases-apk-card:hover,
+.releases-page .releases-ecosystem-card:hover,
+.releases-page .releases-install-steps:hover,
+.releases-page .glass-panel:hover,
+.releases-page .glass-card:hover {
+  box-shadow: none !important;
+  transform: none !important;
 }

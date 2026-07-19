@@ -1,3 +1,5 @@
+import { normalizeGeofenceRadius, GEOFENCE_DEFAULT_METERS } from './systemSettings.js';
+
 export function generateGuardId() {
   return `GRD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
 }
@@ -35,9 +37,17 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function isWithinPremiseGeofence(guardCoords, premiseCoords, radiusMeters = 800) {
-  if (!guardCoords?.lat || !premiseCoords?.lat) return true;
-  return haversineMeters(guardCoords.lat, guardCoords.lng, premiseCoords.lat, premiseCoords.lng) <= radiusMeters;
+export function isValidGpsCoord(lat, lng) {
+  const la = Number(lat);
+  const ln = Number(lng);
+  return Number.isFinite(la) && Number.isFinite(ln) && !(la === 0 && ln === 0);
+}
+
+export function isWithinPremiseGeofence(guardCoords, premiseCoords, radiusMeters = GEOFENCE_DEFAULT_METERS) {
+  if (!isValidGpsCoord(premiseCoords?.lat, premiseCoords?.lng)) return false;
+  if (!isValidGpsCoord(guardCoords?.lat, guardCoords?.lng)) return false;
+  const radius = normalizeGeofenceRadius(radiusMeters);
+  return haversineMeters(guardCoords.lat, guardCoords.lng, premiseCoords.lat, premiseCoords.lng) <= radius;
 }
 
 export function parseShiftMinutes(timeStr) {
@@ -102,9 +112,7 @@ export function dismissGuardAlerts(state, tenantId, guardId, type) {
 }
 
 function geofenceRadiusFromState(state) {
-  const raw = state?.systemSettings?.geofenceRadiusMeters;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : 800;
+  return normalizeGeofenceRadius(state?.systemSettings?.geofenceRadiusMeters);
 }
 
 function noMovementMsFromState(state) {
@@ -127,7 +135,7 @@ export function evaluateGuardMonitoring(state, tenantId, guardId, coords) {
   const guardName = getGuardName(state, tenantId, guardId);
   const geofenceRadius = geofenceRadiusFromState(state);
 
-  if (coords?.lat && premise && !isWithinPremiseGeofence(coords, premise.coordinates, geofenceRadius)) {
+  if (coords?.lat != null && coords?.lng != null && premise && !isWithinPremiseGeofence(coords, premise.coordinates, geofenceRadius)) {
     pushGuardAlert(state, tenantId, {
       type: 'geofence_exit',
       severity: 'critical',

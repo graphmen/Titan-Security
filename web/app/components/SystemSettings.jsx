@@ -152,8 +152,8 @@ export default function SystemSettings({
             <SelectSetting
               label="Geofence radius"
               hint="Guards must be within this distance to clock in at a premises."
-              value={systemSettings.geofenceRadiusMeters ?? 800}
-              options={[200, 400, 600, 800, 1000, 1500, 2000]}
+              value={systemSettings.geofenceRadiusMeters ?? 30}
+              options={[10, 15, 20, 25, 30, 40, 50]}
               suffix="m"
               disabled={savingKey === 'geofenceRadiusMeters'}
               onChange={(v) => save('geofenceRadiusMeters', v)}
@@ -219,7 +219,7 @@ export default function SystemSettings({
               <MenuRow
                 icon={MapPin}
                 label="GPS & Geofencing"
-                hint={`${systemSettings.geofenceRadiusMeters ?? 800}m radius`}
+                hint={`${systemSettings.geofenceRadiusMeters ?? 30}m radius`}
                 onClick={() => setPanel('gps')}
               />
               <MenuRow

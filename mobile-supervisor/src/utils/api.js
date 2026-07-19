@@ -25,16 +25,4 @@ export async function fetchSupervisorState(apiBase, tenantId, supervisorId) {
   return res.json();
 }
 
-export function getLocation() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('GPS not available on this device'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => reject(new Error('Could not get GPS — enable location permission')),
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
-  });
-}
+export { getLocation } from './location';

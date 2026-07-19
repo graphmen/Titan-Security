@@ -31,8 +31,11 @@ try {
 
   if ($gradleExit -eq 0 -and (Test-Path $apkOut)) {
     $size = [math]::Round((Get-Item $apkOut).Length / 1MB, 2)
+    $baseApk = Join-Path $androidDir "app\build\outputs\apk\debug\security.apk"
+    Copy-Item $apkOut $baseApk -Force
     Write-Host ""
     Write-Host "APK ready (Gradle): $apkOut ($size MB)" -ForegroundColor Green
+    Write-Host "Base APK updated for repacks: $baseApk" -ForegroundColor DarkGray
   } elseif (Test-Path $repackScript) {
     Write-Host "Gradle unavailable - using repack-apk.ps1..." -ForegroundColor Yellow
     & $repackScript

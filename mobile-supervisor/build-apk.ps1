@@ -26,7 +26,10 @@ try {
   $gradleExit = $LASTEXITCODE
   if ($gradleExit -eq 0 -and (Test-Path $apkOut)) {
     $size = [math]::Round((Get-Item $apkOut).Length / 1MB, 2)
+    $baseApk = Join-Path $androidDir "app\build\outputs\apk\debug\security.apk"
+    Copy-Item $apkOut $baseApk -Force
     Write-Host "APK ready: $apkOut ($size MB)" -ForegroundColor Green
+    Write-Host "Base APK updated for repacks: $baseApk" -ForegroundColor DarkGray
   } elseif (Test-Path $repackScript) {
     Write-Host "Gradle unavailable - using repack..." -ForegroundColor Yellow
     & $repackScript
@@ -36,7 +39,7 @@ try {
   Pop-Location
 }
 
-$distApk = Join-Path $PSScriptRoot "TitanSupervisor-v1.1.2.apk"
+$distApk = Join-Path $PSScriptRoot "TitanSupervisor-v1.1.3.apk"
 if (Test-Path $apkOut) {
   Copy-Item $apkOut $distApk -Force
   Write-Host "Copy to phone: $distApk" -ForegroundColor Green

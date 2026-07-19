@@ -16,6 +16,7 @@ import {
   generateSwapId,
   todayDateStr,
   isWithinPremiseGeofence,
+  isValidGpsCoord,
   getGuardName,
   getActiveAttendanceForGuard,
   parseShiftMinutes,
@@ -45,6 +46,7 @@ import {
   DEFAULT_SYSTEM_SETTINGS,
   ensureSystemSettings,
   getGeofenceRadius,
+  normalizeGeofenceRadius,
   TITAN_TENANT_ID,
 } from './systemSettings';
 import { isValidEmailAddress } from './email';
@@ -675,7 +677,17 @@ export function processLocalAction(payload) {
 
       const coords = { lat: parseFloat(lat), lng: parseFloat(lng) };
       const geofenceRadius = getGeofenceRadius(state);
-      if (!isWithinPremiseGeofence(coords, premise.coordinates, geofenceRadius)) {
+      const premiseCoords = premise.coordinates;
+      if (!isValidGpsCoord(premiseCoords?.lat, premiseCoords?.lng)) {
+        return {
+          error: 'This premises has no GPS coordinates — ask a supervisor to capture GPS on site first',
+          status: 403,
+        };
+      }
+      if (!isValidGpsCoord(coords.lat, coords.lng)) {
+        return { error: 'Could not verify your GPS location — enable location and try again', status: 403 };
+      }
+      if (!isWithinPremiseGeofence(coords, premiseCoords, geofenceRadius)) {
         return { error: `You must be at the premises to clock in (within ${geofenceRadius}m GPS geofence)`, status: 403 };
       }
 
@@ -1179,6 +1191,11 @@ export function processLocalAction(payload) {
           state.systemSettings[key] = updates[key];
         }
       });
+      if (updates.geofenceRadiusMeters !== undefined) {
+        state.systemSettings.geofenceRadiusMeters = normalizeGeofenceRadius(
+          state.systemSettings.geofenceRadiusMeters
+        );
+      }
       state.systemSettings.updatedAt = new Date().toISOString();
       break;
     }

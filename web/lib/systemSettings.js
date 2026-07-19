@@ -1,17 +1,29 @@
 export const TITAN_TENANT_ID = 'titan';
 
+export const GEOFENCE_MIN_METERS = 10;
+export const GEOFENCE_MAX_METERS = 50;
+export const GEOFENCE_DEFAULT_METERS = 30;
+
 export const DEFAULT_SYSTEM_SETTINGS = {
   companyName: 'Titan Protection Security',
   companyShortName: 'Titan',
   sirenAlertsEnabled: true,
-  geofenceRadiusMeters: 800,
+  geofenceRadiusMeters: GEOFENCE_DEFAULT_METERS,
   noMovementAlertMinutes: 45,
   licenseExpiryWarningDays: 60,
 };
 
 export function mergeSystemSettings(raw) {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_SYSTEM_SETTINGS };
-  return { ...DEFAULT_SYSTEM_SETTINGS, ...raw };
+  const merged = { ...DEFAULT_SYSTEM_SETTINGS, ...raw };
+  merged.geofenceRadiusMeters = normalizeGeofenceRadius(merged.geofenceRadiusMeters);
+  return merged;
+}
+
+export function normalizeGeofenceRadius(raw) {
+  const n = Number(raw);
+  const base = Number.isFinite(n) && n > 0 ? n : GEOFENCE_DEFAULT_METERS;
+  return Math.min(GEOFENCE_MAX_METERS, Math.max(GEOFENCE_MIN_METERS, Math.round(base)));
 }
 
 export function ensureSystemSettings(state) {

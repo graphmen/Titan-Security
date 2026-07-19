@@ -79,5 +79,6 @@ if ($monitorEntry) { $manifest.monitor = $monitorEntry }
 if ($supervisorEntry) { $manifest.supervisor = $supervisorEntry }
 $manifest.updatedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 
-$manifest | ConvertTo-Json -Depth 6 | Out-File -FilePath $manifestPath -Encoding utf8NoBOM
+$json = $manifest | ConvertTo-Json -Depth 6
+[System.IO.File]::WriteAllText($manifestPath, $json, (New-Object System.Text.UTF8Encoding $false))
 Write-Host ('Updated manifest: {0}' -f $manifestPath) -ForegroundColor Cyan

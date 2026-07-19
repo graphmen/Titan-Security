@@ -1,5 +1,7 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
+
+const TitanLocation = registerPlugin('TitanLocation');
 
 function mapWebGeoError(err) {
   const code = err?.code;
@@ -73,18 +75,41 @@ async function capacitorGetPosition() {
   }
 }
 
+async function titanGetPosition() {
+  const pos = await TitanLocation.getCurrentPosition();
+  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+}
+
 function canUseCapacitorGeolocation() {
   return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('Geolocation');
 }
 
 /** Get current GPS coordinates. Requires permission; throws with a clear message on failure. */
 export async function getLocation() {
-  if (canUseCapacitorGeolocation()) {
+  if (Capacitor.isNativePlatform()) {
+    if (Capacitor.isPluginAvailable('TitanLocation')) {
+      try {
+        return await titanGetPosition();
+      } catch (err) {
+        if (!isPluginNotImplemented(err)) {
+          const msg = String(err?.message || err);
+          if (!msg.toLowerCase().includes('not implemented')) throw err;
+        }
+      }
+    }
+
+    if (canUseCapacitorGeolocation()) {
+      try {
+        return await capacitorGetPosition();
+      } catch (err) {
+        if (!isPluginNotImplemented(err)) throw err;
+      }
+    }
+
     try {
-      return await capacitorGetPosition();
-    } catch (err) {
-      if (!isPluginNotImplemented(err)) throw err;
-      // Repacked APKs may ship without the native Geolocation plugin — use WebView GPS.
+      await Geolocation.requestPermissions();
+    } catch (_) {
+      /* Native plugin may be missing in repacked APKs — still try WebView GPS. */
     }
   }
 

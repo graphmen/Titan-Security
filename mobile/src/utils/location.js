@@ -176,7 +176,24 @@ export async function requestLocationPermission() {
     /* repacked APK fallback */
   }
 
+  await triggerWebViewLocationPermission();
+
   return checkLocationPermission();
+}
+
+/** Nudge Capacitor WebView to show the Android location permission dialog. */
+function triggerWebViewLocationPermission() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve();
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      () => resolve(),
+      () => resolve(),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
+  });
 }
 
 /** Run on app launch — returns whether to show the in-app permission explainer. */

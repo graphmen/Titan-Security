@@ -35,6 +35,16 @@ New-Item -ItemType Directory -Path $work | Out-Null
 $unsignedApk = Join-Path $work "unsigned.apk"
 Copy-Item $srcApk $unsignedApk -Force
 
+$repoRoot = Split-Path (Split-Path $root -Parent) -Parent
+$patchScript = Join-Path $repoRoot "scripts\patch-apk-permissions.ps1"
+$manifestSrc = Join-Path $root "app\src\main\AndroidManifest.xml"
+if (Test-Path $patchScript) {
+  & $patchScript -ApkPath $unsignedApk -ManifestSourcePath $manifestSrc
+  Copy-Item $unsignedApk $srcApk -Force
+} else {
+  Write-Host "Warning: patch-apk-permissions.ps1 not found - camera/location may be missing from manifest." -ForegroundColor Yellow
+}
+
 Write-Host "Updating web assets in APK (preserving Android package structure)..." -ForegroundColor Cyan
 
 $zip = [System.IO.Compression.ZipFile]::Open($unsignedApk, [System.IO.Compression.ZipArchiveMode]::Update)
@@ -97,7 +107,7 @@ if ($LASTEXITCODE -ne 0) { throw "APK verification failed after signing" }
 New-Item -ItemType Directory -Force -Path (Split-Path $outApk) | Out-Null
 Copy-Item $signedApk $outApk -Force
 
-$distApk = Join-Path (Split-Path $root -Parent) "TitanSupervisor-v1.1.4.apk"
+$distApk = Join-Path (Split-Path $root -Parent) "TitanSupervisor-v1.1.5.apk"
 Copy-Item $outApk $distApk -Force
 
 try {

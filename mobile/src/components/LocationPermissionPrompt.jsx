@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { MapPin, Shield, Settings } from 'lucide-react';
-import {
-  requestLocationPermission,
-  markLocationPermissionPrompted,
-} from '../utils/location';
+import { MapPin, Shield, Camera, Settings } from 'lucide-react';
+import { requestEssentialPermissions } from '../utils/permissions';
+import { markLocationPermissionPrompted } from '../utils/location';
 import { APP_VERSION_CODE } from '../config';
 
 export default function LocationPermissionPrompt({ appName, onDone }) {
@@ -19,8 +17,8 @@ export default function LocationPermissionPrompt({ appName, onDone }) {
     setBusy(true);
     setDenied(false);
     try {
-      const { granted } = await requestLocationPermission();
-      if (granted) {
+      const { location } = await requestEssentialPermissions();
+      if (location.granted) {
         finish();
       } else {
         setDenied(true);
@@ -36,19 +34,20 @@ export default function LocationPermissionPrompt({ appName, onDone }) {
         <div className="loc-perm-icon-wrap">
           <MapPin size={28} strokeWidth={2} />
         </div>
-        <h2 id="loc-perm-title" className="loc-perm-title">Location access required</h2>
+        <h2 id="loc-perm-title" className="loc-perm-title">Permissions required</h2>
         <p className="loc-perm-text">
-          {appName} needs your location for shift clock-in, geofence verification, SOS alerts, and on-site GPS capture.
+          {appName} needs location and camera access for shift clock-in, SOS alerts, incident photos, and on-site GPS capture.
         </p>
         <ul className="loc-perm-list">
-          <li><Shield size={14} /> Clock-in only works when you are at the premises</li>
-          <li><MapPin size={14} /> SOS sends your live coordinates to Command Centre</li>
+          <li><Shield size={14} /> Location — clock-in geofence and SOS coordinates</li>
+          <li><MapPin size={14} /> GPS capture at premises and checkpoints</li>
+          <li><Camera size={14} /> Camera — incident photos and profile pictures</li>
         </ul>
 
         {denied && (
           <p className="loc-perm-denied">
             <Settings size={14} />
-            Permission was denied. Open phone Settings → Apps → {appName} → Permissions → Location → Allow.
+            A permission was denied. Open Settings → Apps → {appName} → Permissions, then allow Location and Camera.
           </p>
         )}
 
@@ -58,10 +57,10 @@ export default function LocationPermissionPrompt({ appName, onDone }) {
           onClick={handleAllow}
           disabled={busy}
         >
-          {busy ? 'Requesting…' : denied ? 'Try again' : 'Allow location access'}
+          {busy ? 'Requesting…' : denied ? 'Try again' : 'Allow permissions'}
         </button>
         <button type="button" className="loc-perm-btn loc-perm-btn-secondary" onClick={finish} disabled={busy}>
-          {denied ? 'Continue without GPS' : 'Not now'}
+          {denied ? 'Continue without permissions' : 'Not now'}
         </button>
       </div>
     </div>

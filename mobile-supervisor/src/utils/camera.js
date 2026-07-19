@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { requestCameraPermission } from './permissions';
 
 function pickImageViaInput() {
   return new Promise((resolve) => {
@@ -26,6 +27,7 @@ function pickImageViaInput() {
 export async function captureIncidentPhoto() {
   if (Capacitor.isNativePlatform()) {
     try {
+      await requestCameraPermission();
       const photo = await Camera.getPhoto({
         quality: 72,
         allowEditing: false,
@@ -46,6 +48,7 @@ export async function captureIncidentPhoto() {
 export async function pickProfilePhoto() {
   if (Capacitor.isNativePlatform()) {
     try {
+      await requestCameraPermission();
       const photo = await Camera.getPhoto({
         quality: 65,
         allowEditing: true,

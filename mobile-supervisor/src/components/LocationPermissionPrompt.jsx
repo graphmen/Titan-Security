@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { MapPin, Building2, Settings } from 'lucide-react';
-import {
-  requestLocationPermission,
-  markLocationPermissionPrompted,
-} from '../utils/location';
+import { MapPin, Building2, Camera, Settings } from 'lucide-react';
+import { requestEssentialPermissions } from '../utils/permissions';
+import { markLocationPermissionPrompted } from '../utils/location';
 import { APP_VERSION_CODE } from '../config';
 
 export default function LocationPermissionPrompt({ appName, onDone }) {
@@ -19,8 +17,8 @@ export default function LocationPermissionPrompt({ appName, onDone }) {
     setBusy(true);
     setDenied(false);
     try {
-      const { granted } = await requestLocationPermission();
-      if (granted) {
+      const { location } = await requestEssentialPermissions();
+      if (location.granted) {
         finish();
       } else {
         setDenied(true);
@@ -36,19 +34,20 @@ export default function LocationPermissionPrompt({ appName, onDone }) {
         <div className="loc-perm-icon-wrap">
           <MapPin size={28} strokeWidth={2} />
         </div>
-        <h2 id="loc-perm-title" className="loc-perm-title">Location access required</h2>
+        <h2 id="loc-perm-title" className="loc-perm-title">Permissions required</h2>
         <p className="loc-perm-text">
-          {appName} needs your location to capture premises coordinates and verify site GPS for your guards.
+          {appName} needs location and camera access to capture site coordinates and profile photos.
         </p>
         <ul className="loc-perm-list">
-          <li><Building2 size={14} /> Register premises and important place coordinates</li>
+          <li><Building2 size={14} /> Location — register premises and important places</li>
           <li><MapPin size={14} /> Enable guard geofence clock-in at your sites</li>
+          <li><Camera size={14} /> Camera — supervisor profile and site photos</li>
         </ul>
 
         {denied && (
           <p className="loc-perm-denied">
             <Settings size={14} />
-            Permission was denied. Open phone Settings → Apps → {appName} → Permissions → Location → Allow.
+            A permission was denied. Open Settings → Apps → {appName} → Permissions, then allow Location and Camera.
           </p>
         )}
 
@@ -58,10 +57,10 @@ export default function LocationPermissionPrompt({ appName, onDone }) {
           onClick={handleAllow}
           disabled={busy}
         >
-          {busy ? 'Requesting…' : denied ? 'Try again' : 'Allow location access'}
+          {busy ? 'Requesting…' : denied ? 'Try again' : 'Allow permissions'}
         </button>
         <button type="button" className="loc-perm-btn loc-perm-btn-secondary" onClick={finish} disabled={busy}>
-          {denied ? 'Continue without GPS' : 'Not now'}
+          {denied ? 'Continue without permissions' : 'Not now'}
         </button>
       </div>
     </div>

@@ -34,6 +34,25 @@ import com.getcapacitor.annotation.PermissionCallback;
 public class TitanLocationPlugin extends Plugin {
 
     @PluginMethod
+    public void checkPermissions(PluginCall call) {
+        call.resolve(permissionStatus());
+    }
+
+    @PluginMethod
+    public void requestPermissions(PluginCall call) {
+        if (getPermissionState("location") == PermissionState.GRANTED) {
+            call.resolve(permissionStatus());
+            return;
+        }
+        requestPermissionForAlias("location", call, "requestOnlyCallback");
+    }
+
+    @PermissionCallback
+    private void requestOnlyCallback(PluginCall call) {
+        call.resolve(permissionStatus());
+    }
+
+    @PluginMethod
     public void getCurrentPosition(PluginCall call) {
         if (getPermissionState("location") != PermissionState.GRANTED) {
             requestPermissionForAlias("location", call, "locationPermsCallback");
@@ -131,5 +150,11 @@ public class TitanLocationPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("coords", coords);
         call.resolve(ret);
+    }
+
+    private JSObject permissionStatus() {
+        JSObject ret = new JSObject();
+        ret.put("location", getPermissionState("location").toString().toLowerCase());
+        return ret;
     }
 }

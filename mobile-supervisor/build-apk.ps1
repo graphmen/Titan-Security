@@ -39,7 +39,7 @@ try {
   Pop-Location
 }
 
-$distApk = Join-Path $PSScriptRoot "TitanSupervisor-v1.1.3.apk"
+$distApk = Join-Path $PSScriptRoot "TitanSupervisor-v1.1.4.apk"
 if (Test-Path $apkOut) {
   Copy-Item $apkOut $distApk -Force
   Write-Host "Copy to phone: $distApk" -ForegroundColor Green

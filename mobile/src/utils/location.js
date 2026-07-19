@@ -84,6 +84,120 @@ function canUseCapacitorGeolocation() {
   return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('Geolocation');
 }
 
+const PERM_VERSION_KEY = 'titan_location_perm_version';
+
+function isGrantedStatus(status) {
+  return status === 'granted' || status === 'limited';
+}
+
+/** Whether this app version still needs the install/update location prompt. */
+export function shouldPromptLocationPermission(appVersionCode) {
+  if (!Capacitor.isNativePlatform()) return false;
+  const last = parseInt(localStorage.getItem(PERM_VERSION_KEY) || '0', 10);
+  return !Number.isFinite(last) || last < appVersionCode;
+}
+
+export function markLocationPermissionPrompted(appVersionCode) {
+  localStorage.setItem(PERM_VERSION_KEY, String(appVersionCode));
+}
+
+async function readNativePermissionStatus() {
+  if (Capacitor.isPluginAvailable('TitanLocation')) {
+    try {
+      const status = await TitanLocation.checkPermissions();
+      if (status?.location) return status.location;
+    } catch (_) {
+      /* fall through */
+    }
+  }
+
+  if (canUseCapacitorGeolocation()) {
+    try {
+      const status = await Geolocation.checkPermissions();
+      if (status.location === 'granted' || status.coarseLocation === 'granted') return 'granted';
+      if (status.location === 'denied' || status.coarseLocation === 'denied') return 'denied';
+      return status.location || status.coarseLocation || 'prompt';
+    } catch (_) {
+      /* fall through */
+    }
+  }
+
+  return 'prompt';
+}
+
+/** Check current location permission without triggering the system dialog. */
+export async function checkLocationPermission() {
+  if (!Capacitor.isNativePlatform()) {
+    return { granted: true, status: 'granted' };
+  }
+  const status = await readNativePermissionStatus();
+  return { granted: isGrantedStatus(status), status };
+}
+
+/** Ask the user for location access (shows the Android permission dialog). */
+export async function requestLocationPermission() {
+  if (!Capacitor.isNativePlatform()) {
+    return { granted: true, status: 'granted' };
+  }
+
+  const current = await checkLocationPermission();
+  if (current.granted) return current;
+
+  if (Capacitor.isPluginAvailable('TitanLocation')) {
+    try {
+      const result = await TitanLocation.requestPermissions();
+      const status = result?.location || 'denied';
+      return { granted: isGrantedStatus(status), status };
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) {
+        const msg = String(err?.message || err);
+        if (!msg.toLowerCase().includes('not implemented')) {
+          return { granted: false, status: 'denied' };
+        }
+      }
+    }
+  }
+
+  if (canUseCapacitorGeolocation()) {
+    try {
+      const req = await Geolocation.requestPermissions();
+      const granted = req.location === 'granted' || req.coarseLocation === 'granted';
+      return { granted, status: granted ? 'granted' : req.location || req.coarseLocation || 'denied' };
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) {
+        return { granted: false, status: 'denied' };
+      }
+    }
+  }
+
+  try {
+    await Geolocation.requestPermissions();
+  } catch (_) {
+    /* repacked APK fallback */
+  }
+
+  return checkLocationPermission();
+}
+
+/** Run on app launch — returns whether to show the in-app permission explainer. */
+export async function initLocationPermissionFlow(appVersionCode) {
+  if (!Capacitor.isNativePlatform()) {
+    return { needsPrompt: false, granted: true };
+  }
+
+  const { granted, status } = await checkLocationPermission();
+  if (granted) {
+    markLocationPermissionPrompted(appVersionCode);
+    return { needsPrompt: false, granted: true, status };
+  }
+
+  return {
+    needsPrompt: shouldPromptLocationPermission(appVersionCode),
+    granted: false,
+    status,
+  };
+}
+
 /** Get current GPS coordinates. Requires permission; throws with a clear message on failure. */
 export async function getLocation() {
   if (Capacitor.isNativePlatform()) {

@@ -17,10 +17,12 @@ import SitesPanel from './views/SitesPanel';
 import TeamPanel from './views/TeamPanel';
 import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, personInitials } from './utils/auth';
-import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION } from './config';
+import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION, APP_VERSION_CODE } from './config';
 import AppUpdatePanel from './components/AppUpdatePanel';
+import LocationPermissionPrompt from './components/LocationPermissionPrompt';
 import { postSupervisorAction, fetchSupervisorState } from './utils/api';
 import { pickProfilePhoto } from './utils/camera';
+import { initLocationPermissionFlow } from './utils/location';
 
 export default function App() {
   const apiBase = DEFAULT_API_URL.replace(/\/$/, '');
@@ -45,6 +47,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [locPermVisible, setLocPermVisible] = useState(false);
 
   const { theme, toggleTheme, isDark } = useTheme();
 
@@ -67,6 +70,15 @@ export default function App() {
       showToast(e.message || 'Could not refresh data', 'error');
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { needsPrompt } = await initLocationPermissionFlow(APP_VERSION_CODE);
+      if (!cancelled && needsPrompt) setLocPermVisible(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !supervisorId) return;
@@ -154,32 +166,46 @@ export default function App() {
   const incidents = (state?.occurrenceBook || []).filter((i) => i.status !== 'Resolved').slice(0, 20);
   const activeAlertCount = alerts.filter((a) => a.status === 'Active').length + swaps.filter((s) => s.status === 'Pending').length;
 
+  const locationPrompt = locPermVisible ? (
+    <LocationPermissionPrompt
+      appName="Titan Supervisor"
+      onDone={() => setLocPermVisible(false)}
+    />
+  ) : null;
+
   if (!isAuthenticated && mustChangePin && (pendingSupervisor || supervisor)) {
     return (
-      <ChangePin
-        supervisor={pendingSupervisor || supervisor}
-        tenantId={tenantId}
-        apiBase={apiBase}
-        currentPin={loginPinUsed}
-        onComplete={handlePinChanged}
-      />
+      <>
+        {locationPrompt}
+        <ChangePin
+          supervisor={pendingSupervisor || supervisor}
+          tenantId={tenantId}
+          apiBase={apiBase}
+          currentPin={loginPinUsed}
+          onComplete={handlePinChanged}
+        />
+      </>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <PinLogin
-        tenantId={tenantId}
-        apiBase={apiBase}
-        isDark={isDark}
-        onToggleTheme={toggleTheme}
-        onLogin={handleLogin}
-      />
+      <>
+        {locationPrompt}
+        <PinLogin
+          tenantId={tenantId}
+          apiBase={apiBase}
+          isDark={isDark}
+          onToggleTheme={toggleTheme}
+          onLogin={handleLogin}
+        />
+      </>
     );
   }
 
   return (
     <div className="phone-container">
+      {locationPrompt}
       {toast && <div className={`mob-toast mob-toast-${toast.type}`}>{toast.message}</div>}
 
       <header className="mob-header mob-header-compact">

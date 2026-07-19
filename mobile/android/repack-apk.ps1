@@ -97,7 +97,7 @@ if ($LASTEXITCODE -ne 0) { throw "APK verification failed after signing" }
 New-Item -ItemType Directory -Force -Path (Split-Path $outApk) | Out-Null
 Copy-Item $signedApk $outApk -Force
 
-$distApk = Join-Path (Split-Path $root -Parent) "TitanMonitor-v1.0.12.apk"
+$distApk = Join-Path (Split-Path $root -Parent) "TitanMonitor-v1.0.13.apk"
 Copy-Item $outApk $distApk -Force
 
 try {

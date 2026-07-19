@@ -40,11 +40,12 @@ import ChangePin from './components/ChangePin';
 import ProfilePhoto from './components/ProfilePhoto';
 import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, guardInitials } from './utils/auth';
-import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS } from './config';
+import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION_CODE } from './config';
 import AppUpdatePanel from './components/AppUpdatePanel';
+import LocationPermissionPrompt from './components/LocationPermissionPrompt';
 import { postStateAction } from './utils/api';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
-import { getLocation } from './utils/location';
+import { getLocation, initLocationPermissionFlow } from './utils/location';
 import { startVoiceMemo } from './utils/voice';
 import {
   playNfcScan,
@@ -122,6 +123,7 @@ export default function App() {
   const { theme, toggleTheme, isDark } = useTheme();
   const [splashVisible, setSplashVisible] = useState(true);
   const [splashExiting, setSplashExiting] = useState(false);
+  const [locPermVisible, setLocPermVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [tabKey, setTabKey] = useState(0);
@@ -147,6 +149,16 @@ export default function App() {
       clearTimeout(hideTimer);
     };
   }, []);
+
+  useEffect(() => {
+    if (splashVisible) return;
+    let cancelled = false;
+    (async () => {
+      const { needsPrompt } = await initLocationPermissionFlow(APP_VERSION_CODE);
+      if (!cancelled && needsPrompt) setLocPermVisible(true);
+    })();
+    return () => { cancelled = true; };
+  }, [splashVisible]);
 
   const saveQueueToStorage = (newQueue) => {
     setOfflineQueue(newQueue);
@@ -957,6 +969,12 @@ export default function App() {
   return (
     <div className="phone-container">
       {splashVisible && <SplashScreen exiting={splashExiting} />}
+      {locPermVisible && (
+        <LocationPermissionPrompt
+          appName="Titan Monitor"
+          onDone={() => setLocPermVisible(false)}
+        />
+      )}
       {toast && (
         <div className={`mob-toast mob-toast-${toast.type}`}>
           {toast.message}

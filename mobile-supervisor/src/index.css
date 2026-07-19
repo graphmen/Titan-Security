@@ -1254,6 +1254,126 @@ body {
   40% { transform: scale(1.15); opacity: 1; }
 }
 
+/* ── Location permission prompt ── */
+.loc-perm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(15, 31, 23, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.loc-perm-card {
+  width: 100%;
+  max-width: 340px;
+  background: var(--mob-surface, #fff);
+  border: 1px solid var(--mob-border, #e2e8f0);
+  border-radius: 16px;
+  padding: 1.35rem 1.25rem 1.15rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
+
+.loc-perm-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #dbeafe;
+  color: #1d4ed8;
+  margin-bottom: 0.85rem;
+}
+
+.loc-perm-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--mob-text, #0f172a);
+}
+
+.loc-perm-text {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--mob-text-muted, #64748b);
+}
+
+.loc-perm-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.loc-perm-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--mob-text-muted, #64748b);
+}
+
+.loc-perm-list li svg {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: #2563eb;
+}
+
+.loc-perm-denied {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #92400e;
+}
+
+.loc-perm-denied svg {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.loc-perm-btn {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+}
+
+.loc-perm-btn-primary {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+
+.loc-perm-btn-primary:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.loc-perm-btn-secondary {
+  background: transparent;
+  color: var(--mob-text-muted, #64748b);
+  border: 1px solid var(--mob-border, #e2e8f0);
+}
+
 /* ── Tab transitions ── */
 .mob-tab-panel {
   animation: tabSlideIn 0.34s cubic-bezier(0.22, 1, 0.36, 1);

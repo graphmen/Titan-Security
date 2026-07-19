@@ -7,7 +7,7 @@ export const DEFAULT_TENANT_ID = 'titan';
 /** Match web dashboard polling — avoids hammering /api/state. */
 export const STATE_POLL_MS = 10000;
 
-export const APP_VERSION = '1.0.14';
-export const APP_VERSION_CODE = 14;
+export const APP_VERSION = '1.0.15';
+export const APP_VERSION_CODE = 15;
 
 export const MOBILE_APP_ID = 'monitor';

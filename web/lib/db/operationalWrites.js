@@ -25,13 +25,6 @@ export const OPERATIONAL_WRITE_ACTIONS = new Set([
 
 const db = supabaseAdmin;
 
-async function requireDbOk(result, context) {
-  if (result?.error) {
-    throw new Error(`${context}: ${result.error.message}`);
-  }
-  return result;
-}
-
 import {
   attendanceToRow,
   alertToRow,
@@ -40,6 +33,24 @@ import {
   shiftToRow,
   swapToRow,
 } from './mappers.js';
+
+async function requireDbOk(result, context) {
+  if (result?.error) {
+    throw new Error(`${context}: ${result.error.message}`);
+  }
+  return result;
+}
+
+async function upsertGuardAlerts(alerts, tenantId, context) {
+  if (!alerts.length) return;
+  const rows = alerts.map((a) => alertToRow(a, tenantId));
+  let result = await db.from('guard_alerts').upsert(rows);
+  if (result?.error && /premise_id|shift_id/i.test(result.error.message || '')) {
+    const minimal = rows.map(({ premise_id, shift_id, ...rest }) => rest);
+    result = await db.from('guard_alerts').upsert(minimal);
+  }
+  await requireDbOk(result, context);
+}
 
 export function usesOperationalDbWrite(action) {
   return OPERATIONAL_WRITE_ACTIONS.has(action);
@@ -53,7 +64,7 @@ function findOccurrenceByPrefix(state, prefix) {
   return (state.occurrenceBook || []).find((item) => item.id?.startsWith(prefix)) || null;
 }
 
-export async function persistOperationalActionToDb(action, payload, tenantId, state) {
+export async function persistOperationalActionToDb(action, payload, tenantId, state, actionResult = {}) {
   switch (action) {
     case 'LOG_INCIDENT': {
       const item = latestOccurrence(state);
@@ -251,26 +262,19 @@ export async function persistOperationalActionToDb(action, payload, tenantId, st
       const { alertId } = payload;
       const alert = (state.guardAlerts?.[tenantId] || []).find((a) => a.id === alertId);
       if (alert) {
-        await requireDbOk(
-          await db.from('guard_alerts').upsert(alertToRow({ ...alert, status: 'Dismissed' }, tenantId)),
-          'guard_alerts DISMISS_GUARD_ALERT'
-        );
+        await upsertGuardAlerts([{ ...alert, status: 'Dismissed' }], tenantId, 'guard_alerts DISMISS_GUARD_ALERT');
       }
       break;
     }
     case 'DISMISS_ALERTS_BY_TYPE': {
       const { alertType } = payload;
-      const alerts = (state.guardAlerts?.[tenantId] || []).filter(
-        (a) => a.status === 'Active' && (!alertType || a.type === alertType)
-      );
-      if (alerts.length) {
-        await requireDbOk(
-          await db.from('guard_alerts').upsert(
-            alerts.map((a) => alertToRow({ ...a, status: 'Dismissed' }, tenantId))
-          ),
-          'guard_alerts DISMISS_ALERTS_BY_TYPE'
-        );
-      }
+      const dismissedIds = actionResult.dismissedIds || [];
+      const alerts = dismissedIds.length
+        ? (state.guardAlerts?.[tenantId] || []).filter((a) => dismissedIds.includes(a.id))
+        : (state.guardAlerts?.[tenantId] || []).filter(
+            (a) => a.status === 'Dismissed' && (!alertType || a.type === alertType)
+          );
+      await upsertGuardAlerts(alerts, tenantId, 'guard_alerts DISMISS_ALERTS_BY_TYPE');
       break;
     }
     default:

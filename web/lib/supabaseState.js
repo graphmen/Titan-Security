@@ -193,7 +193,7 @@ export async function runSupabaseAction(payload) {
   } else if (destructive) {
     await applyDirectRowDelete(action, payload, tenantId);
   } else if (usesOperationalDbWrite(action)) {
-    await persistOperationalActionToDb(action, payload, tenantId, getLocalState());
+    await persistOperationalActionToDb(action, payload, tenantId, getLocalState(), result);
   } else if (action === 'UPDATE_SYSTEM_SETTINGS') {
     await persistSystemSettingsToDb(getLocalState().systemSettings);
   } else if (!READ_ONLY_ACTIONS.has(action) && RELATIONAL_WRITE_ACTIONS.has(action)) {

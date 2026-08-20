@@ -1024,14 +1024,16 @@ export function processLocalAction(payload) {
       ensureAlertStore(state, tenantId);
       const now = new Date().toISOString();
       let count = 0;
+      const dismissedIds = [];
       state.guardAlerts[tenantId].forEach((a) => {
         if (a.status !== 'Active') return;
         if (alertType && a.type !== alertType) return;
         a.status = 'Dismissed';
         a.resolvedAt = now;
+        dismissedIds.push(a.id);
         count += 1;
       });
-      return { success: true, dismissedCount: count };
+      return { success: true, dismissedCount: count, dismissedIds };
     }
     case 'CREATE_PREMISE': {
       const {

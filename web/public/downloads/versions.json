@@ -6,16 +6,16 @@
                     "version":  "1.0.16",
                     "versionCode":  16,
                     "apkFile":  "titan-monitor-latest.apk",
-                    "notes":  "Published 2026-08-20 03:57"
+                    "notes":  "Published 2026-08-20 08:42"
                 },
     "supervisor":  {
                        "appId":  "supervisor",
                        "name":  "Titan Supervisor",
                        "description":  "Supervisor field app - teams, sites, and territory operations.",
-                       "version":  "1.1.7",
-                       "versionCode":  17,
+                       "version":  "1.1.8",
+                       "versionCode":  18,
                        "apkFile":  "titan-supervisor-latest.apk",
-                       "notes":  "Published 2026-08-20 03:57"
+                       "notes":  "Published 2026-08-20 08:42"
                    },
-    "updatedAt":  "2026-08-20T01:57:03.967Z"
+    "updatedAt":  "2026-08-20T06:42:30.021Z"
 }

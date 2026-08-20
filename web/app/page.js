@@ -32,6 +32,7 @@ import {
   UserCog,
   Map,
   MapPinned,
+  Database,
   Menu,
   X,
   LogOut,
@@ -40,6 +41,7 @@ import PremisesRegistration from './components/PremisesRegistration';
 import GuardManagement from './components/GuardManagement';
 import SupervisorManagement from './components/SupervisorManagement';
 import SystemSettings from './components/SystemSettings';
+import DatabaseExplorer from './components/DatabaseExplorer';
 import { mergeSystemSettings } from '../lib/systemSettings';
 import { apiFetch } from '../lib/apiClient';
 import { useRouter } from 'next/navigation';
@@ -512,6 +514,14 @@ export default function DashboardPage() {
           </li>
           <li>
             <button 
+              className={`sidebar-nav-item ${activeTab === 'data' ? 'active' : ''}`}
+              onClick={() => selectTab('data')}
+            >
+              <Database size={18} /> Data Explorer
+            </button>
+          </li>
+          <li>
+            <button 
               className={`sidebar-nav-item ${activeTab === 'master' ? 'active' : ''}`}
               onClick={() => selectTab('master')}
             >
@@ -561,7 +571,7 @@ export default function DashboardPage() {
           <div className="page-header-main">
             <h1 className="page-title">
               {activeTab === 'supervisors' ? 'Supervisor & Territory Management'
-                : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'map' ? 'GIS Operations Map' : activeTab === 'command' ? 'Command Centre Operations' : 'Master Administration'}
+                : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'map' ? 'GIS Operations Map' : activeTab === 'command' ? 'Command Centre Operations' : activeTab === 'data' ? 'Database Explorer' : 'Master Administration'}
             </h1>
             <p className="page-subtitle">
               {activeTab === 'supervisors'
@@ -574,6 +584,8 @@ export default function DashboardPage() {
                 ? 'GIS operations map — premises, patrol routes, live guards, NFC scans, alerts, and activity in one view.'
                 : activeTab === 'command' 
                 ? 'Real-time patrol monitoring, incident updates, and visitor tracking logs.' 
+                : activeTab === 'data'
+                ? 'Browse every collection in the live database — search, inspect JSON, and export records.'
                 : 'Configure onboarding templates, review custom checklists, and manage server data.'}
             </p>
             <p className="page-meta">
@@ -940,8 +952,15 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+        ) : activeTab === 'data' ? (
+          <DatabaseExplorer
+            state={state}
+            tenantId={state.activeTenantId}
+            dataSource={state.dataSource}
+            onRefresh={fetchState}
+            refreshing={loading}
+          />
         ) : (
-          /* ==================== MASTER ADMIN ==================== */
           <div className="dashboard-grid animate-fade-in">
             {/* Server database sync */}
             <div className="col-12">

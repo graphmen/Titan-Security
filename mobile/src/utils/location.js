@@ -133,19 +133,29 @@ function canUseCapacitorGeolocation() {
 }
 
 const PERM_VERSION_KEY = 'titan_location_perm_version';
+const PERM_SKIPPED_KEY = 'titan_location_perm_skipped';
 
 function isGrantedStatus(status) {
   return status === 'granted' || status === 'limited';
 }
 
-/** Whether this app version still needs the install/update location prompt. */
+/** Whether install/update should auto-request and show the permission explainer. */
 export function shouldPromptLocationPermission(appVersionCode) {
   if (!Capacitor.isNativePlatform()) return false;
+  const skipped = localStorage.getItem(PERM_SKIPPED_KEY) === '1';
   const last = parseInt(localStorage.getItem(PERM_VERSION_KEY) || '0', 10);
-  return !Number.isFinite(last) || last < appVersionCode;
+  if (!Number.isFinite(last) || last < appVersionCode) return true;
+  return !skipped;
 }
 
 export function markLocationPermissionPrompted(appVersionCode) {
+  localStorage.removeItem(PERM_SKIPPED_KEY);
+  localStorage.setItem(PERM_VERSION_KEY, String(appVersionCode));
+}
+
+/** User chose to continue without granting — don't nag every launch until next app update. */
+export function markLocationPermissionSkipped(appVersionCode) {
+  localStorage.setItem(PERM_SKIPPED_KEY, '1');
   localStorage.setItem(PERM_VERSION_KEY, String(appVersionCode));
 }
 
@@ -244,22 +254,34 @@ function triggerWebViewLocationPermission() {
   });
 }
 
-/** Run on app launch — returns whether to show the in-app permission explainer. */
+/** Run on app launch — auto-requests Android location dialog on install/update. */
 export async function initLocationPermissionFlow(appVersionCode) {
   if (!Capacitor.isNativePlatform()) {
     return { needsPrompt: false, granted: true };
   }
 
-  const { granted, status } = await checkLocationPermission();
+  let { granted, status } = await checkLocationPermission();
   if (granted) {
     markLocationPermissionPrompted(appVersionCode);
     return { needsPrompt: false, granted: true, status };
   }
 
+  const shouldAutoRequest = shouldPromptLocationPermission(appVersionCode);
+  if (shouldAutoRequest) {
+    const result = await requestLocationPermission();
+    granted = result.granted;
+    status = result.status;
+    if (granted) {
+      markLocationPermissionPrompted(appVersionCode);
+      return { needsPrompt: false, granted: true, status };
+    }
+  }
+
   return {
-    needsPrompt: shouldPromptLocationPermission(appVersionCode),
+    needsPrompt: shouldAutoRequest || status === 'denied',
     granted: false,
     status,
+    autoRequested: shouldAutoRequest,
   };
 }
 
@@ -301,14 +323,32 @@ export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 8;
 /** High-accuracy GPS for registering premises or patrol places on site. */
 export async function getLocationForPremiseCapture() {
   if (Capacitor.isNativePlatform()) {
+    const perm = await requestLocationPermission();
+    if (!perm.granted) {
+      throw new Error('Location permission denied — enable GPS in your phone Settings');
+    }
+
+    if (Capacitor.isPluginAvailable('TitanLocation')) {
+      try {
+        const pos = await titanGetPosition();
+        if (pos.accuracy != null && pos.accuracy <= PREMISE_MAX_ACCURACY_METERS) return pos;
+        if (pos.accuracy != null) {
+          throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${PREMISE_MAX_ACCURACY_METERS}m or better. Move to open sky and retry.`);
+        }
+        return pos;
+      } catch (err) {
+        if (!isPluginNotImplemented(err)) throw err;
+      }
+    }
+
     try {
       if (canUseCapacitorGeolocation()) {
-        await ensureNativePermissions();
         const pos = await nativeGetPosition(true, 35000);
         if (pos.accuracy != null && pos.accuracy <= PREMISE_MAX_ACCURACY_METERS) return pos;
         if (pos.accuracy != null) {
           throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${PREMISE_MAX_ACCURACY_METERS}m or better. Move to open sky and retry.`);
         }
+        return pos;
       }
     } catch (err) {
       if (!isPluginNotImplemented(err)) throw err;
@@ -321,14 +361,32 @@ export async function getLocationForPremiseCapture() {
 export async function getLocationForClockIn(maxAccuracyMeters = GUARD_CLOCKIN_MAX_ACCURACY_METERS) {
   const target = Math.min(GUARD_CLOCKIN_MAX_ACCURACY_METERS, maxAccuracyMeters);
   if (Capacitor.isNativePlatform()) {
+    const perm = await requestLocationPermission();
+    if (!perm.granted) {
+      throw new Error('Location permission denied — enable GPS in your phone Settings');
+    }
+
+    if (Capacitor.isPluginAvailable('TitanLocation')) {
+      try {
+        const pos = await titanGetPosition();
+        if (pos.accuracy != null && pos.accuracy <= target) return pos;
+        if (pos.accuracy != null) {
+          throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${target}m or better to clock in.`);
+        }
+        return pos;
+      } catch (err) {
+        if (!isPluginNotImplemented(err)) throw err;
+      }
+    }
+
     try {
       if (canUseCapacitorGeolocation()) {
-        await ensureNativePermissions();
         const pos = await nativeGetPosition(true, 35000);
         if (pos.accuracy != null && pos.accuracy <= target) return pos;
         if (pos.accuracy != null) {
           throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${target}m or better to clock in.`);
         }
+        return pos;
       }
     } catch (err) {
       if (!isPluginNotImplemented(err)) throw err;

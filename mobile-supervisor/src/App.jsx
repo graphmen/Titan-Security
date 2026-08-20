@@ -48,6 +48,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [locPermVisible, setLocPermVisible] = useState(false);
+  const [locPermAutoRequested, setLocPermAutoRequested] = useState(false);
 
   const { theme, toggleTheme, isDark } = useTheme();
 
@@ -74,8 +75,11 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { needsPrompt } = await initLocationPermissionFlow(APP_VERSION_CODE);
-      if (!cancelled && needsPrompt) setLocPermVisible(true);
+      const { needsPrompt, autoRequested } = await initLocationPermissionFlow(APP_VERSION_CODE);
+      if (!cancelled && needsPrompt) {
+        setLocPermAutoRequested(!!autoRequested);
+        setLocPermVisible(true);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -170,6 +174,7 @@ export default function App() {
     <LocationPermissionPrompt
       appName="Titan Supervisor"
       onDone={() => setLocPermVisible(false)}
+      autoRequested={locPermAutoRequested}
     />
   ) : null;
 

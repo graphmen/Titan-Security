@@ -1,32 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MapPin, Shield, Camera, Settings } from 'lucide-react';
 import { requestEssentialPermissions } from '../utils/permissions';
-import { markLocationPermissionPrompted } from '../utils/location';
+import { markLocationPermissionPrompted, markLocationPermissionSkipped } from '../utils/location';
 import { APP_VERSION_CODE } from '../config';
 
-export default function LocationPermissionPrompt({ appName, onDone }) {
+export default function LocationPermissionPrompt({ appName, onDone, autoRequested = false }) {
   const [busy, setBusy] = useState(false);
   const [denied, setDenied] = useState(false);
+  const startedRef = useRef(false);
 
-  const finish = () => {
+  const finishGranted = useCallback(() => {
     markLocationPermissionPrompted(APP_VERSION_CODE);
     onDone?.();
-  };
+  }, [onDone]);
 
-  const handleAllow = async () => {
+  const finishSkipped = useCallback(() => {
+    markLocationPermissionSkipped(APP_VERSION_CODE);
+    onDone?.();
+  }, [onDone]);
+
+  const handleAllow = useCallback(async () => {
     setBusy(true);
     setDenied(false);
     try {
       const { location } = await requestEssentialPermissions();
       if (location.granted) {
-        finish();
+        finishGranted();
       } else {
         setDenied(true);
       }
     } finally {
       setBusy(false);
     }
-  };
+  }, [finishGranted]);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    if (!autoRequested) {
+      handleAllow();
+    }
+  }, [autoRequested, handleAllow]);
 
   return (
     <div className="loc-perm-overlay" role="dialog" aria-modal="true" aria-labelledby="loc-perm-title">
@@ -59,9 +73,11 @@ export default function LocationPermissionPrompt({ appName, onDone }) {
         >
           {busy ? 'Requesting…' : denied ? 'Try again' : 'Allow permissions'}
         </button>
-        <button type="button" className="loc-perm-btn loc-perm-btn-secondary" onClick={finish} disabled={busy}>
-          {denied ? 'Continue without permissions' : 'Not now'}
-        </button>
+        {denied && (
+          <button type="button" className="loc-perm-btn loc-perm-btn-secondary" onClick={finishSkipped} disabled={busy}>
+            Continue without permissions
+          </button>
+        )}
       </div>
     </div>
   );

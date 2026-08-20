@@ -124,6 +124,7 @@ export default function App() {
   const [splashVisible, setSplashVisible] = useState(true);
   const [splashExiting, setSplashExiting] = useState(false);
   const [locPermVisible, setLocPermVisible] = useState(false);
+  const [locPermAutoRequested, setLocPermAutoRequested] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [tabKey, setTabKey] = useState(0);
@@ -154,8 +155,11 @@ export default function App() {
     if (splashVisible) return;
     let cancelled = false;
     (async () => {
-      const { needsPrompt } = await initLocationPermissionFlow(APP_VERSION_CODE);
-      if (!cancelled && needsPrompt) setLocPermVisible(true);
+      const { needsPrompt, autoRequested } = await initLocationPermissionFlow(APP_VERSION_CODE);
+      if (!cancelled && needsPrompt) {
+        setLocPermAutoRequested(!!autoRequested);
+        setLocPermVisible(true);
+      }
     })();
     return () => { cancelled = true; };
   }, [splashVisible]);
@@ -974,6 +978,7 @@ export default function App() {
         <LocationPermissionPrompt
           appName="Titan Monitor"
           onDone={() => setLocPermVisible(false)}
+          autoRequested={locPermAutoRequested}
         />
       )}
       {toast && (

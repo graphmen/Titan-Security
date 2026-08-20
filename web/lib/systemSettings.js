@@ -19,6 +19,8 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   missedClockInGraceMinutes: 30,
   /** Minutes after scheduled end before guard is reminded to clock out. */
   missedClockOutGraceMinutes: 30,
+  /** How often to re-alert for missed clock-in/out after dismiss or prior alert (supervisor/guard). */
+  missedShiftAlertRepeatMinutes: 30,
 };
 
 export function mergeSystemSettings(raw) {
@@ -72,5 +74,6 @@ export function getShiftTimingSettings(state) {
     clockInReminderMinutes: num(s.shiftClockInReminderMinutes, 30),
     missedClockInGraceMinutes: num(s.missedClockInGraceMinutes, 30),
     missedClockOutGraceMinutes: num(s.missedClockOutGraceMinutes, 30),
+    missedShiftAlertRepeatMinutes: num(s.missedShiftAlertRepeatMinutes, 30),
   };
 }

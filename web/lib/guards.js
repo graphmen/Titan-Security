@@ -110,6 +110,36 @@ export function pushGuardAlert(state, tenantId, alert) {
   return entry;
 }
 
+/** Missed clock-in/out alerts repeat every N minutes until the guard clocks in or out. */
+export function pushRecurringComplianceAlert(state, tenantId, alert, repeatMinutes = 30) {
+  ensureAlertStore(state, tenantId);
+  const key = alertDedupeKey(alert);
+  const matching = state.guardAlerts[tenantId].filter((a) => alertDedupeKey(a) === key);
+  if (matching.some((a) => a.status === 'Active')) return null;
+
+  const repeatMs = Math.max(1, repeatMinutes) * 60 * 1000;
+  const latest = matching.reduce((best, a) => {
+    if (!best) return a;
+    const aAt = new Date(a.resolvedAt || a.createdAt).getTime();
+    const bAt = new Date(best.resolvedAt || best.createdAt).getTime();
+    return aAt > bAt ? a : best;
+  }, null);
+
+  if (latest) {
+    const lastAt = new Date(latest.resolvedAt || latest.createdAt).getTime();
+    if (Date.now() - lastAt < repeatMs) return null;
+  }
+
+  const entry = {
+    id: generateAlertId(),
+    status: 'Active',
+    createdAt: new Date().toISOString(),
+    ...alert,
+  };
+  state.guardAlerts[tenantId].unshift(entry);
+  return entry;
+}
+
 export function dismissGuardAlerts(state, tenantId, guardId, type) {
   ensureAlertStore(state, tenantId);
   state.guardAlerts[tenantId].forEach((a) => {
@@ -204,7 +234,11 @@ export function getShiftEndDate(shift) {
 
 /** Alert supervisors when guards miss clock-in; alert guards when they miss clock-out. */
 export function evaluateShiftCompliance(state, tenantId) {
-  const { missedClockInGraceMinutes, missedClockOutGraceMinutes } = getShiftTimingSettings(state);
+  const {
+    missedClockInGraceMinutes,
+    missedClockOutGraceMinutes,
+    missedShiftAlertRepeatMinutes,
+  } = getShiftTimingSettings(state);
   const now = Date.now();
   const today = todayDateStr();
   const shifts = state.shifts?.[tenantId] || [];
@@ -230,7 +264,7 @@ export function evaluateShiftCompliance(state, tenantId) {
     if (now >= missedInAt && shift.status === 'Scheduled' && !isOnDuty(shift.guardId, shift)) {
       const guardName = getGuardName(state, tenantId, shift.guardId);
       const premise = premises.find((p) => p.id === shift.premiseId);
-      pushGuardAlert(state, tenantId, {
+      pushRecurringComplianceAlert(state, tenantId, {
         type: 'missed_clock_in',
         severity: 'critical',
         guardId: shift.guardId,
@@ -238,7 +272,7 @@ export function evaluateShiftCompliance(state, tenantId) {
         premiseId: shift.premiseId,
         shiftId: shift.id,
         message: `${guardName} has not clocked in at ${premise?.name || 'site'} (${shift.startTime}–${shift.endTime}).`,
-      });
+      }, missedShiftAlertRepeatMinutes);
     }
   });
 
@@ -264,7 +298,7 @@ export function evaluateShiftCompliance(state, tenantId) {
 
       const guardName = getGuardName(state, tenantId, att.guardId);
       const premise = premises.find((p) => p.id === att.premiseId);
-      pushGuardAlert(state, tenantId, {
+      pushRecurringComplianceAlert(state, tenantId, {
         type: 'missed_clock_out',
         severity: 'warning',
         guardId: att.guardId,
@@ -272,7 +306,7 @@ export function evaluateShiftCompliance(state, tenantId) {
         premiseId: att.premiseId,
         shiftId: shift.id,
         message: `${guardName} has not clocked out from ${premise?.name || 'site'} — shift ended at ${shift.endTime}. Return to site geofence to clock out.`,
-      });
+      }, missedShiftAlertRepeatMinutes);
     });
 }
 

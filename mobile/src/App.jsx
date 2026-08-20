@@ -125,7 +125,7 @@ export default function App() {
 
   const [swapForm, setSwapForm] = useState({ shiftId: '', targetGuardId: '', reason: '' });
   const movementAlertPlayed = useRef(false);
-  const missedClockOutPlayed = useRef(false);
+  const missedClockOutPlayed = useRef(null);
   const shiftReminderPlayed = useRef(new Set());
   const hasLoadedStateRef = useRef(false);
   const voiceRecorderRef = useRef(null);
@@ -320,7 +320,7 @@ export default function App() {
       });
       showToast('Shift ended — clocked out at premises');
       movementAlertPlayed.current = false;
-      missedClockOutPlayed.current = false;
+      missedClockOutPlayed.current = null;
       fetchState();
     } catch (e) {
       showToast(e.message || 'Clock-out failed — you must be at the premises geofence', 'error');
@@ -966,13 +966,18 @@ export default function App() {
     const alerts = (state.guardAlerts?.[tenantId] || []).filter(
       (a) => a.guardId === guardId && a.status === 'Active' && a.type === 'missed_clock_out'
     );
-    if (alerts.length > 0 && !missedClockOutPlayed.current) {
-      playMissedClockOutBeep();
-      missedClockOutPlayed.current = true;
-      showToast('Shift ended — return to premises geofence to clock out', 'error');
-    }
-    if (alerts.length === 0) {
-      missedClockOutPlayed.current = false;
+    if (alerts.length > 0) {
+      const latest = alerts.reduce((best, a) => {
+        if (!best) return a;
+        return new Date(a.createdAt).getTime() > new Date(best.createdAt).getTime() ? a : best;
+      }, null);
+      if (latest && latest.id !== missedClockOutPlayed.current) {
+        playMissedClockOutBeep();
+        missedClockOutPlayed.current = latest.id;
+        showToast('Shift ended — return to premises geofence to clock out', 'error');
+      }
+    } else {
+      missedClockOutPlayed.current = null;
     }
   }, [state, guardId, tenantId]);
 

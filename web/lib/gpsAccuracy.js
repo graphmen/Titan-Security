@@ -1,8 +1,8 @@
 /** Premise / patrol place GPS must be captured within this accuracy (meters). */
-export const PREMISE_MAX_ACCURACY_METERS = 10;
+export const PREMISE_MAX_ACCURACY_METERS = 5;
 
 /** Guard clock-in GPS must be at least this accurate (meters). */
-export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 8;
+export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 5;
 
 export function formatAccuracyMeters(accuracy) {
   if (!Number.isFinite(Number(accuracy))) return 'unknown';
@@ -24,7 +24,7 @@ export function isClockInAccuracyAcceptable(accuracy, geofenceRadiusMeters) {
 }
 
 export function premiseAccuracyError(accuracy) {
-  return `GPS accuracy ${formatAccuracyMeters(accuracy)} is too low — capture on site with ±${PREMISE_MAX_ACCURACY_METERS}m or better (open sky, hold still)`;
+  return `GPS accuracy ${formatAccuracyMeters(accuracy)} is too low — capture on site with ±${PREMISE_MAX_ACCURACY_METERS}m or better (open sky, hold still 15–20s)`;
 }
 
 export function clockInAccuracyError(accuracy, geofenceRadiusMeters) {

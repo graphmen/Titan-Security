@@ -1,6 +1,10 @@
 import { PREMISE_MAX_ACCURACY_METERS, premiseAccuracyError } from './gpsAccuracy.js';
 
-const DEFAULT_TIMEOUT_MS = 35000;
+const DEFAULT_TIMEOUT_MS = 60000;
+const WARMUP_MS = 10000;
+const STABILIZE_MS = 6000;
+const MIN_SAMPLES = 3;
+const EXCEPTIONAL_ACCURACY = 3;
 
 function mapWebGeoError(err) {
   const code = err?.code;
@@ -11,7 +15,7 @@ function mapWebGeoError(err) {
 }
 
 /**
- * Watch GPS until accuracy meets maxAccuracyMeters or timeout.
+ * Watch GPS with warmup + stabilization until accuracy meets maxAccuracyMeters or timeout.
  * Returns { lat, lng, accuracy }.
  */
 export function captureHighAccuracyPosition(maxAccuracyMeters = PREMISE_MAX_ACCURACY_METERS, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -22,14 +26,37 @@ export function captureHighAccuracyPosition(maxAccuracyMeters = PREMISE_MAX_ACCU
     }
 
     let best = null;
+    let bestQualified = null;
+    let qualifiedCount = 0;
     let settled = false;
+    let stabilizeTimerId = null;
+    const startMs = Date.now();
 
     const finish = (fn) => {
       if (settled) return;
       settled = true;
       navigator.geolocation.clearWatch(watchId);
       clearTimeout(timerId);
+      if (stabilizeTimerId) clearTimeout(stabilizeTimerId);
       fn();
+    };
+
+    const tryFinishStabilized = () => {
+      if (bestQualified && qualifiedCount >= MIN_SAMPLES && bestQualified.accuracy <= maxAccuracyMeters) {
+        finish(() => resolve(bestQualified));
+        return;
+      }
+      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters) {
+        finish(() => reject(new Error(
+          `GPS still settling — got ±${Math.round(bestQualified.accuracy)}m but need ${MIN_SAMPLES} stable readings. Hold still in open sky 15–20s and retry.`
+        )));
+        return;
+      }
+      if (best) {
+        finish(() => reject(new Error(premiseAccuracyError(best.accuracy))));
+        return;
+      }
+      finish(() => reject(new Error('Could not get a GPS fix — enable location and try outdoors')));
     };
 
     const watchId = navigator.geolocation.watchPosition(
@@ -41,8 +68,18 @@ export function captureHighAccuracyPosition(maxAccuracyMeters = PREMISE_MAX_ACCU
           accuracy,
         };
         if (!best || accuracy < best.accuracy) best = sample;
-        if (accuracy <= maxAccuracyMeters) {
-          finish(() => resolve(sample));
+
+        const elapsed = Date.now() - startMs;
+        const pastWarmup = elapsed >= WARMUP_MS;
+        const exceptional = accuracy <= EXCEPTIONAL_ACCURACY;
+        if (!pastWarmup && !exceptional) return;
+        if (accuracy > maxAccuracyMeters) return;
+
+        qualifiedCount += 1;
+        if (!bestQualified || accuracy < bestQualified.accuracy) bestQualified = sample;
+
+        if (!stabilizeTimerId) {
+          stabilizeTimerId = setTimeout(tryFinishStabilized, STABILIZE_MS);
         }
       },
       (err) => finish(() => reject(mapWebGeoError(err))),
@@ -50,15 +87,11 @@ export function captureHighAccuracyPosition(maxAccuracyMeters = PREMISE_MAX_ACCU
     );
 
     const timerId = setTimeout(() => {
-      if (best && best.accuracy <= maxAccuracyMeters) {
-        finish(() => resolve(best));
+      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters && qualifiedCount >= MIN_SAMPLES) {
+        finish(() => resolve(bestQualified));
         return;
       }
-      if (best) {
-        finish(() => reject(new Error(premiseAccuracyError(best.accuracy))));
-        return;
-      }
-      finish(() => reject(new Error('Could not get a GPS fix — enable location and try outdoors')));
+      tryFinishStabilized();
     }, timeoutMs);
   });
 }

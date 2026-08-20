@@ -140,8 +140,12 @@ export default async function DownloadsPage() {
 
                     <dl className="releases-meta-list">
                       <div className="releases-meta-row">
-                        <dt><Package size={14} /> Package name</dt>
+                        <dt><Package size={14} /> APK file</dt>
                         <dd>{app.apkFile}</dd>
+                      </div>
+                      <div className="releases-meta-row">
+                        <dt><Layers size={14} /> Version</dt>
+                        <dd>v{app.version} (build {app.versionCode})</dd>
                       </div>
                       <div className="releases-meta-row">
                         <dt><HardDrive size={14} /> File size</dt>
@@ -169,7 +173,9 @@ export default async function DownloadsPage() {
                       </a>
                     )}
 
-                    {app.notes && <p className="releases-apk-notes">{app.notes}</p>}
+                    {app.notes && (
+                      <p className="releases-apk-notes"><strong>What&apos;s new:</strong> {app.notes}</p>
+                    )}
                   </article>
                 );
               })}

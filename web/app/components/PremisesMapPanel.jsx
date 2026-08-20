@@ -909,7 +909,7 @@ export default function PremisesMapPanel({
     const empty = (
       <div className="premises-map-empty" style={{ minHeight: height }}>
         <p style={{ fontWeight: 600, marginBottom: '0.35rem' }}>GIS map awaiting site data</p>
-        <p style={{ fontSize: '0.85rem' }}>Register premises and capture GPS on site (±10m) to populate the operations map.</p>
+        <p style={{ fontSize: '0.85rem' }}>Register premises and capture GPS on site (±5m) to populate the operations map.</p>
         <p style={{ fontSize: '0.78rem', marginTop: '0.35rem' }}>
           Patrol places, NFC checkpoints, guard trails, and live alerts will appear here automatically.
         </p>

@@ -38,42 +38,79 @@ function webGetPosition(options) {
   });
 }
 
-function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 35000) {
+function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 60000, options = {}) {
+  const warmupMs = options.warmupMs ?? 10000;
+  const stabilizeMs = options.stabilizeMs ?? 6000;
+  const minSamples = options.minSamples ?? 3;
+  const exceptionalAccuracy = 3;
+
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error('GPS not available on this device'));
       return;
     }
     let best = null;
+    let bestQualified = null;
+    let qualifiedCount = 0;
     let settled = false;
+    let stabilizeTimerId = null;
+    const startMs = Date.now();
+
     const finish = (fn) => {
       if (settled) return;
       settled = true;
       navigator.geolocation.clearWatch(watchId);
       clearTimeout(timerId);
+      if (stabilizeTimerId) clearTimeout(stabilizeTimerId);
       fn();
     };
+
+    const tryFinishStabilized = () => {
+      if (bestQualified && qualifiedCount >= minSamples && bestQualified.accuracy <= maxAccuracyMeters) {
+        finish(() => resolve(bestQualified));
+        return;
+      }
+      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters) {
+        finish(() => reject(new Error(
+          `GPS still settling — got ±${Math.round(bestQualified.accuracy)}m but need ${minSamples} stable readings. Hold still in open sky 15–20s and retry.`
+        )));
+        return;
+      }
+      if (best?.accuracy != null) {
+        finish(() => reject(new Error(`GPS accuracy ±${Math.round(best.accuracy)}m — need ±${maxAccuracyMeters}m or better. Move to open sky, hold still 15–20s, and retry.`)));
+        return;
+      }
+      finish(() => reject(new Error('Could not get a GPS fix — enable location and try outdoors')));
+    };
+
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const sample = mapPosition(pos);
         if (!best || (sample.accuracy != null && sample.accuracy < best.accuracy)) best = sample;
-        if (sample.accuracy != null && sample.accuracy <= maxAccuracyMeters) {
-          finish(() => resolve(sample));
+
+        const elapsed = Date.now() - startMs;
+        const pastWarmup = elapsed >= warmupMs;
+        const exceptional = sample.accuracy != null && sample.accuracy <= exceptionalAccuracy;
+        if (!pastWarmup && !exceptional) return;
+        if (sample.accuracy == null || sample.accuracy > maxAccuracyMeters) return;
+
+        qualifiedCount += 1;
+        if (!bestQualified || sample.accuracy < bestQualified.accuracy) bestQualified = sample;
+
+        if (!stabilizeTimerId) {
+          stabilizeTimerId = setTimeout(tryFinishStabilized, stabilizeMs);
         }
       },
       (err) => finish(() => reject(mapWebGeoError(err))),
       { enableHighAccuracy: true, maximumAge: 0, timeout: timeoutMs }
     );
+
     const timerId = setTimeout(() => {
-      if (best?.accuracy != null && best.accuracy <= maxAccuracyMeters) {
-        finish(() => resolve(best));
+      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters && qualifiedCount >= minSamples) {
+        finish(() => resolve(bestQualified));
         return;
       }
-      if (best?.accuracy != null) {
-        finish(() => reject(new Error(`GPS accuracy ±${Math.round(best.accuracy)}m — need ±${maxAccuracyMeters}m or better. Move to open sky and retry.`)));
-        return;
-      }
-      finish(() => reject(new Error('Could not get a GPS fix — enable location and try outdoors')));
+      tryFinishStabilized();
     }, timeoutMs);
   });
 }
@@ -128,8 +165,14 @@ async function titanGetPosition() {
   return mapPosition({ coords: pos.coords });
 }
 
-async function titanWatchBestPosition(maxAccuracyMeters, timeoutMs = 45000) {
-  const pos = await TitanLocation.getHighAccuracyPosition({ maxAccuracyMeters, timeoutMs });
+async function titanWatchBestPosition(maxAccuracyMeters, timeoutMs = 60000, options = {}) {
+  const pos = await TitanLocation.getHighAccuracyPosition({
+    maxAccuracyMeters,
+    timeoutMs,
+    warmupMs: options.warmupMs ?? 10000,
+    stabilizeMs: options.stabilizeMs ?? 6000,
+    minSamples: options.minSamples ?? 3,
+  });
   const mapped = mapPosition({ coords: pos.coords });
   if (mapped.accuracy == null) {
     throw new Error('Could not get a GPS fix — enable location and try outdoors');
@@ -326,8 +369,18 @@ export async function getLocation() {
   return webGetPositionWithRetries();
 }
 
-export const PREMISE_MAX_ACCURACY_METERS = 10;
-export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 8;
+export const PREMISE_MAX_ACCURACY_METERS = 5;
+export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 5;
+export const PREMISE_CAPTURE_TIMEOUT_MS = 60000;
+export const PREMISE_GPS_WARMUP_MS = 10000;
+export const PREMISE_GPS_STABILIZE_MS = 6000;
+export const PREMISE_GPS_MIN_SAMPLES = 3;
+
+const premiseCaptureOptions = {
+  warmupMs: PREMISE_GPS_WARMUP_MS,
+  stabilizeMs: PREMISE_GPS_STABILIZE_MS,
+  minSamples: PREMISE_GPS_MIN_SAMPLES,
+};
 
 /** High-accuracy GPS for registering premises or patrol places on site. */
 export async function getLocationForPremiseCapture() {
@@ -338,7 +391,7 @@ export async function getLocationForPremiseCapture() {
 
   if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('TitanLocation')) {
     try {
-      return await titanWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, 45000);
+      return await titanWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, PREMISE_CAPTURE_TIMEOUT_MS, premiseCaptureOptions);
     } catch (err) {
       if (!isPluginNotImplemented(err)) throw err;
     }
@@ -348,16 +401,16 @@ export async function getLocationForPremiseCapture() {
     try {
       if (canUseCapacitorGeolocation()) {
         await ensureNativePermissions();
-        return webWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, 45000);
+        return webWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, PREMISE_CAPTURE_TIMEOUT_MS, premiseCaptureOptions);
       }
     } catch (err) {
       if (!isPluginNotImplemented(err)) throw err;
     }
   }
-  return webWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, 45000);
+  return webWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, PREMISE_CAPTURE_TIMEOUT_MS, premiseCaptureOptions);
 }
 
-/** High-accuracy GPS for guard clock-in geofencing (5–8m zone). */
+/** High-accuracy GPS for guard clock-in geofencing (5m zone). */
 export async function getLocationForClockIn(maxAccuracyMeters = GUARD_CLOCKIN_MAX_ACCURACY_METERS) {
   const target = Math.min(GUARD_CLOCKIN_MAX_ACCURACY_METERS, maxAccuracyMeters);
   const perm = await requestLocationPermission();
@@ -367,7 +420,7 @@ export async function getLocationForClockIn(maxAccuracyMeters = GUARD_CLOCKIN_MA
 
   if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('TitanLocation')) {
     try {
-      return await titanWatchBestPosition(target, 45000);
+      return await titanWatchBestPosition(target, PREMISE_CAPTURE_TIMEOUT_MS, premiseCaptureOptions);
     } catch (err) {
       if (!isPluginNotImplemented(err)) throw err;
     }
@@ -377,11 +430,11 @@ export async function getLocationForClockIn(maxAccuracyMeters = GUARD_CLOCKIN_MA
     try {
       if (canUseCapacitorGeolocation()) {
         await ensureNativePermissions();
-        return webWatchBestPosition(target, 45000);
+        return webWatchBestPosition(target, PREMISE_CAPTURE_TIMEOUT_MS, premiseCaptureOptions);
       }
     } catch (err) {
       if (!isPluginNotImplemented(err)) throw err;
     }
   }
-  return webWatchBestPosition(target, 45000);
+  return webWatchBestPosition(target, PREMISE_CAPTURE_TIMEOUT_MS, premiseCaptureOptions);
 }

@@ -11,13 +11,14 @@ import android.os.Handler;
 import android.os.Looper;
 import androidx.core.app.ActivityCompat;
 import com.getcapacitor.JSObject;
-import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 @CapacitorPlugin(
@@ -33,6 +34,8 @@ import java.util.concurrent.atomic.AtomicReference;
     }
 )
 public class TitanLocationPlugin extends Plugin {
+
+    private static final float EXCEPTIONAL_ACCURACY_METERS = 3f;
 
     @PluginMethod
     public void checkPermissions(PluginCall call) {
@@ -62,15 +65,15 @@ public class TitanLocationPlugin extends Plugin {
         fetchLocationQuick(call);
     }
 
-    /** Watch GPS until accuracy meets maxAccuracyMeters (premise capture / clock-in). */
+    /** Watch GPS with warmup + stabilization until accuracy meets maxAccuracyMeters. */
     @PluginMethod
     public void getHighAccuracyPosition(PluginCall call) {
         if (!hasFineLocation()) {
             requestPermissionForAlias("location", call, "highAccuracyPermsCallback");
             return;
         }
-        float maxAccuracy = call.getFloat("maxAccuracyMeters", 15f);
-        int timeoutMs = call.getInt("timeoutMs", 45000);
+        float maxAccuracy = call.getFloat("maxAccuracyMeters", 5f);
+        int timeoutMs = call.getInt("timeoutMs", 60000);
         watchForBestAccuracy(call, maxAccuracy, timeoutMs);
     }
 
@@ -89,8 +92,8 @@ public class TitanLocationPlugin extends Plugin {
             call.reject("Precise location permission denied — enable GPS in your phone Settings");
             return;
         }
-        float maxAccuracy = call.getFloat("maxAccuracyMeters", 15f);
-        int timeoutMs = call.getInt("timeoutMs", 45000);
+        float maxAccuracy = call.getFloat("maxAccuracyMeters", 5f);
+        int timeoutMs = call.getInt("timeoutMs", 60000);
         watchForBestAccuracy(call, maxAccuracy, timeoutMs);
     }
 
@@ -153,6 +156,10 @@ public class TitanLocationPlugin extends Plugin {
         );
     }
 
+    /**
+     * High-accuracy capture: GPS-only, warmup period, then stabilization window
+     * requiring multiple good samples before returning the best fix.
+     */
     private void watchForBestAccuracy(PluginCall call, float maxAccuracyMeters, long timeoutMs) {
         Context ctx = getContext();
         LocationManager lm = (LocationManager) ctx.getSystemService(Context.LOCATION_SERVICE);
@@ -166,28 +173,51 @@ public class TitanLocationPlugin extends Plugin {
             return;
         }
 
-        Location cached = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-        if (cached != null && cached.hasAccuracy() && cached.getAccuracy() <= maxAccuracyMeters
-            && System.currentTimeMillis() - cached.getTime() < 15000) {
-            resolveLocation(call, cached);
-            return;
-        }
+        final long warmupMs = call.getInt("warmupMs", 10000);
+        final long stabilizeMs = call.getInt("stabilizeMs", 6000);
+        final int minSamples = call.getInt("minSamples", 3);
+        final long startMs = System.currentTimeMillis();
 
         Handler handler = new Handler(Looper.getMainLooper());
-        AtomicReference<Location> bestRef = new AtomicReference<>();
+        AtomicReference<Location> bestOverall = new AtomicReference<>();
+        AtomicReference<Location> bestQualified = new AtomicReference<>();
+        AtomicInteger qualifiedCount = new AtomicInteger(0);
+        AtomicBoolean stabilizeScheduled = new AtomicBoolean(false);
+        AtomicBoolean resolved = new AtomicBoolean(false);
 
         LocationListener listener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
-                if (!location.hasAccuracy()) return;
-                Location current = bestRef.get();
+                if (resolved.get() || !location.hasAccuracy()) return;
+
+                Location current = bestOverall.get();
                 if (current == null || location.getAccuracy() < current.getAccuracy()) {
-                    bestRef.set(location);
+                    bestOverall.set(location);
                 }
-                if (location.getAccuracy() <= maxAccuracyMeters) {
-                    handler.removeCallbacksAndMessages(null);
-                    lm.removeUpdates(this);
-                    resolveLocation(call, location);
+
+                long elapsed = System.currentTimeMillis() - startMs;
+                boolean pastWarmup = elapsed >= warmupMs;
+                boolean exceptional = location.getAccuracy() <= EXCEPTIONAL_ACCURACY_METERS;
+
+                if (!pastWarmup && !exceptional) {
+                    return;
+                }
+
+                if (location.getAccuracy() > maxAccuracyMeters) {
+                    return;
+                }
+
+                qualifiedCount.incrementAndGet();
+                Location bestQ = bestQualified.get();
+                if (bestQ == null || location.getAccuracy() < bestQ.getAccuracy()) {
+                    bestQualified.set(location);
+                }
+
+                if (stabilizeScheduled.compareAndSet(false, true)) {
+                    handler.postDelayed(() -> finishStabilized(
+                        call, lm, this, handler, resolved, bestOverall, bestQualified,
+                        qualifiedCount, maxAccuracyMeters, minSamples
+                    ), stabilizeMs);
                 }
             }
 
@@ -202,24 +232,67 @@ public class TitanLocationPlugin extends Plugin {
         };
 
         Runnable onTimeout = () -> {
+            if (resolved.get()) return;
+            resolved.set(true);
             lm.removeUpdates(listener);
-            Location best = bestRef.get();
-            if (best != null && best.hasAccuracy()) {
-                int acc = Math.round(best.getAccuracy());
-                int target = Math.round(maxAccuracyMeters);
-                call.reject(
-                    "GPS accuracy ±" + acc + "m — need ±" + target
-                        + "m or better. Move to open sky and retry."
-                );
-            } else {
-                call.reject("Could not get a GPS fix — enable location and try outdoors");
-            }
+            handler.removeCallbacksAndMessages(null);
+            rejectWithBest(call, bestOverall.get(), maxAccuracyMeters);
         };
 
         handler.postDelayed(onTimeout, timeoutMs);
         lm.requestLocationUpdates(
-            LocationManager.GPS_PROVIDER, 500L, 0f, listener, Looper.getMainLooper()
+            LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper()
         );
+    }
+
+    private void finishStabilized(
+        PluginCall call,
+        LocationManager lm,
+        LocationListener listener,
+        Handler handler,
+        AtomicBoolean resolved,
+        AtomicReference<Location> bestOverall,
+        AtomicReference<Location> bestQualified,
+        AtomicInteger qualifiedCount,
+        float maxAccuracyMeters,
+        int minSamples
+    ) {
+        if (resolved.get()) return;
+        resolved.set(true);
+        lm.removeUpdates(listener);
+        handler.removeCallbacksAndMessages(null);
+
+        Location pick = bestQualified.get();
+        int count = qualifiedCount.get();
+
+        if (pick != null && pick.getAccuracy() <= maxAccuracyMeters && count >= minSamples) {
+            resolveLocation(call, pick);
+            return;
+        }
+
+        if (pick != null && pick.getAccuracy() <= maxAccuracyMeters) {
+            int acc = Math.round(pick.getAccuracy());
+            call.reject(
+                "GPS still settling — got ±" + acc + "m but need " + minSamples
+                    + " stable readings. Hold still in open sky 15–20s and retry."
+            );
+            return;
+        }
+
+        rejectWithBest(call, bestOverall.get(), maxAccuracyMeters);
+    }
+
+    private void rejectWithBest(PluginCall call, Location best, float maxAccuracyMeters) {
+        if (best != null && best.hasAccuracy()) {
+            int acc = Math.round(best.getAccuracy());
+            int target = Math.round(maxAccuracyMeters);
+            call.reject(
+                "GPS accuracy ±" + acc + "m — need ±" + target
+                    + "m or better. Move to open sky, hold still 15–20s, and retry."
+            );
+        } else {
+            call.reject("Could not get a GPS fix — enable location and try outdoors");
+        }
     }
 
     private void resolveLocation(PluginCall call, Location loc) {

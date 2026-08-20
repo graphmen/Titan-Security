@@ -1,8 +1,8 @@
 export const TITAN_TENANT_ID = 'titan';
 
-export const GEOFENCE_MIN_METERS = 10;
-export const GEOFENCE_MAX_METERS = 50;
-export const GEOFENCE_DEFAULT_METERS = 30;
+export const GEOFENCE_MIN_METERS = 5;
+export const GEOFENCE_MAX_METERS = 8;
+export const GEOFENCE_DEFAULT_METERS = 6;
 
 export const DEFAULT_SYSTEM_SETTINGS = {
   companyName: 'Titan Protection Security',

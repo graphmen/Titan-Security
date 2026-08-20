@@ -152,8 +152,8 @@ export default function SystemSettings({
             <SelectSetting
               label="Geofence radius"
               hint="Guards must be within this distance to clock in at a premises."
-              value={systemSettings.geofenceRadiusMeters ?? 30}
-              options={[10, 15, 20, 25, 30, 40, 50]}
+              value={systemSettings.geofenceRadiusMeters ?? 6}
+              options={[5, 6, 7, 8]}
               suffix="m"
               disabled={savingKey === 'geofenceRadiusMeters'}
               onChange={(v) => save('geofenceRadiusMeters', v)}

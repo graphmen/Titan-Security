@@ -1,0 +1,64 @@
+import { PREMISE_MAX_ACCURACY_METERS, premiseAccuracyError } from './gpsAccuracy.js';
+
+const DEFAULT_TIMEOUT_MS = 35000;
+
+function mapWebGeoError(err) {
+  const code = err?.code;
+  if (code === 1) return new Error('Location permission denied — allow location access in your browser');
+  if (code === 2) return new Error('GPS unavailable — check that location services are on');
+  if (code === 3) return new Error('GPS timed out — move to an open area and try again');
+  return new Error('Could not get GPS location');
+}
+
+/**
+ * Watch GPS until accuracy meets maxAccuracyMeters or timeout.
+ * Returns { lat, lng, accuracy }.
+ */
+export function captureHighAccuracyPosition(maxAccuracyMeters = PREMISE_MAX_ACCURACY_METERS, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      reject(new Error('Location is not available in this browser'));
+      return;
+    }
+
+    let best = null;
+    let settled = false;
+
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watchId);
+      clearTimeout(timerId);
+      fn();
+    };
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const accuracy = pos.coords.accuracy;
+        const sample = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy,
+        };
+        if (!best || accuracy < best.accuracy) best = sample;
+        if (accuracy <= maxAccuracyMeters) {
+          finish(() => resolve(sample));
+        }
+      },
+      (err) => finish(() => reject(mapWebGeoError(err))),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: timeoutMs }
+    );
+
+    const timerId = setTimeout(() => {
+      if (best && best.accuracy <= maxAccuracyMeters) {
+        finish(() => resolve(best));
+        return;
+      }
+      if (best) {
+        finish(() => reject(new Error(premiseAccuracyError(best.accuracy))));
+        return;
+      }
+      finish(() => reject(new Error('Could not get a GPS fix — enable location and try outdoors')));
+    }, timeoutMs);
+  });
+}

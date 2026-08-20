@@ -16,6 +16,14 @@ function isPluginNotImplemented(err) {
   return msg.includes('not implemented') || msg.includes('plugin is not');
 }
 
+function mapPosition(pos) {
+  return {
+    lat: pos.coords.latitude,
+    lng: pos.coords.longitude,
+    accuracy: pos.coords.accuracy ?? null,
+  };
+}
+
 function webGetPosition(options) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -23,10 +31,50 @@ function webGetPosition(options) {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) => resolve(mapPosition(pos)),
       (err) => reject(mapWebGeoError(err)),
       options
     );
+  });
+}
+
+function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 35000) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('GPS not available on this device'));
+      return;
+    }
+    let best = null;
+    let settled = false;
+    const finish = (fn) => {
+      if (settled) return;
+      settled = true;
+      navigator.geolocation.clearWatch(watchId);
+      clearTimeout(timerId);
+      fn();
+    };
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const sample = mapPosition(pos);
+        if (!best || (sample.accuracy != null && sample.accuracy < best.accuracy)) best = sample;
+        if (sample.accuracy != null && sample.accuracy <= maxAccuracyMeters) {
+          finish(() => resolve(sample));
+        }
+      },
+      (err) => finish(() => reject(mapWebGeoError(err))),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: timeoutMs }
+    );
+    const timerId = setTimeout(() => {
+      if (best?.accuracy != null && best.accuracy <= maxAccuracyMeters) {
+        finish(() => resolve(best));
+        return;
+      }
+      if (best?.accuracy != null) {
+        finish(() => reject(new Error(`GPS accuracy ±${Math.round(best.accuracy)}m — need ±${maxAccuracyMeters}m or better. Move to open sky and retry.`)));
+        return;
+      }
+      finish(() => reject(new Error('Could not get a GPS fix — enable location and try outdoors')));
+    }, timeoutMs);
   });
 }
 
@@ -56,7 +104,7 @@ async function nativeGetPosition(highAccuracy, timeoutMs) {
     enableHighAccuracy: highAccuracy,
     timeout: timeoutMs,
   });
-  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  return mapPosition(pos);
 }
 
 async function capacitorGetPosition() {
@@ -77,7 +125,7 @@ async function capacitorGetPosition() {
 
 async function titanGetPosition() {
   const pos = await TitanLocation.getCurrentPosition();
-  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  return mapPosition({ coords: pos.coords });
 }
 
 function canUseCapacitorGeolocation() {
@@ -245,4 +293,46 @@ export async function getLocation() {
   }
 
   return webGetPositionWithRetries();
+}
+
+export const PREMISE_MAX_ACCURACY_METERS = 10;
+export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 8;
+
+/** High-accuracy GPS for registering premises or patrol places on site. */
+export async function getLocationForPremiseCapture() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      if (canUseCapacitorGeolocation()) {
+        await ensureNativePermissions();
+        const pos = await nativeGetPosition(true, 35000);
+        if (pos.accuracy != null && pos.accuracy <= PREMISE_MAX_ACCURACY_METERS) return pos;
+        if (pos.accuracy != null) {
+          throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${PREMISE_MAX_ACCURACY_METERS}m or better. Move to open sky and retry.`);
+        }
+      }
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) throw err;
+    }
+  }
+  return webWatchBestPosition(PREMISE_MAX_ACCURACY_METERS);
+}
+
+/** High-accuracy GPS for guard clock-in geofencing (5–8m zone). */
+export async function getLocationForClockIn(maxAccuracyMeters = GUARD_CLOCKIN_MAX_ACCURACY_METERS) {
+  const target = Math.min(GUARD_CLOCKIN_MAX_ACCURACY_METERS, maxAccuracyMeters);
+  if (Capacitor.isNativePlatform()) {
+    try {
+      if (canUseCapacitorGeolocation()) {
+        await ensureNativePermissions();
+        const pos = await nativeGetPosition(true, 35000);
+        if (pos.accuracy != null && pos.accuracy <= target) return pos;
+        if (pos.accuracy != null) {
+          throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${target}m or better to clock in.`);
+        }
+      }
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) throw err;
+    }
+  }
+  return webWatchBestPosition(target);
 }

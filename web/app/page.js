@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { 
   Shield, 
   MapPin, 
@@ -30,6 +31,7 @@ import {
   Home,
   UserCog,
   Map,
+  MapPinned,
   Menu,
   X,
   LogOut,
@@ -43,9 +45,18 @@ import { apiFetch } from '../lib/apiClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+const PremisesMapPanel = dynamic(() => import('./components/PremisesMapPanel'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ minHeight: 420, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+      Loading map…
+    </div>
+  ),
+});
+
 export default function DashboardPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('premises'); // 'premises', 'command', or 'master'
+  const [activeTab, setActiveTab] = useState('premises');
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -72,8 +83,6 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // Map Canvas Ref
-  const canvasRef = useRef(null);
-  const guardPosition = useRef({ x: 120, y: 180, index: 0, direction: 1 });
   const fetchInFlightRef = useRef(false);
   const pollDelayRef = useRef(10000);
   const pollTimerRef = useRef(null);
@@ -404,118 +413,6 @@ export default function DashboardPage() {
     }
   };
 
-  // Interactive Live Map Animation on Canvas (Employra Clean Slate Theme)
-  useEffect(() => {
-    if (!state) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let animId;
-
-    const cps = state.checkpoints[state.activeTenantId] || [];
-
-    const drawMap = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Draw grid floor background (light style)
-      ctx.strokeStyle = '#f1f5f9';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < canvas.width; i += 20) {
-        ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i, canvas.height);
-        ctx.stroke();
-      }
-      for (let j = 0; j < canvas.height; j += 20) {
-        ctx.beginPath();
-        ctx.moveTo(0, j);
-        ctx.lineTo(canvas.width, j);
-        ctx.stroke();
-      }
-
-      // Draw client facility fence lines
-      ctx.strokeStyle = 'rgba(27, 67, 50, 0.08)';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(40, 40, canvas.width - 80, canvas.height - 80);
-
-      // Draw dotted path linking checkpoints
-      if (cps.length > 1) {
-        ctx.beginPath();
-        ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = 'rgba(27, 67, 50, 0.25)';
-        ctx.lineWidth = 2;
-        ctx.moveTo(cps[0].coords.x, cps[0].coords.y);
-        for (let i = 1; i < cps.length; i++) {
-          ctx.lineTo(cps[i].coords.x, cps[i].coords.y);
-        }
-        ctx.closePath();
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      // Draw checkpoints
-      cps.forEach(cp => {
-        const isScanned = cp.status === 'Scanned';
-        ctx.beginPath();
-        ctx.arc(cp.coords.x, cp.coords.y, 14, 0, 2 * Math.PI);
-        ctx.fillStyle = isScanned ? 'rgba(16, 185, 129, 0.1)' : 'rgba(148, 163, 184, 0.05)';
-        ctx.fill();
-        ctx.strokeStyle = isScanned ? '#10b981' : '#cbd5e1';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Inner circle dot
-        ctx.beginPath();
-        ctx.arc(cp.coords.x, cp.coords.y, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = isScanned ? '#10b981' : '#94a3b8';
-        ctx.fill();
-
-        // Labels
-        ctx.fillStyle = '#475569';
-        ctx.font = '500 10px var(--font-sans)';
-        ctx.textAlign = 'center';
-        ctx.fillText(cp.name, cp.coords.x, cp.coords.y - 20);
-      });
-
-      // Animate simulated Guard movement along the path
-      if (cps.length > 0) {
-        const nextTargetIndex = (guardPosition.current.index + guardPosition.current.direction) % cps.length;
-        const target = cps[nextTargetIndex < 0 ? cps.length - 1 : nextTargetIndex];
-        const dx = target.coords.x - guardPosition.current.x;
-        const dy = target.coords.y - guardPosition.current.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < 2) {
-          guardPosition.current.index = nextTargetIndex;
-          if (nextTargetIndex === cps.length - 1) guardPosition.current.direction = -1;
-          if (nextTargetIndex === 0) guardPosition.current.direction = 1;
-        } else {
-          guardPosition.current.x += (dx / distance) * 0.5;
-          guardPosition.current.y += (dy / distance) * 0.5;
-        }
-
-        // Draw guard dot
-        ctx.beginPath();
-        ctx.arc(guardPosition.current.x, guardPosition.current.y, 8, 0, 2 * Math.PI);
-        ctx.fillStyle = '#1b4332';
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 9px var(--font-sans)';
-        ctx.textAlign = 'center';
-        ctx.fillText('G1', guardPosition.current.x, guardPosition.current.y + 3);
-      }
-
-      animId = requestAnimationFrame(drawMap);
-    };
-
-    drawMap();
-    return () => cancelAnimationFrame(animId);
-  }, [state]);
-
   // Loading display
   if (loading && !state) {
     return (
@@ -599,6 +496,14 @@ export default function DashboardPage() {
           </li>
           <li>
             <button 
+              className={`sidebar-nav-item ${activeTab === 'map' ? 'active' : ''}`}
+              onClick={() => selectTab('map')}
+            >
+              <MapPinned size={18} /> Site Map
+            </button>
+          </li>
+          <li>
+            <button 
               className={`sidebar-nav-item ${activeTab === 'command' ? 'active' : ''}`}
               onClick={() => selectTab('command')}
             >
@@ -656,7 +561,7 @@ export default function DashboardPage() {
           <div className="page-header-main">
             <h1 className="page-title">
               {activeTab === 'supervisors' ? 'Supervisor & Territory Management'
-                : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'command' ? 'Command Centre Operations' : 'Master Administration'}
+                : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'map' ? 'Protected Premises Map' : activeTab === 'command' ? 'Command Centre Operations' : 'Master Administration'}
             </h1>
             <p className="page-subtitle">
               {activeTab === 'supervisors'
@@ -665,6 +570,8 @@ export default function DashboardPage() {
                 ? 'Register guards, schedule shifts, and monitor GPS clock-in attendance from the field.'
                 : activeTab === 'premises'
                 ? 'Register sites under protection, add important places, and set up NFC patrol points for guards.'
+                : activeTab === 'map'
+                ? 'Live map of all protected premises, geofences, and on-duty guards.'
                 : activeTab === 'command' 
                 ? 'Real-time patrol monitoring, incident updates, and visitor tracking logs.' 
                 : 'Configure onboarding templates, review custom checklists, and manage server data.'}
@@ -753,6 +660,29 @@ export default function DashboardPage() {
             checkpoints={curCheckpoints}
             onRefresh={fetchState}
           />
+        ) : activeTab === 'map' ? (
+          <div className="animate-fade-in">
+            <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>All Protected Premises</h3>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
+                Every registered site with GPS appears here. Geofence circles show the clock-in zone ({systemSettings.geofenceRadiusMeters}m).
+                {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+                  ? ' Switch basemap style using the control on the map.'
+                  : ' Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY for Google basemaps (Roadmap, Satellite, Hybrid, Terrain).'}
+              </p>
+            </div>
+            <div className="glass-panel" style={{ padding: '1rem' }}>
+              <PremisesMapPanel
+                premises={curPremises}
+                places={curPlaces}
+                guards={curGuards}
+                attendance={curAttendance}
+                geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+                height={560}
+                showPlaces
+              />
+            </div>
+          </div>
         ) : activeTab === 'command' ? (
           /* ==================== COMMAND CENTRE ==================== */
           <div className="dashboard-grid">
@@ -830,31 +760,24 @@ export default function DashboardPage() {
 
             {/* Left Content Column: Map Canvas - was col-8 row */}
             <div className="col-8" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div className="glass-panel canvas-map-card" style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div className="glass-panel canvas-map-card" style={{ flex: 1, padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                   <div>
                     <h3 style={{ fontSize: '1.1rem' }}>Live Guard Geofence Tracker</h3>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Real-time GPS nodes and NFC hardware checkpoint scans</p>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Real-time premises locations, geofences, and on-duty guard GPS</p>
                   </div>
                   <button className="btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }} onClick={handleResetPatrols}>
                     <RefreshCw size={12} /> Reset Patrol
                   </button>
                 </div>
-                
-                {/* Canvas blueprint panel */}
-                <div style={{ background: '#ffffff', border: '1px solid var(--border-light)', borderRadius: '12px', overflow: 'hidden', flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '360px' }}>
-                  <canvas 
-                    ref={canvasRef} 
-                    width={560} 
-                    height={360} 
-                    style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
-                  />
-                  <div style={{ position: 'absolute', bottom: '12px', right: '12px', background: 'rgba(255,255,255,0.9)', padding: '0.35rem 0.65rem', borderRadius: '6px', fontSize: '0.7rem', border: '1px solid var(--border-light)', display: 'flex', gap: '0.75rem', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-muted)' }}><span style={{ display: 'block', width: '8px', height: '8px', background: '#1b4332', borderRadius: '50%' }} /> Guard GPS</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-muted)' }}><span style={{ display: 'block', width: '8px', height: '8px', background: '#10b981', borderRadius: '50%' }} /> Scanned</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-muted)' }}><span style={{ display: 'block', width: '8px', height: '8px', background: '#94a3b8', borderRadius: '50%' }} /> Pending</span>
-                  </div>
-                </div>
+                <PremisesMapPanel
+                  premises={curPremises}
+                  places={curPlaces}
+                  guards={curGuards}
+                  attendance={curAttendance}
+                  geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+                  height={480}
+                />
               </div>
             </div>
 

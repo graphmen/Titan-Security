@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Building2, MapPin, Navigation, Plus, Pencil } from 'lucide-react';
-import { getLocation } from '../utils/api';
+import { getLocationForPremiseCapture, PREMISE_MAX_ACCURACY_METERS } from '../utils/location';
 
 const emptyPremise = (territoryId = '') => ({
-  name: '', address: '', city: 'Harare', suburb: '', territoryId, ownerName: '', ownerContact: '', lat: '', lng: '',
+  name: '', address: '', city: 'Harare', suburb: '', territoryId, ownerName: '', ownerContact: '', lat: '', lng: '', accuracyMeters: '',
 });
 
 export default function SitesPanel({
@@ -15,27 +15,41 @@ export default function SitesPanel({
 }) {
   const [premiseForm, setPremiseForm] = useState(emptyPremise());
   const [placeForm, setPlaceForm] = useState({
-    premiseId: '', name: '', type: 'Patrol Point', description: '', lat: '', lng: '', hasNfc: true, schedule: 'Every 2 hours',
+    premiseId: '', name: '', type: 'Patrol Point', description: '', lat: '', lng: '', accuracyMeters: '', hasNfc: true, schedule: 'Every 2 hours',
   });
   const [editingPremiseId, setEditingPremiseId] = useState(null);
+  const [gpsCapturing, setGpsCapturing] = useState(null);
 
   const captureGps = async (target, premiseId = null) => {
+    setGpsCapturing(target);
     try {
-      const { lat, lng } = await getLocation();
-      const coords = { lat: lat.toFixed(6), lng: lng.toFixed(6) };
+      const { lat, lng, accuracy } = await getLocationForPremiseCapture();
+      const coords = {
+        lat: lat.toFixed(6),
+        lng: lng.toFixed(6),
+        accuracyMeters: Math.round(accuracy),
+      };
       if (target === 'premise') {
         setPremiseForm((f) => ({ ...f, ...coords }));
+        showToast(`GPS captured ${coords.accuracyMeters ? `±${coords.accuracyMeters}m` : ''}`);
       } else if (target === 'place') {
         setPlaceForm((f) => ({ ...f, ...coords }));
+        showToast(`GPS captured ±${coords.accuracyMeters}m`);
       } else if (premiseId) {
         await onAction('UPDATE_PREMISE', {
           premiseId,
-          updates: { lat: parseFloat(coords.lat), lng: parseFloat(coords.lng) },
+          updates: {
+            lat: parseFloat(coords.lat),
+            lng: parseFloat(coords.lng),
+            accuracyMeters: coords.accuracyMeters,
+          },
         });
-        showToast('Site GPS updated');
+        showToast(`Site GPS updated ±${coords.accuracyMeters}m`);
       }
     } catch (e) {
       showToast(e.message, 'error');
+    } finally {
+      setGpsCapturing(null);
     }
   };
 
@@ -43,6 +57,10 @@ export default function SitesPanel({
     e.preventDefault();
     if (!premiseForm.name || !premiseForm.address || !premiseForm.territoryId) {
       showToast('Name, address and territory required', 'error');
+      return;
+    }
+    if (!premiseForm.lat || !premiseForm.lng || !premiseForm.accuracyMeters) {
+      showToast(`Capture GPS on site first (±${PREMISE_MAX_ACCURACY_METERS}m required)`, 'error');
       return;
     }
     try {
@@ -56,8 +74,9 @@ export default function SitesPanel({
             suburb: premiseForm.suburb,
             ownerName: premiseForm.ownerName,
             ownerContact: premiseForm.ownerContact,
-            lat: parseFloat(premiseForm.lat) || 0,
-            lng: parseFloat(premiseForm.lng) || 0,
+            lat: parseFloat(premiseForm.lat),
+            lng: parseFloat(premiseForm.lng),
+            accuracyMeters: parseFloat(premiseForm.accuracyMeters),
           },
         });
         showToast('Site updated');
@@ -70,8 +89,9 @@ export default function SitesPanel({
           territoryId: premiseForm.territoryId,
           ownerName: premiseForm.ownerName,
           ownerContact: premiseForm.ownerContact,
-          lat: parseFloat(premiseForm.lat) || 0,
-          lng: parseFloat(premiseForm.lng) || 0,
+          lat: parseFloat(premiseForm.lat),
+          lng: parseFloat(premiseForm.lng),
+          accuracyMeters: parseFloat(premiseForm.accuracyMeters),
         });
         showToast(`Site registered: ${premiseForm.name}`);
       }
@@ -94,6 +114,7 @@ export default function SitesPanel({
       ownerContact: p.ownerContact || '',
       lat: p.coordinates?.lat?.toString() || '',
       lng: p.coordinates?.lng?.toString() || '',
+      accuracyMeters: p.coordinates?.accuracyMeters?.toString() || '',
     });
   };
 
@@ -103,14 +124,19 @@ export default function SitesPanel({
       showToast('Select a site and enter place name', 'error');
       return;
     }
+    if (!placeForm.lat || !placeForm.lng || !placeForm.accuracyMeters) {
+      showToast(`Capture GPS at the patrol point (±${PREMISE_MAX_ACCURACY_METERS}m required)`, 'error');
+      return;
+    }
     try {
       await onAction('CREATE_PLACE', {
         premiseId: placeForm.premiseId,
         name: placeForm.name,
         type: placeForm.type,
         description: placeForm.description,
-        lat: parseFloat(placeForm.lat) || undefined,
-        lng: parseFloat(placeForm.lng) || undefined,
+        lat: parseFloat(placeForm.lat),
+        lng: parseFloat(placeForm.lng),
+        accuracyMeters: parseFloat(placeForm.accuracyMeters),
         hasNfc: placeForm.hasNfc,
         schedule: placeForm.schedule,
       });
@@ -140,8 +166,8 @@ export default function SitesPanel({
           <div><label className="mob-field-label">Lat</label><input className="mob-input" value={premiseForm.lat} onChange={(e) => setPremiseForm({ ...premiseForm, lat: e.target.value })} /></div>
           <div><label className="mob-field-label">Lng</label><input className="mob-input" value={premiseForm.lng} onChange={(e) => setPremiseForm({ ...premiseForm, lng: e.target.value })} /></div>
         </div>
-        <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" onClick={() => captureGps('premise')}>
-          <Navigation size={14} /> Capture GPS Here
+        <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" disabled={gpsCapturing === 'premise'} onClick={() => captureGps('premise')}>
+          <Navigation size={14} /> {gpsCapturing === 'premise' ? 'Acquiring GPS…' : `Capture GPS (±${PREMISE_MAX_ACCURACY_METERS}m)`}
         </button>
         <div className="mob-form-actions">
           {editingPremiseId && (
@@ -168,8 +194,8 @@ export default function SitesPanel({
           <div><label className="mob-field-label">Lat</label><input className="mob-input" value={placeForm.lat} onChange={(e) => setPlaceForm({ ...placeForm, lat: e.target.value })} /></div>
           <div><label className="mob-field-label">Lng</label><input className="mob-input" value={placeForm.lng} onChange={(e) => setPlaceForm({ ...placeForm, lng: e.target.value })} /></div>
         </div>
-        <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" onClick={() => captureGps('place')}>
-          <Navigation size={14} /> Capture GPS Here
+        <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" disabled={gpsCapturing === 'place'} onClick={() => captureGps('place')}>
+          <Navigation size={14} /> {gpsCapturing === 'place' ? 'Acquiring GPS…' : 'Capture GPS Here'}
         </button>
         <button type="submit" className="mob-btn mob-btn-success"><Plus size={14} /> Add Place</button>
       </form>

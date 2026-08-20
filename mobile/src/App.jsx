@@ -45,7 +45,7 @@ import AppUpdatePanel from './components/AppUpdatePanel';
 import LocationPermissionPrompt from './components/LocationPermissionPrompt';
 import { postStateAction } from './utils/api';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
-import { getLocation, initLocationPermissionFlow } from './utils/location';
+import { getLocation, getLocationForClockIn, initLocationPermissionFlow } from './utils/location';
 import { startVoiceMemo } from './utils/voice';
 import {
   playNfcScan,
@@ -245,7 +245,7 @@ export default function App() {
       localStorage.setItem('titan_premise_id', targetPremise);
     }
     try {
-      const { lat, lng } = await getLocation();
+      const { lat, lng, accuracy } = await getLocationForClockIn();
       await postStateAction(apiBase, {
         action: 'GUARD_CLOCK_IN',
         guardId,
@@ -253,6 +253,7 @@ export default function App() {
         tenantId,
         lat,
         lng,
+        accuracyMeters: accuracy,
       });
       showToast('Shift started — you are on duty');
       fetchState();

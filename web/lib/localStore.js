@@ -1,4 +1,10 @@
 import {
+  isPremiseAccuracyAcceptable,
+  isClockInAccuracyAcceptable,
+  premiseAccuracyError,
+  clockInAccuracyError,
+} from './gpsAccuracy.js';
+import {
   generatePremiseId,
   generatePlaceId,
   syncCheckpointFromPlace,
@@ -661,7 +667,7 @@ export function processLocalAction(payload) {
       break;
     }
     case 'GUARD_CLOCK_IN': {
-      const { guardId, premiseId, lat, lng } = payload;
+      const { guardId, premiseId, lat, lng, accuracyMeters } = payload;
       if (!guardId || !premiseId) return { error: 'Guard and premises required', status: 400 };
 
       const guards = state.guards[tenantId] || [];
@@ -686,6 +692,9 @@ export function processLocalAction(payload) {
       }
       if (!isValidGpsCoord(coords.lat, coords.lng)) {
         return { error: 'Could not verify your GPS location — enable location and try again', status: 403 };
+      }
+      if (!isClockInAccuracyAcceptable(accuracyMeters, geofenceRadius)) {
+        return { error: clockInAccuracyError(accuracyMeters, geofenceRadius), status: 403 };
       }
       if (!isWithinPremiseGeofence(coords, premiseCoords, geofenceRadius)) {
         return { error: `You must be at the premises to clock in (within ${geofenceRadius}m GPS geofence)`, status: 403 };
@@ -910,8 +919,18 @@ export function processLocalAction(payload) {
         territoryId = null,
         lat,
         lng,
+        accuracyMeters,
       } = payload;
       if (!name || !address) return { error: 'Premises name and address are required', status: 400 };
+
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+      if (!isValidGpsCoord(parsedLat, parsedLng)) {
+        return { error: 'Valid GPS coordinates are required — capture GPS on site first', status: 400 };
+      }
+      if (!isPremiseAccuracyAcceptable(accuracyMeters)) {
+        return { error: premiseAccuracyError(accuracyMeters), status: 400 };
+      }
 
       const id = generatePremiseId();
       const premise = {
@@ -925,8 +944,10 @@ export function processLocalAction(payload) {
         suburb,
         territoryId: territoryId || null,
         coordinates: {
-          lat: parseFloat(lat) || 0,
-          lng: parseFloat(lng) || 0,
+          lat: parsedLat,
+          lng: parsedLng,
+          accuracyMeters: Math.round(Number(accuracyMeters)),
+          capturedAt: new Date().toISOString(),
         },
         status: 'Active',
         createdAt: new Date().toISOString(),
@@ -941,12 +962,22 @@ export function processLocalAction(payload) {
       const { premiseId, updates = {} } = payload;
       const premise = (state.premises[tenantId] || []).find((p) => p.id === premiseId);
       if (!premise) return { error: 'Premise not found', status: 404 };
-      const { lat, lng, ...rest } = updates;
+      const { lat, lng, accuracyMeters, ...rest } = updates;
       Object.assign(premise, rest, { updatedAt: new Date().toISOString() });
       if (lat !== undefined || lng !== undefined) {
+        const parsedLat = parseFloat(lat ?? premise.coordinates?.lat);
+        const parsedLng = parseFloat(lng ?? premise.coordinates?.lng);
+        if (!isValidGpsCoord(parsedLat, parsedLng)) {
+          return { error: 'Valid GPS coordinates are required — capture GPS on site first', status: 400 };
+        }
+        if (!isPremiseAccuracyAcceptable(accuracyMeters)) {
+          return { error: premiseAccuracyError(accuracyMeters), status: 400 };
+        }
         premise.coordinates = {
-          lat: parseFloat(lat ?? premise.coordinates?.lat) || 0,
-          lng: parseFloat(lng ?? premise.coordinates?.lng) || 0,
+          lat: parsedLat,
+          lng: parsedLng,
+          accuracyMeters: Math.round(Number(accuracyMeters)),
+          capturedAt: new Date().toISOString(),
         };
       }
       break;
@@ -975,6 +1006,7 @@ export function processLocalAction(payload) {
         description = '',
         lat,
         lng,
+        accuracyMeters,
         hasNfc = false,
         nfcCode = '',
         schedule = 'Every 2 hours',
@@ -986,6 +1018,15 @@ export function processLocalAction(payload) {
       const premise = premiseList.find((p) => p.id === premiseId);
       if (!premise) return { error: 'Premise not found', status: 404 };
 
+      const parsedLat = parseFloat(lat);
+      const parsedLng = parseFloat(lng);
+      if (!isValidGpsCoord(parsedLat, parsedLng)) {
+        return { error: 'Valid GPS coordinates are required for patrol places — capture GPS on site', status: 400 };
+      }
+      if (!isPremiseAccuracyAcceptable(accuracyMeters)) {
+        return { error: premiseAccuracyError(accuracyMeters), status: 400 };
+      }
+
       const place = {
         id: generatePlaceId(),
         premiseId,
@@ -994,8 +1035,10 @@ export function processLocalAction(payload) {
         type,
         description,
         coordinates: {
-          lat: parseFloat(lat) || premise.coordinates.lat,
-          lng: parseFloat(lng) || premise.coordinates.lng,
+          lat: parsedLat,
+          lng: parsedLng,
+          accuracyMeters: Math.round(Number(accuracyMeters)),
+          capturedAt: new Date().toISOString(),
         },
         hasNfc: !!hasNfc,
         nfcCode: hasNfc ? (nfcCode || `NFC-${name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}`) : '',
@@ -1017,6 +1060,7 @@ export function processLocalAction(payload) {
         description,
         lat,
         lng,
+        accuracyMeters,
         hasNfc,
         nfcCode,
         schedule,
@@ -1034,9 +1078,19 @@ export function processLocalAction(payload) {
       if (nfcCode !== undefined) place.nfcCode = nfcCode;
       if (schedule !== undefined) place.schedule = schedule;
       if (lat !== undefined || lng !== undefined) {
+        const parsedLat = parseFloat(lat ?? place.coordinates?.lat);
+        const parsedLng = parseFloat(lng ?? place.coordinates?.lng);
+        if (!isValidGpsCoord(parsedLat, parsedLng)) {
+          return { error: 'Valid GPS coordinates are required — capture GPS on site', status: 400 };
+        }
+        if (!isPremiseAccuracyAcceptable(accuracyMeters)) {
+          return { error: premiseAccuracyError(accuracyMeters), status: 400 };
+        }
         place.coordinates = {
-          lat: parseFloat(lat ?? place.coordinates?.lat) || premise.coordinates.lat,
-          lng: parseFloat(lng ?? place.coordinates?.lng) || premise.coordinates.lng,
+          lat: parsedLat,
+          lng: parsedLng,
+          accuracyMeters: Math.round(Number(accuracyMeters)),
+          capturedAt: new Date().toISOString(),
         };
       }
       place.updatedAt = new Date().toISOString();

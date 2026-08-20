@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { apiFetch } from '../../lib/apiClient';
+import { captureHighAccuracyPosition } from '../../lib/captureGps';
+import { PREMISE_MAX_ACCURACY_METERS, formatAccuracyMeters } from '../../lib/gpsAccuracy';
 import {
   Building2,
   MapPin,
@@ -68,6 +70,7 @@ export default function PremisesRegistration({
     territoryId: '',
     lat: '',
     lng: '',
+    accuracyMeters: '',
   });
 
   const [placeForm, setPlaceForm] = useState({
@@ -76,10 +79,12 @@ export default function PremisesRegistration({
     description: '',
     lat: '',
     lng: '',
+    accuracyMeters: '',
     hasNfc: true,
     nfcCode: '',
     schedule: 'Every 2 hours',
   });
+  const [gpsCapturing, setGpsCapturing] = useState(null);
 
   const selectedPremise = premises.find((p) => p.id === selectedPremiseId);
   const premisePlaces = selectedPremiseId ? places[selectedPremiseId] || [] : [];
@@ -124,7 +129,7 @@ export default function PremisesRegistration({
   });
 
   const resetPremiseForm = () => {
-    setPremiseForm({ name: '', ownerName: '', ownerContact: '', address: '', city: '', suburb: '', territoryId: '', lat: '', lng: '' });
+    setPremiseForm({ name: '', ownerName: '', ownerContact: '', address: '', city: '', suburb: '', territoryId: '', lat: '', lng: '', accuracyMeters: '' });
     setEditingPremiseId(null);
     setShowPremiseForm(false);
   };
@@ -136,6 +141,7 @@ export default function PremisesRegistration({
       description: '',
       lat: selectedPremise?.coordinates?.lat?.toString() || '',
       lng: selectedPremise?.coordinates?.lng?.toString() || '',
+      accuracyMeters: selectedPremise?.coordinates?.accuracyMeters?.toString() || '',
       hasNfc: true,
       nfcCode: '',
       schedule: 'Every 2 hours',
@@ -167,6 +173,7 @@ export default function PremisesRegistration({
       territoryId: p.territoryId || '',
       lat: p.coordinates?.lat?.toString() || '',
       lng: p.coordinates?.lng?.toString() || '',
+      accuracyMeters: p.coordinates?.accuracyMeters?.toString() || '',
     });
     setShowPremiseForm(true);
     setShowPlaceForm(false);
@@ -180,6 +187,7 @@ export default function PremisesRegistration({
       description: place.description || '',
       lat: place.coordinates?.lat?.toString() || '',
       lng: place.coordinates?.lng?.toString() || '',
+      accuracyMeters: place.coordinates?.accuracyMeters?.toString() || '',
       hasNfc: !!place.hasNfc,
       nfcCode: place.nfcCode || '',
       schedule: place.schedule || 'Every 2 hours',
@@ -207,33 +215,37 @@ export default function PremisesRegistration({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, tenantId, ...data }),
       });
-      if (!res.ok) throw new Error('Save failed');
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Save failed');
       onRefresh?.();
       return true;
     } catch (e) {
-      alert('Could not save. Please try again.');
+      alert(e.message || 'Could not save. Please try again.');
       return false;
     } finally {
       setSaving(false);
     }
   };
 
-  const useMyLocation = (target) => {
-    if (!navigator.geolocation) {
-      alert('Location is not available in this browser.');
-      return;
+  const useMyLocation = async (target) => {
+    setGpsCapturing(target);
+    try {
+      const { lat, lng, accuracy } = await captureHighAccuracyPosition(PREMISE_MAX_ACCURACY_METERS);
+      const coords = {
+        lat: lat.toFixed(6),
+        lng: lng.toFixed(6),
+        accuracyMeters: Math.round(accuracy).toString(),
+      };
+      if (target === 'premise') {
+        setPremiseForm((f) => ({ ...f, ...coords }));
+      } else {
+        setPlaceForm((f) => ({ ...f, ...coords }));
+      }
+    } catch (e) {
+      alert(e.message || 'Could not get accurate GPS. Move outdoors and try again.');
+    } finally {
+      setGpsCapturing(null);
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        if (target === 'premise') {
-          setPremiseForm((f) => ({ ...f, lat: latitude.toFixed(6), lng: longitude.toFixed(6) }));
-        } else {
-          setPlaceForm((f) => ({ ...f, lat: latitude.toFixed(6), lng: longitude.toFixed(6) }));
-        }
-      },
-      () => alert('Could not get your location. Enter coordinates manually.')
-    );
   };
 
   const copyId = (id) => {
@@ -245,18 +257,56 @@ export default function PremisesRegistration({
   const handleSavePremise = async (e) => {
     e.preventDefault();
     if (!premiseForm.name || !premiseForm.address) return;
+
+    const existing = editingPremiseId ? premises.find((p) => p.id === editingPremiseId) : null;
+    const coordsChanged = existing && (
+      premiseForm.lat !== (existing.coordinates?.lat?.toString() || '')
+      || premiseForm.lng !== (existing.coordinates?.lng?.toString() || '')
+    );
+    const isNew = !editingPremiseId;
+
+    if (isNew || coordsChanged) {
+      if (!premiseForm.lat || !premiseForm.lng || !premiseForm.accuracyMeters) {
+        alert(`Capture GPS on site first (±${PREMISE_MAX_ACCURACY_METERS}m accuracy required).`);
+        return;
+      }
+    }
+
+    const payload = isNew || coordsChanged
+      ? {
+          ...premiseForm,
+          accuracyMeters: parseFloat(premiseForm.accuracyMeters),
+        }
+      : {
+          name: premiseForm.name,
+          ownerName: premiseForm.ownerName,
+          ownerContact: premiseForm.ownerContact,
+          address: premiseForm.address,
+          city: premiseForm.city,
+          suburb: premiseForm.suburb,
+          territoryId: premiseForm.territoryId,
+        };
+
     const ok = editingPremiseId
-      ? await postAction('UPDATE_PREMISE', { premiseId: editingPremiseId, updates: premiseForm })
-      : await postAction('CREATE_PREMISE', premiseForm);
+      ? await postAction('UPDATE_PREMISE', { premiseId: editingPremiseId, updates: payload })
+      : await postAction('CREATE_PREMISE', payload);
     if (ok) resetPremiseForm();
   };
 
   const handleSavePlace = async (e) => {
     e.preventDefault();
     if (!selectedPremiseId || !placeForm.name) return;
+    if (!placeForm.lat || !placeForm.lng || !placeForm.accuracyMeters) {
+      alert(`Capture GPS at the patrol point (±${PREMISE_MAX_ACCURACY_METERS}m accuracy required).`);
+      return;
+    }
+    const payload = {
+      ...placeForm,
+      accuracyMeters: parseFloat(placeForm.accuracyMeters),
+    };
     const ok = editingPlaceId
-      ? await postAction('UPDATE_PLACE', { premiseId: selectedPremiseId, placeId: editingPlaceId, ...placeForm })
-      : await postAction('CREATE_PLACE', { premiseId: selectedPremiseId, ...placeForm });
+      ? await postAction('UPDATE_PLACE', { premiseId: selectedPremiseId, placeId: editingPlaceId, ...payload })
+      : await postAction('CREATE_PLACE', { premiseId: selectedPremiseId, ...payload });
     if (ok) resetPlaceForm();
   };
 
@@ -461,15 +511,20 @@ export default function PremisesRegistration({
                 </select>
               </div>
               <div className="input-group" style={{ marginBottom: 0 }}>
-                <label>GPS Coordinates</label>
+                <label>GPS Coordinates (±{PREMISE_MAX_ACCURACY_METERS}m required)</label>
                 <div style={{ display: 'flex', gap: '0.35rem' }}>
-                  <input className="form-input" value={premiseForm.lat} onChange={(e) => setPremiseForm({ ...premiseForm, lat: e.target.value })} placeholder="Latitude" style={{ flex: 1 }} />
-                  <input className="form-input" value={premiseForm.lng} onChange={(e) => setPremiseForm({ ...premiseForm, lng: e.target.value })} placeholder="Longitude" style={{ flex: 1 }} />
+                  <input className="form-input" value={premiseForm.lat} readOnly placeholder="Latitude" style={{ flex: 1 }} />
+                  <input className="form-input" value={premiseForm.lng} readOnly placeholder="Longitude" style={{ flex: 1 }} />
                 </div>
+                {premiseForm.accuracyMeters && (
+                  <p style={{ fontSize: '0.72rem', color: 'var(--color-success)', marginTop: '0.35rem' }}>
+                    Accuracy: {formatAccuracyMeters(parseFloat(premiseForm.accuracyMeters))}
+                  </p>
+                )}
               </div>
-              <div style={{ gridColumn: 'span 2', display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-                <button type="button" className="btn-secondary" onClick={() => useMyLocation('premise')}>
-                  <Navigation size={14} /> Use My Location
+              <div style={{ gridColumn: 'span 2', display: 'flex', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                <button type="button" className="btn-secondary" disabled={gpsCapturing === 'premise'} onClick={() => useMyLocation('premise')}>
+                  <Navigation size={14} /> {gpsCapturing === 'premise' ? 'Acquiring GPS…' : 'Capture GPS On Site'}
                 </button>
                 <button type="button" className="btn-secondary" onClick={resetPremiseForm}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={saving} style={{ marginLeft: 'auto' }}>
@@ -499,6 +554,9 @@ export default function PremisesRegistration({
                   {selectedPremise.coordinates?.lat ? (
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-dimmed)', marginTop: '0.35rem' }}>
                       GPS: {selectedPremise.coordinates.lat}, {selectedPremise.coordinates.lng}
+                      {selectedPremise.coordinates.accuracyMeters
+                        ? ` · ${formatAccuracyMeters(selectedPremise.coordinates.accuracyMeters)}`
+                        : ''}
                     </p>
                   ) : null}
                 </div>
@@ -612,12 +670,19 @@ export default function PremisesRegistration({
                       <input className="form-input" value={placeForm.description} onChange={(e) => setPlaceForm({ ...placeForm, description: e.target.value })} placeholder="Brief note about this location" />
                     </div>
                     <div className="input-group" style={{ gridColumn: 'span 2', marginBottom: 0 }}>
-                      <label>Place GPS Coordinates</label>
-                      <div style={{ display: 'flex', gap: '0.35rem' }}>
-                        <input className="form-input" value={placeForm.lat} onChange={(e) => setPlaceForm({ ...placeForm, lat: e.target.value })} placeholder="Latitude" style={{ flex: 1 }} />
-                        <input className="form-input" value={placeForm.lng} onChange={(e) => setPlaceForm({ ...placeForm, lng: e.target.value })} placeholder="Longitude" style={{ flex: 1 }} />
-                        <button type="button" className="btn-secondary" onClick={() => useMyLocation('place')} title="Use my location"><Navigation size={14} /></button>
+                      <label>Place GPS (±{PREMISE_MAX_ACCURACY_METERS}m required)</label>
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        <input className="form-input" value={placeForm.lat} readOnly placeholder="Latitude" style={{ flex: 1 }} />
+                        <input className="form-input" value={placeForm.lng} readOnly placeholder="Longitude" style={{ flex: 1 }} />
+                        <button type="button" className="btn-secondary" disabled={gpsCapturing === 'place'} onClick={() => useMyLocation('place')} title="Capture GPS">
+                          <Navigation size={14} />
+                        </button>
                       </div>
+                      {placeForm.accuracyMeters && (
+                        <p style={{ fontSize: '0.72rem', color: 'var(--color-success)', marginTop: '0.35rem' }}>
+                          Accuracy: {formatAccuracyMeters(parseFloat(placeForm.accuracyMeters))}
+                        </p>
+                      )}
                     </div>
                     <label style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
                       <input type="checkbox" checked={placeForm.hasNfc} onChange={(e) => setPlaceForm({ ...placeForm, hasNfc: e.target.checked })} />

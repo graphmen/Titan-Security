@@ -19,6 +19,7 @@ import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, personInitials } from './utils/auth';
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION, APP_VERSION_CODE } from './config';
 import AppUpdatePanel from './components/AppUpdatePanel';
+import AppUpdateScreen from './components/AppUpdateScreen';
 import LocationPermissionPrompt from './components/LocationPermissionPrompt';
 import { postSupervisorAction, fetchSupervisorState } from './utils/api';
 import { pickProfilePhoto } from './utils/camera';
@@ -49,6 +50,7 @@ export default function App() {
   const [photoBusy, setPhotoBusy] = useState(false);
   const [locPermVisible, setLocPermVisible] = useState(false);
   const [locPermAutoRequested, setLocPermAutoRequested] = useState(false);
+  const [showUpdateScreen, setShowUpdateScreen] = useState(false);
 
   const { theme, toggleTheme, isDark } = useTheme();
 
@@ -213,6 +215,10 @@ export default function App() {
       {locationPrompt}
       {toast && <div className={`mob-toast mob-toast-${toast.type}`}>{toast.message}</div>}
 
+      {showUpdateScreen && (
+        <AppUpdateScreen apiBase={apiBase} onClose={() => setShowUpdateScreen(false)} />
+      )}
+
       <header className="mob-header mob-header-compact">
         <div className="mob-header-brand-text">
           <div className="mob-header-title">Titan Supervisor</div>
@@ -220,7 +226,7 @@ export default function App() {
         </div>
         <div className="mob-header-actions">
           <div className="mob-header-update-wrap">
-            <AppUpdatePanel apiBase={apiBase} compact />
+            <AppUpdatePanel apiBase={apiBase} compact onOpenFullPage={() => setShowUpdateScreen(true)} />
           </div>
           <button type="button" className="mob-theme-btn" onClick={toggleTheme} aria-label="Toggle theme">
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
@@ -321,6 +327,13 @@ export default function App() {
                 <div className="mob-list-meta">{supervisor?.phone}</div>
                 <div className="mob-list-meta">{supervisor?.email}</div>
               </div>
+            </div>
+            <div className="mob-card">
+              <div className="mob-card-label">App Update</div>
+              <p className="mob-hint" style={{ marginTop: 0 }}>Install the latest Titan Supervisor build with one tap.</p>
+              <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" onClick={() => setShowUpdateScreen(true)}>
+                Open Update Page
+              </button>
             </div>
             <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" onClick={handleLogout}>
               <LogOut size={16} /> Sign Out

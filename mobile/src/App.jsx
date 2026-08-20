@@ -32,6 +32,7 @@ import {
   LogOut,
   BadgeCheck,
   TrendingUp,
+  Loader2,
 } from 'lucide-react';
 import { buildGuardProfileContext } from './guardProfile';
 import SplashScreen from './components/SplashScreen';
@@ -42,6 +43,7 @@ import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, guardInitials } from './utils/auth';
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION_CODE } from './config';
 import AppUpdatePanel from './components/AppUpdatePanel';
+import AppUpdateScreen from './components/AppUpdateScreen';
 import LocationPermissionPrompt from './components/LocationPermissionPrompt';
 import { postStateAction } from './utils/api';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
@@ -106,7 +108,6 @@ export default function App() {
   const [vCompany, setVCompany] = useState('');
   const [vPlate, setVPlate] = useState('');
   const [isScanning, setIsScanning] = useState(false);
-  const scanRequestedRef = useRef(false);
 
   // Selected Checklist
   const [activeChecklistId, setActiveChecklistId] = useState('');
@@ -131,6 +132,9 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [tabKey, setTabKey] = useState(0);
+  const [showUpdateScreen, setShowUpdateScreen] = useState(false);
+  const [incidentSubmitting, setIncidentSubmitting] = useState(false);
+  const incidentSubmittingRef = useRef(false);
 
   // Local Canvas Map Ref
   const mapCanvasRef = useRef(null);
@@ -342,50 +346,66 @@ export default function App() {
     const queue = { ...offlineQueue };
     let syncCount = 0;
 
+    const postQueueItem = async (body) => {
+      const res = await fetch(apiUrl('/api/state'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Sync failed');
+    };
+
     try {
-      // 1. Sync patrols
+      const remainingPatrols = [];
       for (const item of queue.patrols) {
-        await fetch(apiUrl('/api/state'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'TAP_NFC', checkpointId: item.checkpointId, guardId: item.guardId, guardName: item.guardName, tenantId: item.tenantId })
-        });
-        syncCount++;
+        try {
+          await postQueueItem({
+            action: 'TAP_NFC',
+            checkpointId: item.checkpointId,
+            guardId: item.guardId,
+            guardName: item.guardName,
+            tenantId: item.tenantId,
+          });
+          syncCount++;
+        } catch {
+          remainingPatrols.push(item);
+        }
       }
-      queue.patrols = [];
+      queue.patrols = remainingPatrols;
 
-      // 2. Sync incidents
+      const remainingIncidents = [];
       for (const item of queue.incidents) {
-        await fetch(apiUrl('/api/state'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'LOG_INCIDENT', ...item })
-        });
-        syncCount++;
+        try {
+          await postQueueItem({ action: 'LOG_INCIDENT', ...item });
+          syncCount++;
+        } catch {
+          remainingIncidents.push(item);
+        }
       }
-      queue.incidents = [];
+      queue.incidents = remainingIncidents;
 
-      // 3. Sync visitors
+      const remainingVisitors = [];
       for (const item of queue.visitors) {
-        await fetch(apiUrl('/api/state'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'REGISTER_VISITOR', ...item })
-        });
-        syncCount++;
+        try {
+          await postQueueItem({ action: 'REGISTER_VISITOR', ...item });
+          syncCount++;
+        } catch {
+          remainingVisitors.push(item);
+        }
       }
-      queue.visitors = [];
+      queue.visitors = remainingVisitors;
 
-      // 4. Sync checklists
+      const remainingChecklists = [];
       for (const item of queue.checklists) {
-        await fetch(apiUrl('/api/state'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'SUBMIT_CHECKLIST', ...item })
-        });
-        syncCount++;
+        try {
+          await postQueueItem({ action: 'SUBMIT_CHECKLIST', ...item });
+          syncCount++;
+        } catch {
+          remainingChecklists.push(item);
+        }
       }
-      queue.checklists = [];
+      queue.checklists = remainingChecklists;
 
       saveQueueToStorage(queue);
       if (syncCount > 0) {
@@ -492,8 +512,9 @@ export default function App() {
   // Log Incident
   const handleLogIncident = async (e) => {
     e.preventDefault();
-    if (!incDesc.trim()) return;
+    if (!incDesc.trim() || incidentSubmittingRef.current) return;
 
+    const clientRequestId = crypto.randomUUID();
     const payload = {
       tenantId,
       guardId,
@@ -502,7 +523,11 @@ export default function App() {
       description: incDesc.trim(),
       photo: incPhoto,
       voice: incVoice,
+      clientRequestId,
     };
+
+    incidentSubmittingRef.current = true;
+    setIncidentSubmitting(true);
 
     if (isOnline) {
       try {
@@ -515,9 +540,14 @@ export default function App() {
       } catch (err) {
         showToast(err.message || 'Could not report incident', 'error');
         queueIncident(payload);
+      } finally {
+        incidentSubmittingRef.current = false;
+        setIncidentSubmitting(false);
       }
     } else {
       queueIncident(payload);
+      incidentSubmittingRef.current = false;
+      setIncidentSubmitting(false);
     }
   };
 
@@ -575,56 +605,30 @@ export default function App() {
 
   useEffect(() => () => { stopQrScanner(); }, []);
 
-  useEffect(() => {
-    if (!isScanning || !scanRequestedRef.current) return undefined;
-    scanRequestedRef.current = false;
-    let cancelled = false;
-
-    (async () => {
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      if (cancelled) return;
-      try {
-        const decoded = await scanQrFromCamera('visitor-qr-reader');
-        if (cancelled) return;
-        const parsed = parseVisitorQr(decoded);
-        if (!parsed?.name) {
-          showToast('Could not read visitor details from QR code', 'error');
-          return;
-        }
-        setVName(parsed.name);
-        setVIdNumber(parsed.idNumber || '');
-        setVCompany(parsed.company || '');
-        setVPlate(parsed.vehiclePlate || '');
-        playSuccessBeep();
-        showToast(`Scanned: ${parsed.name}`);
-      } catch (e) {
-        if (!cancelled) showToast(e.message || 'QR scan failed', 'error');
-      } finally {
-        await stopQrScanner();
-        if (!cancelled) setIsScanning(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      stopQrScanner();
-    };
-  }, [isScanning]);
-
-  const handleScanQrBadge = () => {
-    if (isScanning) {
-      stopQrScanner();
-      setIsScanning(false);
-      return;
-    }
-    scanRequestedRef.current = true;
+  const handleScanQrBadge = async () => {
+    if (isScanning) return;
     setIsScanning(true);
+    try {
+      const decoded = await scanQrFromCamera('visitor-qr-reader');
+      const parsed = parseVisitorQr(decoded);
+      if (!parsed?.name) {
+        showToast('Could not read visitor details from QR code', 'error');
+        return;
+      }
+      setVName(parsed.name);
+      setVIdNumber(parsed.idNumber || '');
+      setVCompany(parsed.company || '');
+      setVPlate(parsed.vehiclePlate || '');
+      playSuccessBeep();
+      showToast(`Scanned: ${parsed.name}`);
+    } catch (e) {
+      if (String(e?.message || e).toLowerCase().includes('cancel')) return;
+      showToast(e.message || 'QR scan failed', 'error');
+    } finally {
+      setIsScanning(false);
+    }
   };
 
-  const handleCancelScan = () => {
-    stopQrScanner();
-    setIsScanning(false);
-  };
 
   // Sign in Visitor
   const handleAddVisitor = async (e) => {
@@ -1098,6 +1102,10 @@ export default function App() {
         </div>
       )}
 
+      {showUpdateScreen && (
+        <AppUpdateScreen apiBase={apiBase} onClose={() => setShowUpdateScreen(false)} />
+      )}
+
       {/* Header */}
       <header className="mob-header mob-header-branded">
         <div>
@@ -1107,7 +1115,7 @@ export default function App() {
 
         <div className="mob-header-actions">
           <div className="mob-header-update-wrap">
-            <AppUpdatePanel apiBase={apiBase} compact />
+            <AppUpdatePanel apiBase={apiBase} compact onOpenFullPage={() => setShowUpdateScreen(true)} />
           </div>
           {offlineCount > 0 && (
             <span className="mob-sync-badge" onClick={syncOfflineQueue} title="Click to sync offline cache">
@@ -1373,20 +1381,22 @@ export default function App() {
                 </div>
               )}
 
-              <button type="submit" className="mob-btn mob-btn-danger">
-                Submit Occurrence Log
+              <button type="submit" className="mob-btn mob-btn-danger" disabled={incidentSubmitting}>
+                {incidentSubmitting ? 'Submitting…' : 'Submit Occurrence Log'}
               </button>
             </form>
 
             {(state?.occurrenceBook || []).filter(
-              (i) => i.guardName === guardName && String(i.type) !== 'Patrol Tap' && String(i.type) !== 'Shift Clock-In'
+              (i) =>
+                i.guardId === guardId &&
+                !['Patrol Tap', 'Shift Clock-In', 'Shift Clock-Out', 'Checklist Submission'].includes(i.type)
             ).slice(0, 5).length > 0 && (
               <div className="mob-card" style={{ marginTop: '1rem' }}>
                 <div className="mob-card-label">Your Recent Reports</div>
                 {(state?.occurrenceBook || [])
                   .filter(
                     (i) =>
-                      i.guardName === guardName &&
+                      i.guardId === guardId &&
                       !['Patrol Tap', 'Shift Clock-In', 'Shift Clock-Out', 'Checklist Submission'].includes(i.type)
                   )
                   .slice(0, 5)
@@ -1742,6 +1752,16 @@ export default function App() {
               </form>
             </div>
 
+            <div className="mob-card">
+              <div className="mob-card-label">App Update</div>
+              <p style={{ fontSize: '0.78rem', color: 'var(--mob-text-muted)', margin: '0 0 0.65rem' }}>
+                Check for the latest Titan Monitor build and install with one tap.
+              </p>
+              <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" onClick={() => setShowUpdateScreen(true)}>
+                Open Update Page
+              </button>
+            </div>
+
             <button type="button" className="mob-btn mob-btn-secondary" style={{ width: '100%', marginTop: '0.25rem' }} onClick={handleLogout}>
               <LogOut size={16} /> Sign Out
             </button>
@@ -1760,7 +1780,10 @@ export default function App() {
             <div className="mob-card" style={{ padding: '0.5rem' }}>
               <div className="scanner-viewport">
                 {isScanning ? (
-                  <div id="visitor-qr-reader" className="visitor-qr-reader" />
+                  <div className="scanner-scanning-msg">
+                    <Loader2 size={28} className="spin" />
+                    <p>Opening camera… point at the visitor QR code</p>
+                  </div>
                 ) : (
                   <>
                     <div className="scanner-laser" />
@@ -1771,17 +1794,12 @@ export default function App() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="button" className="mob-btn mob-btn-secondary" style={{ flex: 1, fontSize: '0.8rem', padding: '0.65rem' }} onClick={handleScanQrBadge}>
-                  {isScanning ? 'Scanning… point at QR code' : 'Scan Visitor QR Code'}
+                <button type="button" className="mob-btn mob-btn-secondary" style={{ flex: 1, fontSize: '0.8rem', padding: '0.65rem' }} onClick={handleScanQrBadge} disabled={isScanning}>
+                  {isScanning ? 'Scanning…' : 'Scan Visitor QR Code'}
                 </button>
-                {isScanning && (
-                  <button type="button" className="mob-btn mob-btn-secondary" style={{ fontSize: '0.8rem', padding: '0.65rem' }} onClick={handleCancelScan}>
-                    Cancel
-                  </button>
-                )}
               </div>
               <p style={{ fontSize: '0.68rem', color: 'var(--mob-text-muted)', margin: '0.5rem 0 0', lineHeight: 1.4 }}>
-                QR can be JSON or text: Name|ID|Company|Plate. You can also type details below manually.
+                Tap scan — your camera opens to capture the QR. Formats: JSON, Name|ID|Company|Plate, or plain name.
               </p>
             </div>
             

@@ -267,7 +267,11 @@ export function processLocalAction(payload) {
       break;
     }
     case 'LOG_INCIDENT': {
-      const { guardName: rawName, guardId, type, description, photo = null, voice = null } = payload;
+      const { guardName: rawName, guardId, type, description, photo = null, voice = null, clientRequestId = null } = payload;
+      if (clientRequestId) {
+        const duplicate = (state.occurrenceBook || []).some((item) => item.clientRequestId === clientRequestId);
+        if (duplicate) break;
+      }
       const { guardName } = resolveGuard(guardId, rawName);
       state.occurrenceBook.unshift({
         id: `ob-inc-${Date.now()}`,
@@ -279,6 +283,7 @@ export function processLocalAction(payload) {
         status: 'Unassigned',
         attachments: { photo, voice },
         guardId: guardId || null,
+        clientRequestId: clientRequestId || null,
       });
       break;
     }

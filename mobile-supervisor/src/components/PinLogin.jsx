@@ -150,7 +150,7 @@ export default function PinLogin({
 
         <p className="pin-demo-hint">Forgot PIN? Ask your administrator to reset it from the web dashboard.</p>
 
-        <AppUpdatePanel apiBase={apiBase} />
+        <AppUpdatePanel apiBase={apiBase} fullPage />
       </div>
     </div>
   );

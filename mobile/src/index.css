@@ -2487,6 +2487,96 @@ body {
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+.spin {
+  animation: spin 0.75s linear infinite;
+}
+
+.app-update-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 600;
+  background: var(--mob-bg);
+  overflow-y: auto;
+}
+
+.app-update-screen-inner {
+  padding: 1rem 1.15rem 2rem;
+}
+
+.app-update-screen-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  color: var(--mob-text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0.35rem 0;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+}
+
+.app-update-screen-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--mob-text);
+}
+
+.app-update-screen-sub {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  color: var(--mob-text-muted);
+  line-height: 1.45;
+}
+
+.app-update-wrap.full-page .app-update-panel {
+  position: static;
+  margin-top: 0;
+  box-shadow: var(--mob-shadow-md);
+}
+
+.app-update-panel.static {
+  position: static;
+  margin-top: 0;
+  padding: 1rem;
+  border-radius: var(--mob-radius-md);
+  border: 1px solid var(--mob-border);
+  background: var(--mob-gradient-card);
+}
+
+.app-update-build {
+  font-weight: 500;
+  color: var(--mob-text-muted);
+  font-size: 0.75rem;
+}
+
+.app-update-notes {
+  font-size: 0.78rem;
+  color: var(--mob-text-muted);
+  margin: 0.35rem 0 0.75rem;
+  line-height: 1.4;
+}
+
+.scanner-scanning-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+  padding: 1rem;
+}
+
+.scanner-scanning-msg p {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .mob-logout-btn {
   width: auto;
   padding: 0.38rem 0.7rem;
@@ -2494,5 +2584,4 @@ body {
   border-radius: 999px;
   gap: 0.3rem;
 }
-
 

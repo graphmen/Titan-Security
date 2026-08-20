@@ -34,7 +34,7 @@ import {
   dismissGuardAlerts,
   ensureAlertStore,
 } from './guards';
-import { syncGuardTerritoryFromPremises, validateGuardSupervisorAssignment, filterAssignedPremisesForSupervisor } from './guardProfile';
+import { syncGuardTerritoryFromPremises, validateGuardSupervisorAssignment, filterAssignedPremisesForSupervisor, getSupervisorsForTerritory, resolveGuardTerritoryId } from './guardProfile';
 import { generateGuardPin, findGuardByPin, validatePinFormat } from './guardAuth';
 import { generateSupervisorPin, findSupervisorByPin } from './supervisorAuth';
 import { sanitizeSupervisorPublic } from './supervisorScope';
@@ -639,6 +639,59 @@ export function processLocalAction(payload) {
       Object.assign(guard, updates, { updatedAt: new Date().toISOString() });
       if (updates.assignedPremiseIds) syncGuardTerritoryFromPremises(state, tenantId, guard);
       break;
+    }
+    case 'BULK_ASSIGN_GUARD_SUPERVISOR': {
+      const { supervisorId, onlyUnassigned = true } = payload;
+      const supCheck = validateGuardSupervisorAssignment(state, tenantId, supervisorId);
+      if (!supCheck.ok) return { error: supCheck.error, status: 400 };
+      const list = state.guards[tenantId] || [];
+      const guardIds = [];
+      const assignedNames = [];
+      for (const guard of list) {
+        if (onlyUnassigned && guard.supervisorId) continue;
+        guard.supervisorId = supervisorId;
+        guard.assignedPremiseIds = filterAssignedPremisesForSupervisor(
+          state,
+          tenantId,
+          supervisorId,
+          guard.assignedPremiseIds || []
+        );
+        guard.updatedAt = new Date().toISOString();
+        guardIds.push(guard.id);
+        assignedNames.push(guard.fullName);
+      }
+      if (guardIds.length === 0) {
+        return { error: 'No unassigned guards to update', status: 400 };
+      }
+      return { success: true, assignedCount: guardIds.length, assignedNames, guardIds };
+    }
+    case 'AUTO_ASSIGN_GUARD_SUPERVISORS_BY_TERRITORY': {
+      const list = state.guards[tenantId] || [];
+      const guardIds = [];
+      const assignedNames = [];
+      for (const guard of list) {
+        if (guard.supervisorId) continue;
+        const territoryId = resolveGuardTerritoryId(state, tenantId, guard);
+        const candidates = getSupervisorsForTerritory(state, tenantId, territoryId);
+        if (candidates.length !== 1) continue;
+        guard.supervisorId = candidates[0].id;
+        guard.assignedPremiseIds = filterAssignedPremisesForSupervisor(
+          state,
+          tenantId,
+          candidates[0].id,
+          guard.assignedPremiseIds || []
+        );
+        guard.updatedAt = new Date().toISOString();
+        guardIds.push(guard.id);
+        assignedNames.push(guard.fullName);
+      }
+      if (guardIds.length === 0) {
+        return {
+          error: 'No guards could be auto-matched — each needs a territory with exactly one supervisor',
+          status: 400,
+        };
+      }
+      return { success: true, assignedCount: guardIds.length, assignedNames, guardIds };
     }
     case 'DELETE_GUARD': {
       const { guardId } = payload;

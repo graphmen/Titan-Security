@@ -99,6 +99,7 @@ export default function GuardManagement({
   const [trainingForm, setTrainingForm] = useState({ name: '', completedDate: '', expiryDate: '', certificateRef: '' });
   const [guardSearch, setGuardSearch] = useState('');
   const [guardTerritoryFilter, setGuardTerritoryFilter] = useState('');
+  const [bulkSupervisorId, setBulkSupervisorId] = useState('');
 
   const today = new Date().toISOString().slice(0, 10);
   const onDuty = attendance.filter((a) => a.status === 'On Duty' || a.status === 'Late');
@@ -166,6 +167,8 @@ export default function GuardManagement({
       ? premisesInTerritory(premises, guardForm.territoryId)
       : [];
   const supervisorName = (id) => supervisors.find((s) => s.id === id)?.fullName || 'Unassigned';
+  const unassignedGuards = guards.filter((g) => !g.supervisorId);
+  const activeSupervisors = supervisors.filter((s) => s.status === 'Active');
   const premisesForGuardCard = (g) => {
     if (g.supervisorId) return premisesForSupervisor(synthState, tenantId, g.supervisorId);
     return premisesInTerritory(premises, g.territoryId);
@@ -384,6 +387,35 @@ export default function GuardManagement({
 
   const updateGuardStatus = (guardId, status) => postAction('UPDATE_GUARD', { guardId, updates: { status } });
   const updateGuardPremises = (guardId, assignedPremiseIds) => postAction('UPDATE_GUARD', { guardId, updates: { assignedPremiseIds } });
+
+  const handleBulkAssignSupervisor = async () => {
+    if (!bulkSupervisorId) {
+      alert('Select a supervisor first.');
+      return;
+    }
+    if (!window.confirm(`Assign ${unassignedGuards.length} unassigned guard(s) to ${supervisorName(bulkSupervisorId)}?`)) {
+      return;
+    }
+    const result = await postAction('BULK_ASSIGN_GUARD_SUPERVISOR', {
+      supervisorId: bulkSupervisorId,
+      onlyUnassigned: true,
+    });
+    if (result?.assignedCount) {
+      alert(`Assigned ${result.assignedCount} guard(s): ${(result.assignedNames || []).join(', ')}`);
+      setBulkSupervisorId('');
+    }
+  };
+
+  const handleAutoMatchSupervisors = async () => {
+    if (!window.confirm('Auto-match unassigned guards to the only supervisor in each guard\'s territory?')) {
+      return;
+    }
+    const result = await postAction('AUTO_ASSIGN_GUARD_SUPERVISORS_BY_TERRITORY', {});
+    if (result?.assignedCount) {
+      alert(`Auto-matched ${result.assignedCount} guard(s): ${(result.assignedNames || []).join(', ')}`);
+    }
+  };
+
   const togglePremiseAssign = (pid) => {
     const ids = guardForm.assignedPremiseIds.includes(pid)
       ? guardForm.assignedPremiseIds.filter((x) => x !== pid)
@@ -512,6 +544,61 @@ export default function GuardManagement({
                   <UserPlus size={14} /> Register Guard
                 </button>
               </div>
+
+              {unassignedGuards.length > 0 && (
+                <div
+                  style={{
+                    background: '#fffbeb',
+                    border: '1px solid #fcd34d',
+                    borderRadius: '10px',
+                    padding: '1rem',
+                    marginBottom: '1rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: '0.9rem', color: '#92400e' }}>
+                        <Shield size={14} style={{ display: 'inline', marginRight: '0.35rem' }} />
+                        {unassignedGuards.length} guard{unassignedGuards.length === 1 ? '' : 's'} without a supervisor
+                      </p>
+                      <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: '#b45309' }}>
+                        {unassignedGuards.map((g) => g.fullName).join(', ')}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                      <select
+                        className="form-select"
+                        value={bulkSupervisorId}
+                        onChange={(e) => setBulkSupervisorId(e.target.value)}
+                        style={{ minWidth: '200px', fontSize: '0.8rem' }}
+                      >
+                        <option value="">Choose supervisor…</option>
+                        {activeSupervisors.map((s) => (
+                          <option key={s.id} value={s.id}>{s.fullName}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        style={{ fontSize: '0.8rem' }}
+                        disabled={saving || !bulkSupervisorId}
+                        onClick={handleBulkAssignSupervisor}
+                      >
+                        Assign all to supervisor
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ fontSize: '0.8rem' }}
+                        disabled={saving}
+                        onClick={handleAutoMatchSupervisors}
+                      >
+                        Auto-match by territory
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {showGuardForm && (
                 <form onSubmit={handleSaveGuard} style={{ background: '#f8fafc', border: '1px solid var(--border-light)', borderRadius: '10px', padding: '1rem', marginBottom: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.65rem' }}>

@@ -146,7 +146,8 @@ const READ_ONLY_ACTIONS = new Set(['GUARD_LOGIN', 'SUPERVISOR_LOGIN', 'SWITCH_TE
 
 /** Actions that change guards/premises/etc. and need a relational write after memory update. */
 const RELATIONAL_WRITE_ACTIONS = new Set([
-  'CREATE_GUARD', 'UPDATE_GUARD', 'RESET_GUARD_PIN', 'CHANGE_GUARD_PIN',
+  'CREATE_GUARD', 'UPDATE_GUARD', 'BULK_ASSIGN_GUARD_SUPERVISOR', 'AUTO_ASSIGN_GUARD_SUPERVISORS_BY_TERRITORY',
+  'RESET_GUARD_PIN', 'CHANGE_GUARD_PIN',
   'CREATE_SHIFT', 'UPDATE_SHIFT',
   'CREATE_PREMISE', 'UPDATE_PREMISE', 'CREATE_PLACE', 'UPDATE_PLACE',
   'CREATE_TERRITORY', 'UPDATE_TERRITORY', 'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR', 'UPDATE_SUPERVISOR_PHOTO',
@@ -192,7 +193,7 @@ export async function runSupabaseAction(payload) {
     await persistSystemSettingsToDb(getLocalState().systemSettings);
   } else if (!READ_ONLY_ACTIONS.has(action) && RELATIONAL_WRITE_ACTIONS.has(action)) {
     if (usesDirectRowUpsert(action)) {
-      await applyDirectRowUpsert(action, payload, tenantId, getLocalState());
+      await applyDirectRowUpsert(action, { ...payload, ...result }, tenantId, getLocalState());
     } else {
       await persistStateToSupabase();
     }

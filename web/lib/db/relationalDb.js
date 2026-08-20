@@ -530,6 +530,24 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
       }
       break;
     }
+    case 'BULK_ASSIGN_GUARD_SUPERVISOR':
+    case 'AUTO_ASSIGN_GUARD_SUPERVISORS_BY_TERRITORY': {
+      const guardIds = payload.guardIds || [];
+      for (const guardId of guardIds) {
+        const guard = (state.guards?.[tenantId] || []).find((g) => g.id === guardId);
+        if (!guard) continue;
+        await requireDbOk(await db.from('guards').upsert(guardToRow(guard, tenantId)), 'guards bulk upsert');
+        await requireDbOk(await db.from('guard_premises').delete().eq('guard_id', guard.id), 'guard_premises clear');
+        const gpRows = (guard.assignedPremiseIds || []).map((pid) => ({
+          guard_id: guard.id,
+          premise_id: pid,
+        }));
+        if (gpRows.length) {
+          await requireDbOk(await db.from('guard_premises').upsert(gpRows), 'guard_premises upsert');
+        }
+      }
+      break;
+    }
     case 'CREATE_PREMISE':
     case 'UPDATE_PREMISE': {
       const premiseId = payload.premiseId
@@ -567,6 +585,7 @@ const DIRECT_UPSERT_ACTIONS = new Set([
   'CREATE_TERRITORY', 'UPDATE_TERRITORY',
   'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR', 'UPDATE_SUPERVISOR_PHOTO',
   'CREATE_GUARD', 'UPDATE_GUARD', 'UPDATE_GUARD_PHOTO', 'ADD_GUARD_DOCUMENT', 'ADD_GUARD_TRAINING',
+  'BULK_ASSIGN_GUARD_SUPERVISOR', 'AUTO_ASSIGN_GUARD_SUPERVISORS_BY_TERRITORY',
   'RESET_GUARD_PIN', 'CHANGE_GUARD_PIN',
   'CREATE_PREMISE', 'UPDATE_PREMISE',
   'CREATE_PLACE', 'UPDATE_PLACE',

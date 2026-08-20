@@ -19,9 +19,9 @@ export const LAYER_PRESETS = {
   patrol: {
     label: 'Patrol',
     layers: {
-      premises: true, geofences: false, guards: true, trails: true, alerts: false,
-      places: true, checkpoints: true, activity: true, territories: false,
-      patrolRoutes: true, heatmap: false, shiftRoster: false, gpsQuality: false,
+      premises: true, geofences: false, guards: false, trails: false, alerts: false,
+      places: true, checkpoints: false, activity: false, territories: false,
+      patrolRoutes: false, heatmap: false, shiftRoster: false, gpsQuality: false,
     },
   },
   emergency: {
@@ -35,27 +35,27 @@ export const LAYER_PRESETS = {
   overview: {
     label: 'Overview',
     layers: {
-      premises: true, geofences: false, guards: true, trails: false, alerts: true,
-      places: true, checkpoints: true, activity: true, territories: true,
-      patrolRoutes: false, heatmap: true, shiftRoster: true, gpsQuality: true,
+      premises: true, geofences: false, guards: false, trails: false, alerts: false,
+      places: true, checkpoints: false, activity: false, territories: false,
+      patrolRoutes: false, heatmap: false, shiftRoster: false, gpsQuality: false,
     },
   },
 };
 
 export const EXTENDED_DEFAULT_LAYERS = {
   premises: true,
-  geofences: true,
+  geofences: false,
   places: true,
-  checkpoints: true,
-  guards: true,
-  trails: true,
-  alerts: true,
-  activity: true,
-  territories: true,
+  checkpoints: false,
+  guards: false,
+  trails: false,
+  alerts: false,
+  activity: false,
+  territories: false,
   patrolRoutes: false,
   heatmap: false,
   shiftRoster: false,
-  gpsQuality: true,
+  gpsQuality: false,
 };
 
 const STALE_GPS_MS = 12 * 60 * 1000;

@@ -98,7 +98,7 @@ const LAYER_DEFS = [
   { key: 'gpsQuality', label: 'GPS accuracy rings', color: '#22c55e' },
   { key: 'places', label: 'Patrol places', color: '#ef4444' },
   { key: 'patrolRoutes', label: 'Patrol routes', color: '#059669' },
-  { key: 'checkpoints', label: 'NFC checkpoints', color: '#3b82f6' },
+  // checkpoints hidden until NFC patrol is enabled on the map
   { key: 'guards', label: 'Live guards', color: '#60a5fa' },
   { key: 'trails', label: 'Movement trails', color: '#2563eb' },
   { key: 'shiftRoster', label: "Today's shifts", color: '#f59e0b' },

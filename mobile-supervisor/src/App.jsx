@@ -94,8 +94,12 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isAuthenticated, supervisorId]);
 
-  const runAction = async (action, body = {}) => {
+  const runAction = async (action, body = {}, options = {}) => {
     const result = await postSupervisorAction(apiBase, supervisorId, { action, tenantId, ...body });
+    if (options.backgroundRefresh) {
+      fetchState().catch(() => {});
+      return result;
+    }
     await fetchState();
     return result;
   };

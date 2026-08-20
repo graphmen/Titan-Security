@@ -3,7 +3,7 @@ export const DEFAULT_API_URL =
 
 export const DEFAULT_TENANT_ID = 'titan';
 export const STATE_POLL_MS = 15000;
-export const APP_VERSION = '1.2.1';
-export const APP_VERSION_CODE = 21;
+export const APP_VERSION = '1.2.2';
+export const APP_VERSION_CODE = 22;
 
 export const MOBILE_APP_ID = 'supervisor';

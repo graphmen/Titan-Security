@@ -17,9 +17,11 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 @CapacitorPlugin(
     name = "TitanLocation",
@@ -73,7 +75,7 @@ public class TitanLocationPlugin extends Plugin {
             return;
         }
         float maxAccuracy = call.getFloat("maxAccuracyMeters", 5f);
-        int timeoutMs = call.getInt("timeoutMs", 60000);
+        int timeoutMs = call.getInt("timeoutMs", 45000);
         watchForBestAccuracy(call, maxAccuracy, timeoutMs);
     }
 
@@ -93,7 +95,7 @@ public class TitanLocationPlugin extends Plugin {
             return;
         }
         float maxAccuracy = call.getFloat("maxAccuracyMeters", 5f);
-        int timeoutMs = call.getInt("timeoutMs", 60000);
+        int timeoutMs = call.getInt("timeoutMs", 45000);
         watchForBestAccuracy(call, maxAccuracy, timeoutMs);
     }
 
@@ -157,8 +159,7 @@ public class TitanLocationPlugin extends Plugin {
     }
 
     /**
-     * High-accuracy capture: GPS-only, warmup period, then stabilization window
-     * requiring multiple good samples before returning the best fix.
+     * High-accuracy capture: GPS-only, warmup, stabilization, then median of a tight cluster.
      */
     private void watchForBestAccuracy(PluginCall call, float maxAccuracyMeters, long timeoutMs) {
         Context ctx = getContext();
@@ -173,15 +174,15 @@ public class TitanLocationPlugin extends Plugin {
             return;
         }
 
-        final long warmupMs = call.getInt("warmupMs", 10000);
-        final long stabilizeMs = call.getInt("stabilizeMs", 6000);
-        final int minSamples = call.getInt("minSamples", 3);
+        final long warmupMs = call.getInt("warmupMs", 6000);
+        final long stabilizeMs = call.getInt("stabilizeMs", 5000);
+        final int minSamples = call.getInt("minSamples", 4);
+        final float maxSpreadMeters = call.getFloat("maxSpreadMeters", 3f);
         final long startMs = System.currentTimeMillis();
 
         Handler handler = new Handler(Looper.getMainLooper());
-        AtomicReference<Location> bestOverall = new AtomicReference<>();
-        AtomicReference<Location> bestQualified = new AtomicReference<>();
-        AtomicInteger qualifiedCount = new AtomicInteger(0);
+        List<Location> qualifiedSamples = Collections.synchronizedList(new ArrayList<>());
+        Location[] bestOverall = new Location[1];
         AtomicBoolean stabilizeScheduled = new AtomicBoolean(false);
         AtomicBoolean resolved = new AtomicBoolean(false);
 
@@ -190,9 +191,8 @@ public class TitanLocationPlugin extends Plugin {
             public void onLocationChanged(Location location) {
                 if (resolved.get() || !location.hasAccuracy()) return;
 
-                Location current = bestOverall.get();
-                if (current == null || location.getAccuracy() < current.getAccuracy()) {
-                    bestOverall.set(location);
+                if (bestOverall[0] == null || location.getAccuracy() < bestOverall[0].getAccuracy()) {
+                    bestOverall[0] = location;
                 }
 
                 long elapsed = System.currentTimeMillis() - startMs;
@@ -207,16 +207,12 @@ public class TitanLocationPlugin extends Plugin {
                     return;
                 }
 
-                qualifiedCount.incrementAndGet();
-                Location bestQ = bestQualified.get();
-                if (bestQ == null || location.getAccuracy() < bestQ.getAccuracy()) {
-                    bestQualified.set(location);
-                }
+                qualifiedSamples.add(new Location(location));
 
                 if (stabilizeScheduled.compareAndSet(false, true)) {
                     handler.postDelayed(() -> finishStabilized(
-                        call, lm, this, handler, resolved, bestOverall, bestQualified,
-                        qualifiedCount, maxAccuracyMeters, minSamples
+                        call, lm, this, handler, resolved, bestOverall[0],
+                        qualifiedSamples, maxAccuracyMeters, minSamples, maxSpreadMeters
                     ), stabilizeMs);
                 }
             }
@@ -236,12 +232,12 @@ public class TitanLocationPlugin extends Plugin {
             resolved.set(true);
             lm.removeUpdates(listener);
             handler.removeCallbacksAndMessages(null);
-            rejectWithBest(call, bestOverall.get(), maxAccuracyMeters);
+            rejectWithBest(call, bestOverall[0], maxAccuracyMeters);
         };
 
         handler.postDelayed(onTimeout, timeoutMs);
         lm.requestLocationUpdates(
-            LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper()
+            LocationManager.GPS_PROVIDER, 800L, 0f, listener, Looper.getMainLooper()
         );
     }
 
@@ -251,35 +247,89 @@ public class TitanLocationPlugin extends Plugin {
         LocationListener listener,
         Handler handler,
         AtomicBoolean resolved,
-        AtomicReference<Location> bestOverall,
-        AtomicReference<Location> bestQualified,
-        AtomicInteger qualifiedCount,
+        Location bestOverall,
+        List<Location> qualifiedSamples,
         float maxAccuracyMeters,
-        int minSamples
+        int minSamples,
+        float maxSpreadMeters
     ) {
         if (resolved.get()) return;
         resolved.set(true);
         lm.removeUpdates(listener);
         handler.removeCallbacksAndMessages(null);
 
-        Location pick = bestQualified.get();
-        int count = qualifiedCount.get();
+        Location pick = pickStableCluster(qualifiedSamples, maxAccuracyMeters, minSamples, maxSpreadMeters);
 
-        if (pick != null && pick.getAccuracy() <= maxAccuracyMeters && count >= minSamples) {
+        if (pick != null) {
             resolveLocation(call, pick);
             return;
         }
 
-        if (pick != null && pick.getAccuracy() <= maxAccuracyMeters) {
-            int acc = Math.round(pick.getAccuracy());
+        if (!qualifiedSamples.isEmpty()) {
+            int acc = Math.round(qualifiedSamples.get(0).getAccuracy());
             call.reject(
-                "GPS still settling — got ±" + acc + "m but need " + minSamples
-                    + " stable readings. Hold still in open sky 15–20s and retry."
+                "GPS still settling — readings not tight enough. Hold still in open sky 10–15s and retry."
+                + (acc > 0 ? " (best ±" + acc + "m)" : "")
             );
             return;
         }
 
-        rejectWithBest(call, bestOverall.get(), maxAccuracyMeters);
+        rejectWithBest(call, bestOverall, maxAccuracyMeters);
+    }
+
+    /** Median lat/lng of the largest tight cluster (better map pin than single best-accuracy fix). */
+    private Location pickStableCluster(
+        List<Location> samples,
+        float maxAccuracyMeters,
+        int minSamples,
+        float maxSpreadMeters
+    ) {
+        List<Location> good = new ArrayList<>();
+        for (Location loc : samples) {
+            if (loc.hasAccuracy() && loc.getAccuracy() <= maxAccuracyMeters) {
+                good.add(loc);
+            }
+        }
+        if (good.size() < minSamples) {
+            return null;
+        }
+
+        good.sort(Comparator.comparingDouble(Location::getAccuracy));
+
+        for (Location seed : good) {
+            List<Location> cluster = new ArrayList<>();
+            for (Location candidate : good) {
+                if (seed.distanceTo(candidate) <= maxSpreadMeters) {
+                    cluster.add(candidate);
+                }
+            }
+            if (cluster.size() < minSamples) {
+                continue;
+            }
+
+            List<Double> lats = new ArrayList<>();
+            List<Double> lngs = new ArrayList<>();
+            float bestAcc = Float.MAX_VALUE;
+            for (Location loc : cluster) {
+                lats.add(loc.getLatitude());
+                lngs.add(loc.getLongitude());
+                if (loc.getAccuracy() < bestAcc) {
+                    bestAcc = loc.getAccuracy();
+                }
+            }
+            Collections.sort(lats);
+            Collections.sort(lngs);
+            int mid = cluster.size() / 2;
+
+            Location median = new Location("titan-cluster");
+            median.setLatitude(lats.get(mid));
+            median.setLongitude(lngs.get(mid));
+            median.setAccuracy(bestAcc);
+            median.setTime(System.currentTimeMillis());
+            return median;
+        }
+
+        return null;
     }
 
     private void rejectWithBest(PluginCall call, Location best, float maxAccuracyMeters) {
@@ -288,7 +338,7 @@ public class TitanLocationPlugin extends Plugin {
             int target = Math.round(maxAccuracyMeters);
             call.reject(
                 "GPS accuracy ±" + acc + "m — need ±" + target
-                    + "m or better. Move to open sky, hold still 15–20s, and retry."
+                    + "m or better. Move to open sky, hold still 10–15s, and retry."
             );
         } else {
             call.reject("Could not get a GPS fix — enable location and try outdoors");

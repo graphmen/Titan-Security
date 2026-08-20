@@ -15,21 +15,15 @@ function SiteLoadingBanner({ title, subtitle }) {
   );
 }
 
-function getLoadingState(gpsCapturing, saving) {
-  if (saving === 'premise') {
-    return { title: 'Saving site…', subtitle: 'Registering premises — please wait' };
-  }
-  if (saving === 'place') {
-    return { title: 'Adding patrol place…', subtitle: 'Saving place to your site' };
-  }
+function getLoadingState(gpsCapturing) {
   if (gpsCapturing === 'premise') {
-    return { title: 'Acquiring GPS…', subtitle: 'Hold still outdoors — locking ±5m fix (10–20s warmup, up to 60s)' };
+    return { title: 'Acquiring GPS…', subtitle: 'Hold still — averaging multiple readings for ±5m (about 10–15s)' };
   }
   if (gpsCapturing === 'place') {
-    return { title: 'Acquiring GPS…', subtitle: 'Stand at the patrol point — hold still for a precise ±5m fix' };
+    return { title: 'Acquiring GPS…', subtitle: 'Stand at the patrol point and hold still (about 10–15s)' };
   }
   if (typeof gpsCapturing === 'string' && gpsCapturing.startsWith('update-')) {
-    return { title: 'Updating site GPS…', subtitle: 'Hold still outdoors — stabilizing precise location' };
+    return { title: 'Updating site GPS…', subtitle: 'Hold still — locking a precise averaged fix' };
   }
   return null;
 }
@@ -53,8 +47,8 @@ export default function SitesPanel({
   const [gpsCapturing, setGpsCapturing] = useState(null);
   const [saving, setSaving] = useState(null);
 
-  const isBusy = Boolean(gpsCapturing || saving);
-  const loadingState = getLoadingState(gpsCapturing, saving);
+  const isGpsBusy = Boolean(gpsCapturing);
+  const loadingState = getLoadingState(gpsCapturing);
 
   const captureGps = async (target, premiseId = null) => {
     setGpsCapturing(target === 'update' && premiseId ? `update-${premiseId}` : target);
@@ -68,10 +62,10 @@ export default function SitesPanel({
       };
       if (target === 'premise') {
         setPremiseForm((f) => ({ ...f, ...coords }));
-        showToast(`GPS captured ${coords.accuracyMeters ? `±${coords.accuracyMeters}m` : ''}`);
+        showToast(`GPS captured ±${coords.accuracyMeters}m — ready to save`);
       } else if (target === 'place') {
         setPlaceForm((f) => ({ ...f, ...coords }));
-        showToast(`GPS captured ±${coords.accuracyMeters}m`);
+        showToast(`GPS captured ±${coords.accuracyMeters}m — ready to save`);
       } else if (premiseId) {
         await onAction('UPDATE_PREMISE', {
           premiseId,
@@ -101,6 +95,7 @@ export default function SitesPanel({
       return;
     }
     setSaving('premise');
+    const savedTerritory = premiseForm.territoryId;
     try {
       if (editingPremiseId) {
         await onAction('UPDATE_PREMISE', {
@@ -116,7 +111,7 @@ export default function SitesPanel({
             lng: parseFloat(premiseForm.lng),
             accuracyMeters: parseFloat(premiseForm.accuracyMeters),
           },
-        });
+        }, { backgroundRefresh: true });
         showToast('Site updated');
       } else {
         await onAction('CREATE_PREMISE', {
@@ -130,10 +125,10 @@ export default function SitesPanel({
           lat: parseFloat(premiseForm.lat),
           lng: parseFloat(premiseForm.lng),
           accuracyMeters: parseFloat(premiseForm.accuracyMeters),
-        });
+        }, { backgroundRefresh: true });
         showToast(`Site registered: ${premiseForm.name}`);
       }
-      setPremiseForm(emptyPremise(premiseForm.territoryId));
+      setPremiseForm(emptyPremise(savedTerritory));
       setEditingPremiseId(null);
     } catch (err) {
       showToast(err.message, 'error');
@@ -180,7 +175,7 @@ export default function SitesPanel({
         accuracyMeters: parseFloat(placeForm.accuracyMeters),
         hasNfc: placeForm.hasNfc,
         schedule: placeForm.schedule,
-      });
+      }, { backgroundRefresh: true });
       showToast(`Place added: ${placeForm.name}`);
       setPlaceForm((f) => ({ ...f, name: '', description: '', lat: '', lng: '' }));
     } catch (err) {
@@ -197,31 +192,31 @@ export default function SitesPanel({
       ) : null}
 
       <h3 className="mob-section-title"><Building2 size={16} /> {editingPremiseId ? 'Edit Site' : 'Register Site'}</h3>
-      <form onSubmit={handleSavePremise} className={`mob-card elevated${isBusy ? ' mob-card-busy' : ''}`}>
+      <form onSubmit={handleSavePremise} className={`mob-card elevated${isGpsBusy ? ' mob-card-busy' : ''}`}>
         <label className="mob-field-label">Site Name *</label>
-        <input className="mob-input" value={premiseForm.name} onChange={(e) => setPremiseForm({ ...premiseForm, name: e.target.value })} required disabled={isBusy} />
+        <input className="mob-input" value={premiseForm.name} onChange={(e) => setPremiseForm({ ...premiseForm, name: e.target.value })} required disabled={isGpsBusy} />
         <label className="mob-field-label">Address *</label>
-        <input className="mob-input" value={premiseForm.address} onChange={(e) => setPremiseForm({ ...premiseForm, address: e.target.value })} required disabled={isBusy} />
+        <input className="mob-input" value={premiseForm.address} onChange={(e) => setPremiseForm({ ...premiseForm, address: e.target.value })} required disabled={isGpsBusy} />
         <label className="mob-field-label">Territory *</label>
-        <select className="mob-select" value={premiseForm.territoryId} onChange={(e) => setPremiseForm({ ...premiseForm, territoryId: e.target.value })} required disabled={isBusy}>
+        <select className="mob-select" value={premiseForm.territoryId} onChange={(e) => setPremiseForm({ ...premiseForm, territoryId: e.target.value })} required disabled={isGpsBusy}>
           <option value="">Select territory</option>
           {territories.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
         <label className="mob-field-label">Suburb</label>
-        <input className="mob-input" value={premiseForm.suburb} onChange={(e) => setPremiseForm({ ...premiseForm, suburb: e.target.value })} disabled={isBusy} />
+        <input className="mob-input" value={premiseForm.suburb} onChange={(e) => setPremiseForm({ ...premiseForm, suburb: e.target.value })} disabled={isGpsBusy} />
         <div className="mob-coord-row">
-          <div><label className="mob-field-label">Lat</label><input className="mob-input" value={premiseForm.lat} onChange={(e) => setPremiseForm({ ...premiseForm, lat: e.target.value })} disabled={isBusy} /></div>
-          <div><label className="mob-field-label">Lng</label><input className="mob-input" value={premiseForm.lng} onChange={(e) => setPremiseForm({ ...premiseForm, lng: e.target.value })} disabled={isBusy} /></div>
+          <div><label className="mob-field-label">Lat</label><input className="mob-input" value={premiseForm.lat} onChange={(e) => setPremiseForm({ ...premiseForm, lat: e.target.value })} disabled={isGpsBusy} /></div>
+          <div><label className="mob-field-label">Lng</label><input className="mob-input" value={premiseForm.lng} onChange={(e) => setPremiseForm({ ...premiseForm, lng: e.target.value })} disabled={isGpsBusy} /></div>
         </div>
-        <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" disabled={isBusy} onClick={() => captureGps('premise')}>
+        <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" disabled={isGpsBusy} onClick={() => captureGps('premise')}>
           {gpsCapturing === 'premise' ? <Loader2 size={14} className="mob-btn-spinner" /> : <Navigation size={14} />}
           {gpsCapturing === 'premise' ? 'Acquiring GPS…' : `Capture GPS (±${PREMISE_MAX_ACCURACY_METERS}m)`}
         </button>
         <div className="mob-form-actions">
           {editingPremiseId && (
-            <button type="button" className="mob-btn mob-btn-secondary" disabled={isBusy} onClick={() => { setEditingPremiseId(null); setPremiseForm(emptyPremise()); }}>Cancel</button>
+            <button type="button" className="mob-btn mob-btn-secondary" disabled={isGpsBusy} onClick={() => { setEditingPremiseId(null); setPremiseForm(emptyPremise()); }}>Cancel</button>
           )}
-          <button type="submit" className="mob-btn" disabled={isBusy}>
+          <button type="submit" className="mob-btn" disabled={isGpsBusy || saving === 'premise'}>
             {saving === 'premise' ? <Loader2 size={14} className="mob-btn-spinner" /> : <Plus size={14} />}
             {saving === 'premise' ? 'Saving…' : editingPremiseId ? 'Update Site' : 'Save Site'}
           </button>
@@ -229,27 +224,27 @@ export default function SitesPanel({
       </form>
 
       <h3 className="mob-section-title"><MapPin size={16} /> Add Patrol Place</h3>
-      <form onSubmit={handleSavePlace} className={`mob-card elevated${isBusy ? ' mob-card-busy' : ''}`}>
+      <form onSubmit={handleSavePlace} className={`mob-card elevated${isGpsBusy ? ' mob-card-busy' : ''}`}>
         <label className="mob-field-label">Site *</label>
-        <select className="mob-select" value={placeForm.premiseId} onChange={(e) => setPlaceForm({ ...placeForm, premiseId: e.target.value })} required disabled={isBusy}>
+        <select className="mob-select" value={placeForm.premiseId} onChange={(e) => setPlaceForm({ ...placeForm, premiseId: e.target.value })} required disabled={isGpsBusy}>
           <option value="">Select site</option>
           {premises.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <label className="mob-field-label">Place Name *</label>
-        <input className="mob-input" value={placeForm.name} onChange={(e) => setPlaceForm({ ...placeForm, name: e.target.value })} required disabled={isBusy} />
+        <input className="mob-input" value={placeForm.name} onChange={(e) => setPlaceForm({ ...placeForm, name: e.target.value })} required disabled={isGpsBusy} />
         <label className="mob-field-label">Type</label>
-        <select className="mob-select" value={placeForm.type} onChange={(e) => setPlaceForm({ ...placeForm, type: e.target.value })} disabled={isBusy}>
+        <select className="mob-select" value={placeForm.type} onChange={(e) => setPlaceForm({ ...placeForm, type: e.target.value })} disabled={isGpsBusy}>
           <option>Patrol Point</option><option>Gate</option><option>Reception</option><option>Perimeter</option><option>Other</option>
         </select>
         <div className="mob-coord-row">
-          <div><label className="mob-field-label">Lat</label><input className="mob-input" value={placeForm.lat} onChange={(e) => setPlaceForm({ ...placeForm, lat: e.target.value })} disabled={isBusy} /></div>
-          <div><label className="mob-field-label">Lng</label><input className="mob-input" value={placeForm.lng} onChange={(e) => setPlaceForm({ ...placeForm, lng: e.target.value })} disabled={isBusy} /></div>
+          <div><label className="mob-field-label">Lat</label><input className="mob-input" value={placeForm.lat} onChange={(e) => setPlaceForm({ ...placeForm, lat: e.target.value })} disabled={isGpsBusy} /></div>
+          <div><label className="mob-field-label">Lng</label><input className="mob-input" value={placeForm.lng} onChange={(e) => setPlaceForm({ ...placeForm, lng: e.target.value })} disabled={isGpsBusy} /></div>
         </div>
-        <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" disabled={isBusy} onClick={() => captureGps('place')}>
+        <button type="button" className="mob-btn mob-btn-secondary mob-btn-block-gap" disabled={isGpsBusy} onClick={() => captureGps('place')}>
           {gpsCapturing === 'place' ? <Loader2 size={14} className="mob-btn-spinner" /> : <Navigation size={14} />}
           {gpsCapturing === 'place' ? 'Acquiring GPS…' : 'Capture GPS Here'}
         </button>
-        <button type="submit" className="mob-btn mob-btn-success" disabled={isBusy}>
+        <button type="submit" className="mob-btn mob-btn-success" disabled={isGpsBusy || saving === 'place'}>
           {saving === 'place' ? <Loader2 size={14} className="mob-btn-spinner" /> : <Plus size={14} />}
           {saving === 'place' ? 'Adding…' : 'Add Place'}
         </button>
@@ -268,13 +263,13 @@ export default function SitesPanel({
               <button
                 type="button"
                 className="mob-icon-btn"
-                disabled={isBusy}
+                disabled={isGpsBusy}
                 onClick={() => captureGps('update', p.id)}
                 title="Update GPS"
               >
                 {gpsCapturing === `update-${p.id}` ? <Loader2 size={14} className="mob-btn-spinner" /> : <Navigation size={14} />}
               </button>
-              <button type="button" className="mob-icon-btn" disabled={isBusy} onClick={() => startEditPremise(p)} title="Edit"><Pencil size={14} /></button>
+              <button type="button" className="mob-icon-btn" disabled={isGpsBusy} onClick={() => startEditPremise(p)} title="Edit"><Pencil size={14} /></button>
             </div>
           </div>
         ))}

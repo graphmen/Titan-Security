@@ -38,10 +38,43 @@ function webGetPosition(options) {
   });
 }
 
-function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 60000, options = {}) {
-  const warmupMs = options.warmupMs ?? 10000;
-  const stabilizeMs = options.stabilizeMs ?? 6000;
-  const minSamples = options.minSamples ?? 3;
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Median of a tight GPS cluster — more accurate map pin than a single reading. */
+function pickStableCluster(samples, maxAccuracyMeters, minSamples, maxSpreadMeters) {
+  const good = samples
+    .filter((s) => s.accuracy != null && s.accuracy <= maxAccuracyMeters)
+    .sort((a, b) => a.accuracy - b.accuracy);
+
+  for (const seed of good) {
+    const cluster = good.filter(
+      (s) => haversineMeters(seed.lat, seed.lng, s.lat, s.lng) <= maxSpreadMeters
+    );
+    if (cluster.length < minSamples) continue;
+
+    const lats = cluster.map((s) => s.lat).sort((a, b) => a - b);
+    const lngs = cluster.map((s) => s.lng).sort((a, b) => a - b);
+    const mid = Math.floor(cluster.length / 2);
+    const accuracy = Math.min(...cluster.map((s) => s.accuracy));
+    return { lat: lats[mid], lng: lngs[mid], accuracy };
+  }
+  return null;
+}
+
+function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 45000, options = {}) {
+  const warmupMs = options.warmupMs ?? 6000;
+  const stabilizeMs = options.stabilizeMs ?? 5000;
+  const minSamples = options.minSamples ?? 4;
+  const maxSpreadMeters = options.maxSpreadMeters ?? 3;
   const exceptionalAccuracy = 3;
 
   return new Promise((resolve, reject) => {
@@ -50,8 +83,7 @@ function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 60000, options = {}
       return;
     }
     let best = null;
-    let bestQualified = null;
-    let qualifiedCount = 0;
+    const qualifiedSamples = [];
     let settled = false;
     let stabilizeTimerId = null;
     const startMs = Date.now();
@@ -66,18 +98,19 @@ function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 60000, options = {}
     };
 
     const tryFinishStabilized = () => {
-      if (bestQualified && qualifiedCount >= minSamples && bestQualified.accuracy <= maxAccuracyMeters) {
-        finish(() => resolve(bestQualified));
+      const pick = pickStableCluster(qualifiedSamples, maxAccuracyMeters, minSamples, maxSpreadMeters);
+      if (pick) {
+        finish(() => resolve(pick));
         return;
       }
-      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters) {
+      if (qualifiedSamples.length > 0) {
         finish(() => reject(new Error(
-          `GPS still settling — got ±${Math.round(bestQualified.accuracy)}m but need ${minSamples} stable readings. Hold still in open sky 15–20s and retry.`
+          'GPS still settling — readings not tight enough. Hold still in open sky 10–15s and retry.'
         )));
         return;
       }
       if (best?.accuracy != null) {
-        finish(() => reject(new Error(`GPS accuracy ±${Math.round(best.accuracy)}m — need ±${maxAccuracyMeters}m or better. Move to open sky, hold still 15–20s, and retry.`)));
+        finish(() => reject(new Error(`GPS accuracy ±${Math.round(best.accuracy)}m — need ±${maxAccuracyMeters}m or better. Move to open sky, hold still 10–15s, and retry.`)));
         return;
       }
       finish(() => reject(new Error('Could not get a GPS fix — enable location and try outdoors')));
@@ -94,8 +127,7 @@ function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 60000, options = {}
         if (!pastWarmup && !exceptional) return;
         if (sample.accuracy == null || sample.accuracy > maxAccuracyMeters) return;
 
-        qualifiedCount += 1;
-        if (!bestQualified || sample.accuracy < bestQualified.accuracy) bestQualified = sample;
+        qualifiedSamples.push(sample);
 
         if (!stabilizeTimerId) {
           stabilizeTimerId = setTimeout(tryFinishStabilized, stabilizeMs);
@@ -106,8 +138,9 @@ function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 60000, options = {}
     );
 
     const timerId = setTimeout(() => {
-      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters && qualifiedCount >= minSamples) {
-        finish(() => resolve(bestQualified));
+      const pick = pickStableCluster(qualifiedSamples, maxAccuracyMeters, minSamples, maxSpreadMeters);
+      if (pick) {
+        finish(() => resolve(pick));
         return;
       }
       tryFinishStabilized();
@@ -165,13 +198,14 @@ async function titanGetPosition() {
   return mapPosition({ coords: pos.coords });
 }
 
-async function titanWatchBestPosition(maxAccuracyMeters, timeoutMs = 60000, options = {}) {
+async function titanWatchBestPosition(maxAccuracyMeters, timeoutMs = 45000, options = {}) {
   const pos = await TitanLocation.getHighAccuracyPosition({
     maxAccuracyMeters,
     timeoutMs,
-    warmupMs: options.warmupMs ?? 10000,
-    stabilizeMs: options.stabilizeMs ?? 6000,
-    minSamples: options.minSamples ?? 3,
+    warmupMs: options.warmupMs ?? 6000,
+    stabilizeMs: options.stabilizeMs ?? 5000,
+    minSamples: options.minSamples ?? 4,
+    maxSpreadMeters: options.maxSpreadMeters ?? 3,
   });
   const mapped = mapPosition({ coords: pos.coords });
   if (mapped.accuracy == null) {
@@ -371,15 +405,17 @@ export async function getLocation() {
 
 export const PREMISE_MAX_ACCURACY_METERS = 5;
 export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 5;
-export const PREMISE_CAPTURE_TIMEOUT_MS = 60000;
-export const PREMISE_GPS_WARMUP_MS = 10000;
-export const PREMISE_GPS_STABILIZE_MS = 6000;
-export const PREMISE_GPS_MIN_SAMPLES = 3;
+export const PREMISE_CAPTURE_TIMEOUT_MS = 45000;
+export const PREMISE_GPS_WARMUP_MS = 6000;
+export const PREMISE_GPS_STABILIZE_MS = 5000;
+export const PREMISE_GPS_MIN_SAMPLES = 4;
+export const PREMISE_GPS_MAX_SPREAD_METERS = 3;
 
 const premiseCaptureOptions = {
   warmupMs: PREMISE_GPS_WARMUP_MS,
   stabilizeMs: PREMISE_GPS_STABILIZE_MS,
   minSamples: PREMISE_GPS_MIN_SAMPLES,
+  maxSpreadMeters: PREMISE_GPS_MAX_SPREAD_METERS,
 };
 
 /** High-accuracy GPS for registering premises or patrol places on site. */

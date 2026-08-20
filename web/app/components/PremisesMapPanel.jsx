@@ -41,7 +41,7 @@ import {
 
 const MARKER_STYLES = {
   premise: { fill: '#1b4332', stroke: '#86efac', label: 'SITE' },
-  place: { fill: '#047857', stroke: '#6ee7b7', label: 'P' },
+  place: { fill: '#b91c1c', stroke: '#fca5a5', label: 'P' },
   checkpoint: { fill: '#1d4ed8', stroke: '#93c5fd', label: 'NFC' },
   guard: { fill: '#1e40af', stroke: '#60a5fa', label: 'G' },
   alert: { fill: '#b91c1c', stroke: '#fca5a5', label: '!' },
@@ -64,7 +64,7 @@ function svgPin(fill, stroke, label, size = 36) {
 function pinIcon(kind, label = '', extraClass = '', colors = null) {
   const style = colors || MARKER_STYLES[kind] || MARKER_STYLES.activity;
   const pinLabel = kind === 'premise' && label ? label.slice(0, 3).toUpperCase() : (colors?.label || style.label);
-  const size = kind === 'sos' ? 40 : kind === 'activity' ? 28 : kind === 'place' ? 30 : 36;
+  const size = kind === 'sos' ? 40 : kind === 'premise' ? 36 : kind === 'place' ? 22 : kind === 'activity' ? 28 : 36;
   const fill = colors?.fill || style.fill;
   const stroke = colors?.stroke || style.stroke;
   return L.divIcon({
@@ -96,7 +96,7 @@ const LAYER_DEFS = [
   { key: 'premises', label: 'Protected premises', color: '#40916c' },
   { key: 'geofences', label: 'Clock-in geofences', color: '#86efac' },
   { key: 'gpsQuality', label: 'GPS accuracy rings', color: '#22c55e' },
-  { key: 'places', label: 'Patrol places', color: '#10b981' },
+  { key: 'places', label: 'Patrol places', color: '#ef4444' },
   { key: 'patrolRoutes', label: 'Patrol routes', color: '#059669' },
   { key: 'checkpoints', label: 'NFC checkpoints', color: '#3b82f6' },
   { key: 'guards', label: 'Live guards', color: '#60a5fa' },
@@ -503,9 +503,12 @@ export default function PremisesMapPanel({
           const c = coordsFrom(place.coordinates);
           if (!c) return;
           extendBounds.push([c.lat, c.lng]);
-          const marker = L.marker([c.lat, c.lng], { icon: pinIcon('place') });
+          const marker = L.marker([c.lat, c.lng], {
+            icon: pinIcon('place'),
+            zIndexOffset: 50,
+          });
           marker.bindPopup(
-            popupHtml(place.name, 'Patrol place', '#10b981', [
+            popupHtml(place.name, 'Patrol place', '#ef4444', [
               `Site: ${premise.name}`,
               place.type ? `Type: ${place.type}` : null,
               place.description || null,
@@ -1006,6 +1009,9 @@ export default function PremisesMapPanel({
         <div className="premises-map-legend">
           <span className="premises-map-legend-item">
             <span className="premises-map-legend-dot" style={{ background: '#40916c' }} /> Premises
+          </span>
+          <span className="premises-map-legend-item">
+            <span className="premises-map-legend-dot" style={{ background: '#ef4444' }} /> Places
           </span>
           <span className="premises-map-legend-item">
             <span className="premises-map-legend-dot" style={{ background: '#60a5fa' }} /> Guards

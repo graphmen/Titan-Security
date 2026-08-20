@@ -3,10 +3,10 @@
                     "appId":  "monitor",
                     "name":  "Titan Monitor",
                     "description":  "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
-                    "version":  "1.0.17",
-                    "versionCode":  17,
+                    "version":  "1.0.18",
+                    "versionCode":  18,
                     "apkFile":  "titan-monitor-latest.apk",
-                    "notes":  "Published 2026-08-20 09:52"
+                    "notes":  "Published 2026-08-20 10:05"
                 },
     "supervisor":  {
                        "appId":  "supervisor",
@@ -15,7 +15,7 @@
                        "version":  "1.1.9",
                        "versionCode":  19,
                        "apkFile":  "titan-supervisor-latest.apk",
-                       "notes":  "Published 2026-08-20 09:52"
+                       "notes":  "Published 2026-08-20 10:05"
                    },
-    "updatedAt":  "2026-08-20T07:52:08.298Z"
+    "updatedAt":  "2026-08-20T08:05:19.094Z"
 }

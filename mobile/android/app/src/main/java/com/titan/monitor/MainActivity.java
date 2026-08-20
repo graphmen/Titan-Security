@@ -42,6 +42,15 @@ public class MainActivity extends BridgeActivity {
                             9001
                         );
                     }
+                    if (ContextCompat.checkSelfPermission(
+                        MainActivity.this, Manifest.permission.CAMERA
+                    ) != PackageManager.PERMISSION_GRANTED) {
+                        ActivityCompat.requestPermissions(
+                            MainActivity.this,
+                            new String[] { Manifest.permission.CAMERA },
+                            9002
+                        );
+                    }
                     request.grant(request.getResources());
                 });
             }

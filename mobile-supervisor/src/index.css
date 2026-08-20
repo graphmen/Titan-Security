@@ -1850,6 +1850,77 @@ body {
   font-size: 0.65rem;
 }
 
+.app-update-wrap {
+  position: relative;
+}
+
+.app-update-wrap.compact {
+  display: inline-flex;
+}
+
+.app-update-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--mob-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+}
+
+.app-update-trigger.has-update {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.app-update-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  flex-shrink: 0;
+}
+
+.app-update-chevron {
+  transition: transform 0.2s ease;
+}
+
+.app-update-chevron.open {
+  transform: rotate(180deg);
+}
+
+.app-update-wrap .app-update-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 200;
+  min-width: 240px;
+  box-shadow: var(--mob-shadow-md);
+}
+
+.app-update-wrap:not(.compact) .app-update-panel {
+  position: static;
+  margin-top: 0.5rem;
+}
+
+.app-update-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.app-update-close {
+  border: none;
+  background: transparent;
+  color: var(--mob-text-muted);
+  padding: 0.2rem;
+  display: inline-flex;
+}
+
 .app-update-panel {
   margin-top: 1rem;
   padding: 0.75rem 0.85rem;
@@ -1860,10 +1931,10 @@ body {
 
 .app-update-panel.compact {
   margin-top: 0;
-  padding: 0.35rem 0.5rem;
-  border: none;
-  background: transparent;
-  min-width: 140px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--mob-border);
+  background: var(--mob-card);
+  min-width: 240px;
 }
 
 .app-update-row {

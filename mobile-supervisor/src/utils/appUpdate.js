@@ -24,7 +24,18 @@ export async function installApkUpdate(apkUrl) {
   if (!apkUrl) throw new Error('No update URL available');
 
   if (Capacitor.getPlatform() === 'android') {
-    await ApkInstaller.installFromUrl({ url: apkUrl });
+    if (Capacitor.isPluginAvailable('ApkInstaller')) {
+      try {
+        await ApkInstaller.installFromUrl({ url: apkUrl });
+        return;
+      } catch (err) {
+        const msg = String(err?.message || err);
+        if (!msg.toLowerCase().includes('not implemented')) {
+          throw new Error(msg || 'Could not download update');
+        }
+      }
+    }
+    window.location.href = apkUrl;
     return;
   }
 

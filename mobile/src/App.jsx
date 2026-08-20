@@ -47,6 +47,8 @@ import { postStateAction } from './utils/api';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
 import { getLocation, getLocationForClockIn, initLocationPermissionFlow } from './utils/location';
 import { startVoiceMemo } from './utils/voice';
+import { scanQrFromCamera, stopQrScanner } from './utils/qrScan';
+import { parseVisitorQr } from './utils/visitorQr';
 import {
   playNfcScan,
   playNfcSuccess,
@@ -104,6 +106,7 @@ export default function App() {
   const [vCompany, setVCompany] = useState('');
   const [vPlate, setVPlate] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const scanRequestedRef = useRef(false);
 
   // Selected Checklist
   const [activeChecklistId, setActiveChecklistId] = useState('');
@@ -570,17 +573,57 @@ export default function App() {
     }
   };
 
-  // Mock scan QR Badge visitor check
+  useEffect(() => () => { stopQrScanner(); }, []);
+
+  useEffect(() => {
+    if (!isScanning || !scanRequestedRef.current) return undefined;
+    scanRequestedRef.current = false;
+    let cancelled = false;
+
+    (async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      if (cancelled) return;
+      try {
+        const decoded = await scanQrFromCamera('visitor-qr-reader');
+        if (cancelled) return;
+        const parsed = parseVisitorQr(decoded);
+        if (!parsed?.name) {
+          showToast('Could not read visitor details from QR code', 'error');
+          return;
+        }
+        setVName(parsed.name);
+        setVIdNumber(parsed.idNumber || '');
+        setVCompany(parsed.company || '');
+        setVPlate(parsed.vehiclePlate || '');
+        playSuccessBeep();
+        showToast(`Scanned: ${parsed.name}`);
+      } catch (e) {
+        if (!cancelled) showToast(e.message || 'QR scan failed', 'error');
+      } finally {
+        await stopQrScanner();
+        if (!cancelled) setIsScanning(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      stopQrScanner();
+    };
+  }, [isScanning]);
+
   const handleScanQrBadge = () => {
-    setIsScanning(true);
-    setTimeout(() => {
+    if (isScanning) {
+      stopQrScanner();
       setIsScanning(false);
-      setVName('Tendai Shumba');
-      setVIdNumber('ID-119932-S');
-      setVCompany('Courier Logistics ZW');
-      setVPlate('HA-990-ZW');
-      playSuccessBeep();
-    }, 1800);
+      return;
+    }
+    scanRequestedRef.current = true;
+    setIsScanning(true);
+  };
+
+  const handleCancelScan = () => {
+    stopQrScanner();
+    setIsScanning(false);
   };
 
   // Sign in Visitor
@@ -598,11 +641,15 @@ export default function App() {
 
     if (isOnline) {
       try {
-        await fetch(apiUrl('/api/state'), {
+        const res = await fetch(apiUrl('/api/state'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'REGISTER_VISITOR', ...payload })
         });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || 'Could not register visitor');
+        }
         showToast(`Visitor checked in: ${vName}`);
         setVName('');
         setVIdNumber('');
@@ -610,7 +657,7 @@ export default function App() {
         setVPlate('');
         fetchState();
       } catch (err) {
-        showToast('Server unreachable — saved offline', 'error');
+        showToast(err.message || 'Server unreachable — saved offline', 'error');
         queueVisitor(payload);
       }
     } else {
@@ -1712,16 +1759,30 @@ export default function App() {
             {/* QR Scanner camera graphic */}
             <div className="mob-card" style={{ padding: '0.5rem' }}>
               <div className="scanner-viewport">
-                <div className="scanner-laser" />
-                <div className="scanner-target-box" style={{ borderColor: isScanning ? 'var(--mob-success)' : 'rgba(255,255,255,0.15)' }}>
-                  {isScanning && (
-                    <QrCode size={40} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'var(--mob-success)', opacity: 0.7 }} />
-                  )}
-                </div>
+                {isScanning ? (
+                  <div id="visitor-qr-reader" className="visitor-qr-reader" />
+                ) : (
+                  <>
+                    <div className="scanner-laser" />
+                    <div className="scanner-target-box">
+                      <QrCode size={40} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'rgba(255,255,255,0.35)' }} />
+                    </div>
+                  </>
+                )}
               </div>
-              <button type="button" className="mob-btn mob-btn-secondary" style={{ fontSize: '0.8rem', padding: '0.65rem' }} onClick={handleScanQrBadge} disabled={isScanning}>
-                {isScanning ? 'Reading credentials...' : 'Scan Visitor QR Code'}
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" className="mob-btn mob-btn-secondary" style={{ flex: 1, fontSize: '0.8rem', padding: '0.65rem' }} onClick={handleScanQrBadge}>
+                  {isScanning ? 'Scanning… point at QR code' : 'Scan Visitor QR Code'}
+                </button>
+                {isScanning && (
+                  <button type="button" className="mob-btn mob-btn-secondary" style={{ fontSize: '0.8rem', padding: '0.65rem' }} onClick={handleCancelScan}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+              <p style={{ fontSize: '0.68rem', color: 'var(--mob-text-muted)', margin: '0.5rem 0 0', lineHeight: 1.4 }}>
+                QR can be JSON or text: Name|ID|Company|Plate. You can also type details below manually.
+              </p>
             </div>
             
             <form onSubmit={handleAddVisitor} className="mob-card elevated">

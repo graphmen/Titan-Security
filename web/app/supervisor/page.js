@@ -1,15 +1,20 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
   AlertTriangle,
   BookOpen,
   Clock,
+  Database,
   Home,
   LogOut,
+  MapPin,
+  MapPinned,
   Menu,
+  Play,
   Radio,
   RefreshCw,
   Shield,
@@ -20,8 +25,27 @@ import {
 } from 'lucide-react';
 import GuardManagement from '../components/GuardManagement';
 import PremisesRegistration from '../components/PremisesRegistration';
+import DatabaseExplorer from '../components/DatabaseExplorer';
 import { mergeSystemSettings } from '../../lib/systemSettings';
 import { apiFetch } from '../../lib/apiClient';
+
+const PremisesMapPanel = dynamic(() => import('../components/PremisesMapPanel'), {
+  ssr: false,
+  loading: () => (
+    <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+      Loading map…
+    </div>
+  ),
+});
+
+const SUPERVISOR_EDITABLE_TABLES = [
+  'premises',
+  'places',
+  'guards',
+  'shifts',
+  'guard_alerts',
+  'occurrence_book',
+];
 
 export default function SupervisorDashboardPage() {
   const router = useRouter();
@@ -175,6 +199,28 @@ export default function SupervisorDashboardPage() {
     setSidebarOpen(false);
   };
 
+  const pageTitle =
+    activeTab === 'command'
+      ? 'Command Centre'
+      : activeTab === 'guards'
+      ? 'Guard Management'
+      : activeTab === 'premises'
+      ? 'Register Premises'
+      : activeTab === 'map'
+      ? 'GIS Operations Map'
+      : 'Data Explorer';
+
+  const pageSubtitle =
+    activeTab === 'command'
+      ? 'Real-time monitoring for guards and sites in your assigned territories.'
+      : activeTab === 'guards'
+      ? 'Manage guards within your territory scope only.'
+      : activeTab === 'premises'
+      ? 'Register and maintain premises in your assigned territories.'
+      : activeTab === 'map'
+      ? 'Live map of premises, patrol points, geofences, and on-duty guard GPS in your territories.'
+      : 'Browse and export records for guards, premises, shifts, and operations in your scope.';
+
   return (
     <div className="app-layout">
       {sidebarOpen && (
@@ -188,8 +234,8 @@ export default function SupervisorDashboardPage() {
         <p className="supervisor-sidebar-user">{supervisorName}</p>
         <ul className="sidebar-nav-list">
           <li>
-            <button className={`sidebar-nav-item ${activeTab === 'command' ? 'active' : ''}`} onClick={() => selectTab('command')}>
-              <Activity size={18} /> Command Centre
+            <button className={`sidebar-nav-item ${activeTab === 'premises' ? 'active' : ''}`} onClick={() => selectTab('premises')}>
+              <Home size={18} /> Register Premises
             </button>
           </li>
           <li>
@@ -198,8 +244,18 @@ export default function SupervisorDashboardPage() {
             </button>
           </li>
           <li>
-            <button className={`sidebar-nav-item ${activeTab === 'premises' ? 'active' : ''}`} onClick={() => selectTab('premises')}>
-              <Home size={18} /> Register Premises
+            <button className={`sidebar-nav-item ${activeTab === 'map' ? 'active' : ''}`} onClick={() => selectTab('map')}>
+              <MapPinned size={18} /> GIS Operations Map
+            </button>
+          </li>
+          <li>
+            <button className={`sidebar-nav-item ${activeTab === 'command' ? 'active' : ''}`} onClick={() => selectTab('command')}>
+              <Activity size={18} /> Command Centre
+            </button>
+          </li>
+          <li>
+            <button className={`sidebar-nav-item ${activeTab === 'data' ? 'active' : ''}`} onClick={() => selectTab('data')}>
+              <Database size={18} /> Data Explorer
             </button>
           </li>
         </ul>
@@ -221,16 +277,8 @@ export default function SupervisorDashboardPage() {
 
         <header className="page-header">
           <div className="page-header-main">
-            <h1 className="page-title">
-              {activeTab === 'command' ? 'Command Centre' : activeTab === 'guards' ? 'Guard Management' : 'Register Premises'}
-            </h1>
-            <p className="page-subtitle">
-              {activeTab === 'command'
-                ? 'Real-time monitoring for guards and sites in your assigned territories.'
-                : activeTab === 'guards'
-                ? 'Manage guards within your territory scope only.'
-                : 'Register and maintain premises in your assigned territories.'}
-            </p>
+            <h1 className="page-title">{pageTitle}</h1>
+            <p className="page-subtitle">{pageSubtitle}</p>
             <p className="page-meta">
               <strong>{systemSettings.companyName}</strong>
               {' · '}{curTerritories.length} territor{curTerritories.length === 1 ? 'y' : 'ies'}
@@ -294,6 +342,33 @@ export default function SupervisorDashboardPage() {
             checkpoints={curCheckpoints}
             onRefresh={fetchState}
           />
+        ) : activeTab === 'map' ? (
+          <div className="animate-fade-in">
+            <PremisesMapPanel
+              showSidebar
+              premises={curPremises}
+              places={curPlaces}
+              guards={curGuards}
+              attendance={curAttendance}
+              checkpoints={curCheckpoints}
+              guardAlerts={curGuardAlerts}
+              occurrenceBook={curOB}
+              activeSos={activeSos}
+              territories={curTerritories}
+              shifts={curShifts}
+              geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+              height={640}
+            />
+          </div>
+        ) : activeTab === 'data' ? (
+          <DatabaseExplorer
+            state={state}
+            tenantId={tenantId}
+            dataSource={state.dataSource}
+            onRefresh={fetchState}
+            refreshing={loading}
+            editableTableIds={SUPERVISOR_EDITABLE_TABLES}
+          />
         ) : (
           <div className="dashboard-grid">
             <div className="col-12 stat-cards-row">
@@ -302,8 +377,26 @@ export default function SupervisorDashboardPage() {
                   <Shield size={20} style={{ color: 'var(--color-primary)' }} />
                 </div>
                 <div>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Compliance</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Compliance Rate</p>
                   <h3 style={{ fontSize: '1.35rem', fontWeight: 700 }}>{complianceRate}%</h3>
+                </div>
+              </div>
+              <div className="glass-panel" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ background: '#d1fae5', padding: '0.65rem', borderRadius: '8px' }}>
+                  <MapPin size={20} style={{ color: 'var(--color-success)' }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Taps Scanned</p>
+                  <h3 style={{ fontSize: '1.35rem', fontWeight: 700 }}>{scannedCps} / {curCheckpoints.length}</h3>
+                </div>
+              </div>
+              <div className="glass-panel" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ background: '#fef3c7', padding: '0.65rem', borderRadius: '8px' }}>
+                  <Users size={20} style={{ color: 'var(--color-warning)' }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Active Guests</p>
+                  <h3 style={{ fontSize: '1.35rem', fontWeight: 700 }}>{curVisitors.filter((v) => v.status === 'Active').length}</h3>
                 </div>
               </div>
               <div className="glass-panel" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -311,46 +404,119 @@ export default function SupervisorDashboardPage() {
                   <Users size={20} style={{ color: '#2563eb' }} />
                 </div>
                 <div>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>On Duty</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>Guards On Duty</p>
                   <h3 style={{ fontSize: '1.35rem', fontWeight: 700 }}>{guardsOnDuty.length}</h3>
                 </div>
               </div>
             </div>
 
             {criticalGuardAlerts.length > 0 && (
-              <div className="col-12">
+              <div className="col-12" style={{ marginBottom: '0.5rem' }}>
                 <div className="glass-panel" style={{ padding: '0.75rem 1rem', background: '#fef2f2', border: '1px solid #fecaca' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <AlertTriangle size={14} /> Guard Alerts ({criticalGuardAlerts.length})
+                  </div>
                   {criticalGuardAlerts.slice(0, 5).map((a) => (
-                    <div key={a.id} style={{ fontSize: '0.8rem', color: '#7f1d1d' }}>{a.message}</div>
+                    <div key={a.id} style={{ fontSize: '0.75rem', color: '#7f1d1d', marginBottom: '0.25rem' }}>{a.message}</div>
                   ))}
                 </div>
               </div>
             )}
 
-            <div className="col-8">
-              <div className="glass-panel" style={{ padding: '1.5rem' }}>
-                <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <BookOpen size={18} /> Occurrence Book
+            {guardsOnDuty.length > 0 && (
+              <div className="col-12" style={{ marginBottom: '0.5rem' }}>
+                <div className="glass-panel" style={{ padding: '0.75rem 1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>Live on duty:</span>
+                  {guardsOnDuty.map((a) => {
+                    const g = curGuards.find((x) => x.id === a.guardId);
+                    const p = curPremises.find((x) => x.id === a.premiseId);
+                    return (
+                      <span key={a.id} className="badge badge-green" style={{ fontSize: '0.75rem' }}>
+                        {g?.fullName || 'Guard'} @ {p?.name || 'Site'} · since {new Date(a.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="col-8" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div className="glass-panel canvas-map-card" style={{ flex: 1, padding: '1rem' }}>
+                <div style={{ marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '1.1rem' }}>Live Guard Geofence Tracker</h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Premises, patrol points, geofences, and on-duty guard GPS in your territories</p>
+                </div>
+                <PremisesMapPanel
+                  compact
+                  premises={curPremises}
+                  places={curPlaces}
+                  guards={curGuards}
+                  attendance={curAttendance}
+                  checkpoints={curCheckpoints}
+                  guardAlerts={curGuardAlerts}
+                  occurrenceBook={curOB}
+                  activeSos={activeSos}
+                  territories={curTerritories}
+                  shifts={curShifts}
+                  geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+                  height={480}
+                />
+              </div>
+            </div>
+
+            <div className="col-4" style={{ display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 200px)' }}>
+              <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
+                  <BookOpen size={18} style={{ color: 'var(--color-primary)' }} />
+                  Occurrence Book (OB)
                 </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '420px', overflowY: 'auto' }}>
+                <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
                   {curOB.length === 0 ? (
-                    <p style={{ color: 'var(--text-dimmed)', fontSize: '0.85rem' }}>No activity in your territories yet.</p>
+                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-dimmed)' }}>
+                      <BookOpen size={40} style={{ strokeWidth: 1.5, marginBottom: '0.75rem' }} />
+                      <p style={{ fontSize: '0.85rem' }}>No activity in your territories yet.</p>
+                    </div>
                   ) : (
                     curOB.map((item) => (
                       <div key={item.id} className="glass-card" style={{ padding: '0.875rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                          <span className="badge badge-blue">{item.type}</span>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-dimmed)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
+                          <span className={`badge ${
+                            item.type === 'SOS Panic Alarm' ? 'badge-red'
+                            : item.type === 'Patrol Tap' ? 'badge-blue'
+                            : 'badge-green'
+                          }`}>
+                            {item.type}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-dimmed)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                             <Clock size={10} /> {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <p style={{ fontSize: '0.825rem', marginBottom: '0.35rem' }}>{item.description}</p>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
-                          <span>{item.guardName}</span>
+                        <p style={{ fontSize: '0.825rem', color: 'var(--text-main)', margin: '0.35rem 0', fontWeight: 500 }}>{item.description}</p>
+                        {(item.attachments?.photo || item.attachments?.voice) && (
+                          <div style={{ display: 'flex', gap: '0.5rem', margin: '0.5rem 0', padding: '0.35rem', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                            {item.attachments.photo && (
+                              <div style={{ width: '42px', height: '42px', borderRadius: '4px', overflow: 'hidden', cursor: 'pointer', border: '1px solid #cbd5e1' }}>
+                                <img src={item.attachments.photo} alt="Attached evidence" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onClick={() => window.open(item.attachments.photo)} />
+                              </div>
+                            )}
+                            {item.attachments.voice && (
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                style={{ flex: 1, padding: '0.2rem', fontSize: '0.7rem', borderRadius: '4px', height: '42px', gap: '0.2rem' }}
+                                onClick={() => { const a = new Audio(item.attachments.voice); a.play(); }}
+                              >
+                                <Play size={10} /> Memo
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '0.35rem', marginTop: '0.35rem', fontSize: '0.75rem' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>{item.guardName}</span>
                           <select
                             value={item.status}
                             onChange={(e) => handleUpdateIncidentStatus(item.id, e.target.value)}
-                            style={{ padding: '0.15rem', fontSize: '0.7rem', borderRadius: '4px', border: '1px solid var(--border-light)' }}
+                            style={{ padding: '0.15rem', fontSize: '0.7rem', background: '#ffffff', color: 'var(--text-main)', borderRadius: '4px', border: '1px solid var(--border-light)' }}
                           >
                             <option value="Unassigned">Unassigned</option>
                             <option value="Investigating">Investigating</option>
@@ -364,27 +530,74 @@ export default function SupervisorDashboardPage() {
               </div>
             </div>
 
-            <div className="col-4">
+            <div className="col-12" style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: '1.25rem', marginTop: '0.5rem', marginBottom: '1.5rem' }}>
               <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <UserPlus size={18} /> Visitor Check-in
+                <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
+                  <UserPlus size={18} style={{ color: 'var(--color-primary)' }} />
+                  Access Desk Registry
                 </h3>
-                <form onSubmit={handleAddVisitor} style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                <form onSubmit={handleAddVisitor} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
                   <input className="form-input" value={vName} onChange={(e) => setVName(e.target.value)} placeholder="Visitor name" required />
                   <input className="form-input" value={vIdNumber} onChange={(e) => setVIdNumber(e.target.value)} placeholder="ID / Passport" required />
                   <input className="form-input" value={vCompany} onChange={(e) => setVCompany(e.target.value)} placeholder="Company" />
                   <input className="form-input" value={vPlate} onChange={(e) => setVPlate(e.target.value)} placeholder="Vehicle plate" />
-                  <button type="submit" className="btn-primary">Check-in</button>
+                  <button type="submit" className="btn-primary" style={{ gridColumn: '1 / -1' }}>Check-in Visitor</button>
                 </form>
-                <div style={{ marginTop: '1rem' }}>
-                  {curVisitors.filter((v) => v.status === 'Active').slice(0, 5).map((v) => (
-                    <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.35rem' }}>
-                      <span>{v.name}</span>
-                      <button type="button" className="btn-secondary" style={{ padding: '0.15rem 0.4rem', fontSize: '0.7rem' }} onClick={() => handleCheckoutVisitor(v.id)}>
-                        Out
-                      </button>
-                    </div>
-                  ))}
+              </div>
+
+              <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column' }}>
+                <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
+                  <Users size={18} style={{ color: 'var(--color-success)' }} />
+                  Live Visitor & Vehicle Log
+                </h3>
+                <div style={{ overflowX: 'auto', flex: 1 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-light)', color: 'var(--text-muted)' }}>
+                        <th style={{ padding: '0.4rem' }}>Visitor Details</th>
+                        <th style={{ padding: '0.4rem' }}>Company</th>
+                        <th style={{ padding: '0.4rem' }}>Plate</th>
+                        <th style={{ padding: '0.4rem' }}>Check In</th>
+                        <th style={{ padding: '0.4rem' }}>Status</th>
+                        <th style={{ padding: '0.4rem', textAlign: 'right' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {curVisitors.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dimmed)' }}>No guests signed in today.</td>
+                        </tr>
+                      ) : (
+                        curVisitors.map((v) => (
+                          <tr key={v.id} style={{ borderBottom: '1px solid #f1f5f9', color: v.status === 'Checked Out' ? 'var(--text-dimmed)' : 'var(--text-main)' }}>
+                            <td style={{ padding: '0.5rem' }}>
+                              <div style={{ fontWeight: '600' }}>{v.name}</div>
+                              <div style={{ fontSize: '0.725rem', color: 'var(--text-dimmed)' }}>{v.idNumber}</div>
+                            </td>
+                            <td style={{ padding: '0.5rem' }}>{v.company || 'N/A'}</td>
+                            <td style={{ padding: '0.5rem' }}>
+                              <span style={{ fontFamily: 'monospace', background: '#f1f5f9', padding: '0.15rem 0.35rem', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '0.8rem' }}>{v.vehiclePlate || '—'}</span>
+                            </td>
+                            <td style={{ padding: '0.5rem' }}>{new Date(v.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                            <td style={{ padding: '0.5rem' }}>
+                              <span className={`badge ${v.status === 'Active' ? 'badge-green' : 'badge-blue'}`}>{v.status}</span>
+                            </td>
+                            <td style={{ padding: '0.5rem', textAlign: 'right' }}>
+                              {v.status === 'Active' ? (
+                                <button type="button" className="btn-secondary" style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem', borderRadius: '4px' }} onClick={() => handleCheckoutVisitor(v.id)}>
+                                  Check Out
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-dimmed)' }}>
+                                  Out: {v.checkOutTime ? new Date(v.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>

@@ -38,6 +38,8 @@ export default function DatabaseExplorer({
   dataSource,
   onRefresh,
   refreshing = false,
+  /** When set, only these table ids may enter edit mode (e.g. supervisor portal). */
+  editableTableIds = null,
 }) {
   const catalog = useMemo(
     () => buildExplorerCatalog(state, tenantId),
@@ -55,7 +57,9 @@ export default function DatabaseExplorer({
   const [saveError, setSaveError] = useState('');
 
   const activeTable = catalog.tables.find((t) => t.id === activeTableId) || catalog.tables[0];
-  const tableEditable = isTableEditable(activeTable?.id);
+  const tableEditable =
+    isTableEditable(activeTable?.id) &&
+    (!editableTableIds || editableTableIds.includes(activeTable?.id));
   const grouped = useMemo(() => groupTablesByCategory(catalog.tables), [catalog.tables]);
 
   const filteredRows = useMemo(() => {

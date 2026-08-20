@@ -81,17 +81,25 @@ export function ensureAlertStore(state, tenantId) {
   if (!state.shiftSwapRequests[tenantId]) state.shiftSwapRequests[tenantId] = [];
 }
 
+function alertDedupeKey(a) {
+  return [
+    a.type,
+    a.guardId,
+    a.premiseId || '',
+    a.shiftId || '',
+  ].join('|');
+}
+
 export function pushGuardAlert(state, tenantId, alert) {
   ensureAlertStore(state, tenantId);
-  const exists = state.guardAlerts[tenantId].some(
-    (a) =>
-      a.type === alert.type &&
-      a.guardId === alert.guardId &&
-      (alert.premiseId ? a.premiseId === alert.premiseId : true) &&
-      (alert.shiftId ? a.shiftId === alert.shiftId : true) &&
-      a.status === 'Active'
+  const key = alertDedupeKey(alert);
+  const existing = state.guardAlerts[tenantId].find(
+    (a) => alertDedupeKey(a) === key
   );
-  if (exists) return null;
+  if (existing) {
+    // Active: already showing. Dismissed: supervisor acknowledged — do not recreate on poll.
+    if (existing.status === 'Active' || existing.status === 'Dismissed') return null;
+  }
   const entry = {
     id: generateAlertId(),
     status: 'Active',

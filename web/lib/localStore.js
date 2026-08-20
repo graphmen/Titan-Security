@@ -1021,16 +1021,15 @@ export function processLocalAction(payload) {
     }
     case 'DISMISS_ALERTS_BY_TYPE': {
       const { alertType } = payload;
-      if (!alertType) return { error: 'Alert type required', status: 400 };
       ensureAlertStore(state, tenantId);
       const now = new Date().toISOString();
       let count = 0;
       state.guardAlerts[tenantId].forEach((a) => {
-        if (a.type === alertType && a.status === 'Active') {
-          a.status = 'Dismissed';
-          a.resolvedAt = now;
-          count += 1;
-        }
+        if (a.status !== 'Active') return;
+        if (alertType && a.type !== alertType) return;
+        a.status = 'Dismissed';
+        a.resolvedAt = now;
+        count += 1;
       });
       return { success: true, dismissedCount: count };
     }

@@ -6,4 +6,10 @@ ALTER TABLE public.guards ADD COLUMN IF NOT EXISTS supervisor_id text REFERENCES
 CREATE INDEX IF NOT EXISTS idx_guards_supervisor ON public.guards(supervisor_id);
 COMMENT ON COLUMN public.guards.supervisor_id IS 'The single supervisor responsible for this guard';
 
+-- 009: guard alert context for dismiss dedupe
+ALTER TABLE public.guard_alerts ADD COLUMN IF NOT EXISTS premise_id text;
+ALTER TABLE public.guard_alerts ADD COLUMN IF NOT EXISTS shift_id text;
+CREATE INDEX IF NOT EXISTS idx_guard_alerts_dedupe
+  ON public.guard_alerts(tenant_id, guard_id, type, premise_id, shift_id, status);
+
 -- After running: reload Master Admin → Master Admin tab → Reload from database

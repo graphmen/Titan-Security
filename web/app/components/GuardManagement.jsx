@@ -974,36 +974,45 @@ export default function GuardManagement({
                 No-movement, license expiry, and shift swap notifications. Geofence-exit alerts are paused for now.
               </p>
             </div>
-            {guardAlerts.some((a) => a.type === 'geofence_exit' && a.status === 'Active') && (
-              <button
-                type="button"
-                className="btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}
-                onClick={() => postAction('DISMISS_ALERTS_BY_TYPE', { alertType: 'geofence_exit' })}
-              >
-                Clear all geofence alerts
-              </button>
+            {activeAlerts.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}
+                  onClick={() => postAction('DISMISS_ALERTS_BY_TYPE', {})}
+                >
+                  Clear all active ({activeAlerts.length})
+                </button>
+                {activeAlerts.some((a) => a.type === 'geofence_exit') && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}
+                    onClick={() => postAction('DISMISS_ALERTS_BY_TYPE', { alertType: 'geofence_exit' })}
+                  >
+                    Clear geofence alerts
+                  </button>
+                )}
+              </div>
             )}
           </div>
-          {guardAlerts.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'var(--text-dimmed)', padding: '2rem' }}>No alerts recorded.</p>
+          {activeAlerts.length === 0 ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-dimmed)', padding: '2rem' }}>No active alerts.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {guardAlerts.slice(0, 50).map((a) => (
-                <div key={a.id} className="glass-card" style={{ padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: a.status === 'Active' ? 1 : 0.6 }}>
+              {activeAlerts.slice(0, 50).map((a) => (
+                <div key={a.id} className="glass-card" style={{ padding: '0.85rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
                       <span className={`badge ${alertBadge(a.severity)}`}>{a.type.replace(/_/g, ' ')}</span>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(a.createdAt).toLocaleString()}</span>
-                      {a.status !== 'Active' && <span className="badge badge-blue">{a.status}</span>}
                     </div>
                     <p style={{ fontSize: '0.85rem', margin: 0 }}>{a.message}</p>
                   </div>
-                  {a.status === 'Active' && (
-                    <button type="button" className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }} onClick={() => postAction('DISMISS_GUARD_ALERT', { alertId: a.id })}>
-                      <X size={12} /> Dismiss
-                    </button>
-                  )}
+                  <button type="button" className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem' }} onClick={() => postAction('DISMISS_GUARD_ALERT', { alertId: a.id })}>
+                    <X size={12} /> Dismiss
+                  </button>
                 </div>
               ))}
             </div>

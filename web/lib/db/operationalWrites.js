@@ -19,6 +19,8 @@ export const OPERATIONAL_WRITE_ACTIONS = new Set([
   'REGISTER_VISITOR',
   'CHECKOUT_VISITOR',
   'UPDATE_INCIDENT_STATUS',
+  'DISMISS_GUARD_ALERT',
+  'DISMISS_ALERTS_BY_TYPE',
 ]);
 
 const db = supabaseAdmin;
@@ -241,6 +243,32 @@ export async function persistOperationalActionToDb(action, payload, tenantId, st
             check_out_time: visitor.checkOutTime,
           }).eq('id', visitorId),
           'visitors CHECKOUT'
+        );
+      }
+      break;
+    }
+    case 'DISMISS_GUARD_ALERT': {
+      const { alertId } = payload;
+      const alert = (state.guardAlerts?.[tenantId] || []).find((a) => a.id === alertId);
+      if (alert) {
+        await requireDbOk(
+          await db.from('guard_alerts').upsert(alertToRow({ ...alert, status: 'Dismissed' }, tenantId)),
+          'guard_alerts DISMISS_GUARD_ALERT'
+        );
+      }
+      break;
+    }
+    case 'DISMISS_ALERTS_BY_TYPE': {
+      const { alertType } = payload;
+      const alerts = (state.guardAlerts?.[tenantId] || []).filter(
+        (a) => a.status === 'Active' && (!alertType || a.type === alertType)
+      );
+      if (alerts.length) {
+        await requireDbOk(
+          await db.from('guard_alerts').upsert(
+            alerts.map((a) => alertToRow({ ...a, status: 'Dismissed' }, tenantId))
+          ),
+          'guard_alerts DISMISS_ALERTS_BY_TYPE'
         );
       }
       break;

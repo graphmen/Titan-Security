@@ -1,6 +1,13 @@
 /** Titan Protection — lightweight service worker (offline shell + static cache). */
-const CACHE = 'titan-pwa-v1';
+const CACHE = 'titan-pwa-v2';
 const PRECACHE = ['/', '/emblem-wordmark.png', '/emblem-light.jpg', '/icons/icon-192.png', '/icons/icon-512.png'];
+
+/** Never cache APKs, version manifest, or the downloads page — always fetch fresh. */
+function isUncachedPath(pathname) {
+  return pathname === '/downloads'
+    || pathname.startsWith('/downloads/')
+    || pathname.startsWith('/api/');
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -21,7 +28,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.pathname.startsWith('/api/')) return;
+  if (isUncachedPath(url.pathname)) return;
 
   event.respondWith(
     fetch(request)

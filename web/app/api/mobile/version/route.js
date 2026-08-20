@@ -24,8 +24,8 @@ export async function GET(req) {
   try {
     const manifest = await loadManifest();
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
-      || `${url.protocol}//${url.host}`;
+      || `${url.protocol}//${url.host}`
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
 
     const cors = {
       'Access-Control-Allow-Origin': origin || '*',

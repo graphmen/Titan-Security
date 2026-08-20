@@ -1,6 +1,6 @@
 /** Built-in defaults for Titan Monitor APK (override via mobile/.env at build time). */
 export const DEFAULT_API_URL =
-  import.meta.env.VITE_API_URL || 'https://titan-security.vercel.app';
+  import.meta.env.VITE_API_URL || 'https://titanprotection.org';
 
 export const DEFAULT_TENANT_ID = 'titan';
 

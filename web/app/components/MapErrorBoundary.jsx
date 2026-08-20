@@ -28,7 +28,7 @@ export default class MapErrorBoundary extends React.Component {
         <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', minHeight: this.props.minHeight || 420 }}>
           <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>GIS map could not load</p>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', maxWidth: 420, margin: '0 auto 1rem' }}>
-            A map rendering error occurred. Other dashboard tabs are still available.
+            {this.state.error?.message || 'A map rendering error occurred. Other dashboard tabs are still available.'}
           </p>
           <button type="button" className="btn-primary" onClick={this.handleRetry} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
             <RefreshCw size={14} /> Retry map

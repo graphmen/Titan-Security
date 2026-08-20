@@ -44,6 +44,7 @@ import SystemSettings from './components/SystemSettings';
 import DatabaseExplorer from './components/DatabaseExplorer';
 import { mergeSystemSettings } from '../lib/systemSettings';
 import { apiFetch } from '../lib/apiClient';
+import { tenantRows } from '../lib/safeData';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import MapErrorBoundary from './components/MapErrorBoundary';
@@ -437,22 +438,22 @@ export default function DashboardPage() {
   }
 
   const tenantKey = state.activeTenantId || 'titan';
-  const curCheckpoints = state.checkpoints?.[tenantKey] || [];
+  const curCheckpoints = tenantRows(state.checkpoints, tenantKey);
   const curOB = (state.occurrenceBook || []).filter((item) => item.tenantId === tenantKey);
   const curVisitors = (state.visitors || []).filter((item) => item.tenantId === tenantKey);
-  const curTemplates = state.checklistTemplates?.[tenantKey] || [];
+  const curTemplates = tenantRows(state.checklistTemplates, tenantKey);
   const curSubmissions = (state.checklistSubmissions || []).filter((item) => item.tenantId === tenantKey);
   const activeSos = state.activeSosAlerts?.[tenantKey];
 
-  const curPremises = state.premises?.[state.activeTenantId] || [];
+  const curPremises = tenantRows(state.premises, tenantKey);
   const curPlaces = state.places || {};
-  const curGuards = state.guards?.[state.activeTenantId] || [];
-  const curShifts = state.shifts?.[state.activeTenantId] || [];
-  const curAttendance = state.attendance?.[state.activeTenantId] || [];
-  const curGuardAlerts = state.guardAlerts?.[state.activeTenantId] || [];
-  const curShiftSwaps = state.shiftSwapRequests?.[state.activeTenantId] || [];
-  const curTerritories = state.territories?.[state.activeTenantId] || [];
-  const curSupervisors = state.supervisors?.[state.activeTenantId] || [];
+  const curGuards = tenantRows(state.guards, tenantKey);
+  const curShifts = tenantRows(state.shifts, tenantKey);
+  const curAttendance = tenantRows(state.attendance, tenantKey);
+  const curGuardAlerts = tenantRows(state.guardAlerts, tenantKey);
+  const curShiftSwaps = tenantRows(state.shiftSwapRequests, tenantKey);
+  const curTerritories = tenantRows(state.territories, tenantKey);
+  const curSupervisors = tenantRows(state.supervisors, tenantKey);
   const systemSettings = mergeSystemSettings(state.systemSettings);
   const onDutyCount = curAttendance.filter((a) => a.status === 'On Duty' || a.status === 'Late').length;
   const activeAlertCount = curGuardAlerts.filter((a) => a.status === 'Active').length;

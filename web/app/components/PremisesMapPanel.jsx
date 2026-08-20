@@ -6,6 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './premisesMap.css';
 import { isValidGpsCoord } from '../../lib/guards';
+import { asArray } from '../../lib/safeData';
 import {
   BASEMAPS,
   DEFAULT_BASEMAP_ID,
@@ -64,7 +65,7 @@ function svgPin(fill, stroke, label, size = 36) {
 
 function pinIcon(kind, label = '', extraClass = '', colors = null) {
   const style = colors || MARKER_STYLES[kind] || MARKER_STYLES.activity;
-  const pinLabel = kind === 'premise' && label ? label.slice(0, 3).toUpperCase() : (colors?.label || style.label);
+  const pinLabel = kind === 'premise' && label ? String(label).slice(0, 3).toUpperCase() : (colors?.label || style.label);
   const size = kind === 'sos' ? 40 : kind === 'premise' ? 36 : kind === 'place' ? 22 : kind === 'activity' ? 28 : 36;
   const fill = colors?.fill || style.fill;
   const stroke = colors?.stroke || style.stroke;
@@ -109,23 +110,22 @@ const LAYER_DEFS = [
   { key: 'territories', label: 'Territory zones', color: '#f59e0b' },
 ];
 
-export default function PremisesMapPanel({
-  premises = [],
-  places = {},
-  guards = [],
-  attendance = [],
-  checkpoints = [],
-  guardAlerts = [],
-  occurrenceBook = [],
-  activeSos = null,
-  territories = [],
-  shifts = [],
-  geofenceRadiusMeters = 6,
-  height = 560,
-  showSidebar = false,
-  compact = false,
-  selectedPremiseId = null,
-}) {
+export default function PremisesMapPanel(props) {
+  const premises = asArray(props.premises);
+  const guards = asArray(props.guards);
+  const attendance = asArray(props.attendance);
+  const checkpoints = asArray(props.checkpoints);
+  const guardAlerts = asArray(props.guardAlerts);
+  const occurrenceBook = asArray(props.occurrenceBook);
+  const territories = asArray(props.territories).filter(Boolean);
+  const shifts = asArray(props.shifts);
+  const places = props.places && typeof props.places === 'object' && !Array.isArray(props.places) ? props.places : {};
+  const activeSos = props.activeSos ?? null;
+  const geofenceRadiusMeters = props.geofenceRadiusMeters ?? 6;
+  const height = props.height ?? 560;
+  const showSidebar = props.showSidebar ?? false;
+  const compact = props.compact ?? false;
+  const selectedPremiseId = props.selectedPremiseId ?? null;
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const overlayRef = useRef(null);
@@ -319,7 +319,13 @@ export default function PremisesMapPanel({
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
 
-    const map = L.map(mapRef.current, {
+    const el = mapRef.current;
+    // React strict-mode remount: clear stale Leaflet container id
+    if (el._leaflet_id != null) {
+      delete el._leaflet_id;
+    }
+
+    const map = L.map(el, {
       center: DEFAULT_MAP_CENTER,
       zoom: DEFAULT_MAP_ZOOM,
       zoomControl: false,
@@ -499,7 +505,7 @@ export default function PremisesMapPanel({
 
         if (layers.premises) {
           const marker = L.marker(latlng, {
-            icon: pinIcon('premise', (premise.name || 'Site').slice(0, 3)),
+            icon: pinIcon('premise', String(premise.name || 'Site').slice(0, 3)),
             zIndexOffset: isSelected ? 900 : 100,
           });
           marker.bindPopup(
@@ -882,7 +888,7 @@ export default function PremisesMapPanel({
                 onClick={() => flyToCoords(p.coordinates, 17)}
               >
                 <strong>{p.name}</strong>
-                <span>{p.coordinates.accuracyMeters ? `±${p.coordinates.accuracyMeters}m` : 'GPS locked'}</span>
+                <span>{p.coordinates?.accuracyMeters ? `±${p.coordinates.accuracyMeters}m` : 'GPS locked'}</span>
               </button>
             ))
           )}

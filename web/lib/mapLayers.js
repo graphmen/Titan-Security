@@ -1,4 +1,5 @@
 import { isValidGpsCoord } from './guards.js';
+import { asArray } from './safeData.js';
 
 /** Basemaps aligned with ZRP ZPCS visualiser — no API key required. */
 export const BASEMAPS = {
@@ -175,17 +176,17 @@ export function countMapStats({
   occurrenceBook = [],
   activeSos,
 }) {
-  const mappedPremises = premises.filter((p) => isValidGpsCoord(p.coordinates?.lat, p.coordinates?.lng));
+  const mappedPremises = asArray(premises).filter((p) => isValidGpsCoord(p.coordinates?.lat, p.coordinates?.lng));
   let placeCount = 0;
   mappedPremises.forEach((p) => {
     const list = places?.[p.id];
     const placeList = Array.isArray(list) ? list : [];
     placeCount += placeList.filter((pl) => isValidGpsCoord(pl.coordinates?.lat, pl.coordinates?.lng)).length;
   });
-  const gpsCheckpoints = checkpoints.filter((c) => isValidGpsCoord(c.coordinates?.lat, c.coordinates?.lng));
-  const onDuty = attendance.filter((a) => a.status === 'On Duty' || a.status === 'Late');
-  const activeAlerts = guardAlerts.filter((a) => a.status === 'Active');
-  const recentActivity = occurrenceBook.filter((ob) => {
+  const gpsCheckpoints = asArray(checkpoints).filter((c) => isValidGpsCoord(c.coordinates?.lat, c.coordinates?.lng));
+  const onDuty = asArray(attendance).filter((a) => a.status === 'On Duty' || a.status === 'Late');
+  const activeAlerts = asArray(guardAlerts).filter((a) => a.status === 'Active');
+  const recentActivity = asArray(occurrenceBook).filter((ob) => {
     const age = Date.now() - new Date(ob.timestamp).getTime();
     return age < 24 * 60 * 60 * 1000;
   });

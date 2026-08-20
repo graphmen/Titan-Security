@@ -1,3 +1,5 @@
+import { normalizeTenantCollections } from './safeData.js';
+
 function normalizePlaces(places) {
   if (!places || typeof places !== 'object' || Array.isArray(places)) return {};
   const out = {};
@@ -16,18 +18,18 @@ export function normalizeClientState(state) {
     activeTenantId: state.activeTenantId || 'titan',
     systemSettings: state.systemSettings || {},
     tenants: state.tenants || {},
-    territories: state.territories || {},
-    supervisors: state.supervisors || {},
-    premises: state.premises || {},
+    territories: normalizeTenantCollections(state.territories),
+    supervisors: normalizeTenantCollections(state.supervisors),
+    premises: normalizeTenantCollections(state.premises),
     places: normalizePlaces(state.places),
-    guards: state.guards || {},
-    shifts: state.shifts || {},
-    attendance: state.attendance || {},
-    checkpoints: state.checkpoints || {},
-    guardAlerts: state.guardAlerts || {},
-    shiftSwapRequests: state.shiftSwapRequests || {},
-    whatsappOutbox: state.whatsappOutbox || {},
-    checklistTemplates: state.checklistTemplates || {},
+    guards: normalizeTenantCollections(state.guards),
+    shifts: normalizeTenantCollections(state.shifts),
+    attendance: normalizeTenantCollections(state.attendance),
+    checkpoints: normalizeTenantCollections(state.checkpoints),
+    guardAlerts: normalizeTenantCollections(state.guardAlerts),
+    shiftSwapRequests: normalizeTenantCollections(state.shiftSwapRequests),
+    whatsappOutbox: normalizeTenantCollections(state.whatsappOutbox),
+    checklistTemplates: normalizeTenantCollections(state.checklistTemplates),
     activeSosAlerts: state.activeSosAlerts || {},
     occurrenceBook: Array.isArray(state.occurrenceBook) ? state.occurrenceBook : [],
     visitors: Array.isArray(state.visitors) ? state.visitors : [],

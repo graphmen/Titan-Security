@@ -29,6 +29,7 @@ import DatabaseExplorer from '../components/DatabaseExplorer';
 import MapErrorBoundary from '../components/MapErrorBoundary';
 import { mergeSystemSettings } from '../../lib/systemSettings';
 import { apiFetch } from '../../lib/apiClient';
+import { tenantRows } from '../../lib/safeData';
 
 const PremisesMapPanel = dynamic(() => import('../components/PremisesMapPanel'), {
   ssr: false,
@@ -173,19 +174,19 @@ export default function SupervisorDashboardPage() {
     );
   }
 
-  const tenantId = state.activeTenantId;
-  const curCheckpoints = state.checkpoints?.[tenantId] || [];
+  const tenantId = state.activeTenantId || 'titan';
+  const curCheckpoints = tenantRows(state.checkpoints, tenantId);
   const curOB = (state.occurrenceBook || []).filter((item) => item.tenantId === tenantId);
   const curVisitors = (state.visitors || []).filter((item) => item.tenantId === tenantId);
-  const curPremises = state.premises?.[tenantId] || [];
+  const curPremises = tenantRows(state.premises, tenantId);
   const curPlaces = state.places || {};
-  const curGuards = state.guards?.[tenantId] || [];
-  const curShifts = state.shifts?.[tenantId] || [];
-  const curAttendance = state.attendance?.[tenantId] || [];
-  const curGuardAlerts = state.guardAlerts?.[tenantId] || [];
-  const curShiftSwaps = state.shiftSwapRequests?.[tenantId] || [];
-  const curTerritories = state.territories?.[tenantId] || [];
-  const curSupervisors = state.supervisors?.[tenantId] || [];
+  const curGuards = tenantRows(state.guards, tenantId);
+  const curShifts = tenantRows(state.shifts, tenantId);
+  const curAttendance = tenantRows(state.attendance, tenantId);
+  const curGuardAlerts = tenantRows(state.guardAlerts, tenantId);
+  const curShiftSwaps = tenantRows(state.shiftSwapRequests, tenantId);
+  const curTerritories = tenantRows(state.territories, tenantId);
+  const curSupervisors = tenantRows(state.supervisors, tenantId);
   const activeSos = state.activeSosAlerts?.[tenantId];
   const systemSettings = mergeSystemSettings(state.systemSettings);
   const guardsOnDuty = curAttendance.filter((a) => a.status === 'On Duty' || a.status === 'Late');

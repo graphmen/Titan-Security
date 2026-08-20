@@ -1,4 +1,5 @@
 import { isValidGpsCoord } from './guards.js';
+import { asArray } from './safeData.js';
 import { coordsFrom, resolveObEventCoords } from './mapLayers.js';
 
 export const ACTIVITY_WINDOWS = [
@@ -139,9 +140,14 @@ export function buildPatrolRoutes(places = {}) {
   return routes;
 }
 
+export function todayShifts(shifts = []) {
+  const today = new Date().toISOString().slice(0, 10);
+  return asArray(shifts).filter((s) => s.date === today || (s.date && String(s.date).startsWith(today)));
+}
+
 export function filterActivityByWindow(occurrenceBook, windowMs) {
   const cutoff = Date.now() - windowMs;
-  return (occurrenceBook || []).filter((ob) => new Date(ob.timestamp).getTime() >= cutoff);
+  return asArray(occurrenceBook).filter((ob) => new Date(ob.timestamp).getTime() >= cutoff);
 }
 
 /** Grid-based heat intensity from resolved event points and trails. */
@@ -182,12 +188,12 @@ export function resolveHeatmapEvents(occurrenceBook, ctx, windowMs) {
 
 export function buildSearchIndex({ premises, guards, places, checkpoints, territories }) {
   const items = [];
-  (premises || []).forEach((p) => {
+  asArray(premises).forEach((p) => {
     const c = coordsFrom(p.coordinates);
     if (!c) return;
     items.push({ type: 'Site', label: p.name, sub: p.address || p.city, coords: c, id: p.id });
   });
-  (guards || []).forEach((g) => {
+  asArray(guards).forEach((g) => {
     items.push({ type: 'Guard', label: g.fullName, sub: g.phone || g.employeeNumber, coords: null, id: g.id, guardId: g.id });
   });
   Object.entries(places || {}).forEach(([premiseId, list]) => {
@@ -197,12 +203,12 @@ export function buildSearchIndex({ premises, guards, places, checkpoints, territ
       items.push({ type: 'Place', label: pl.name, sub: pl.type, coords: c, id: pl.id });
     });
   });
-  (checkpoints || []).forEach((cp) => {
+  asArray(checkpoints).forEach((cp) => {
     const c = coordsFrom(cp.coordinates);
     if (!c) return;
     items.push({ type: 'NFC', label: cp.name, sub: cp.code, coords: c, id: cp.id });
   });
-  (territories || []).forEach((t) => {
+  asArray(territories).filter(Boolean).forEach((t) => {
     items.push({ type: 'Territory', label: t.name, sub: t.city, coords: null, id: t.id, territoryId: t.id });
   });
   return items;
@@ -216,18 +222,13 @@ export function filterSearchIndex(items, query, limit = 12) {
     .slice(0, limit);
 }
 
-export function todayShifts(shifts = []) {
-  const today = new Date().toISOString().slice(0, 10);
-  return shifts.filter((s) => s.date === today || (s.date && String(s.date).startsWith(today)));
-}
-
 export function territoryStats(territoryId, { premises, attendance, guardAlerts }) {
-  const sites = premises.filter((p) => p.territoryId === territoryId);
+  const sites = asArray(premises).filter((p) => p.territoryId === territoryId);
   const siteIds = new Set(sites.map((s) => s.id));
-  const onDuty = attendance.filter(
+  const onDuty = asArray(attendance).filter(
     (a) => siteIds.has(a.premiseId) && (a.status === 'On Duty' || a.status === 'Late')
   ).length;
-  const alerts = guardAlerts.filter((a) => a.status === 'Active' && siteIds.has(a.premiseId)).length;
+  const alerts = asArray(guardAlerts).filter((a) => a.status === 'Active' && siteIds.has(a.premiseId)).length;
   return { sites: sites.length, onDuty, alerts };
 }
 
@@ -247,8 +248,8 @@ export function enrichedPremisePopupLines(premise, {
   guards,
 }) {
   const gq = gpsQualityLevel(premise);
-  const openAlerts = guardAlerts.filter((a) => a.premiseId === premise.id && a.status === 'Active');
-  const scheduled = shiftsToday.filter((s) => s.premiseId === premise.id);
+  const openAlerts = asArray(guardAlerts).filter((a) => a.premiseId === premise.id && a.status === 'Active');
+  const scheduled = asArray(shiftsToday).filter((s) => s.premiseId === premise.id);
 
   const lines = [
     premise.address,

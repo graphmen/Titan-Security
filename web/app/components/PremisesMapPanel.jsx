@@ -34,6 +34,7 @@ import {
   gpsQualityLevel,
   guardStatusStyle,
   haversineMeters,
+  placesForPremise,
   resolveHeatmapEvents,
   territoryStats,
   todayShifts,
@@ -348,8 +349,28 @@ export default function PremisesMapPanel({
       overlayRef.current = null;
       basemapRef.current = null;
       fitOnceRef.current = false;
+      setMapReady(false);
     };
   }, [compact]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || !mapReady) return undefined;
+    const fixSize = () => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // ignore resize errors on unmounted map
+      }
+    };
+    fixSize();
+    const t1 = setTimeout(fixSize, 50);
+    const t2 = setTimeout(fixSize, 300);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [mapReady, compact, showSidebar]);
 
   useEffect(() => {
     if (!basemapOpen) return undefined;
@@ -452,7 +473,7 @@ export default function PremisesMapPanel({
         const onSite = filteredAttendance.filter(
           (a) => a.premiseId === premise.id && (a.status === 'On Duty' || a.status === 'Late')
         );
-        const placeCount = (places[premise.id] || []).length;
+        const placeCount = placesForPremise(places, premise.id).length;
         const gq = gpsQualityLevel(premise);
 
         if (layers.gpsQuality) {
@@ -478,11 +499,11 @@ export default function PremisesMapPanel({
 
         if (layers.premises) {
           const marker = L.marker(latlng, {
-            icon: pinIcon('premise', premise.name.slice(0, 3)),
+            icon: pinIcon('premise', (premise.name || 'Site').slice(0, 3)),
             zIndexOffset: isSelected ? 900 : 100,
           });
           marker.bindPopup(
-            popupHtml(premise.name, 'Premises', '#86efac', enrichedPremisePopupLines(premise, {
+            popupHtml(premise.name || 'Site', 'Premises', '#86efac', enrichedPremisePopupLines(premise, {
               territory,
               onDutyAttendance: onSite,
               placeCount,
@@ -499,7 +520,7 @@ export default function PremisesMapPanel({
 
     if (layers.places) {
       mappedPremises.forEach((premise) => {
-        (places[premise.id] || []).forEach((place) => {
+        placesForPremise(places, premise.id).forEach((place) => {
           const c = coordsFrom(place.coordinates);
           if (!c) return;
           extendBounds.push([c.lat, c.lng]);

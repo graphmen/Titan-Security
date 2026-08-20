@@ -26,6 +26,7 @@ import {
 import GuardManagement from '../components/GuardManagement';
 import PremisesRegistration from '../components/PremisesRegistration';
 import DatabaseExplorer from '../components/DatabaseExplorer';
+import MapErrorBoundary from '../components/MapErrorBoundary';
 import { mergeSystemSettings } from '../../lib/systemSettings';
 import { apiFetch } from '../../lib/apiClient';
 
@@ -344,21 +345,23 @@ export default function SupervisorDashboardPage() {
           />
         ) : activeTab === 'map' ? (
           <div className="animate-fade-in">
-            <PremisesMapPanel
-              showSidebar
-              premises={curPremises}
-              places={curPlaces}
-              guards={curGuards}
-              attendance={curAttendance}
-              checkpoints={curCheckpoints}
-              guardAlerts={curGuardAlerts}
-              occurrenceBook={curOB}
-              activeSos={activeSos}
-              territories={curTerritories}
-              shifts={curShifts}
-              geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
-              height={640}
-            />
+            <MapErrorBoundary minHeight={640}>
+              <PremisesMapPanel
+                showSidebar
+                premises={curPremises}
+                places={curPlaces}
+                guards={curGuards}
+                attendance={curAttendance}
+                checkpoints={curCheckpoints}
+                guardAlerts={curGuardAlerts}
+                occurrenceBook={curOB}
+                activeSos={activeSos}
+                territories={curTerritories}
+                shifts={curShifts}
+                geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+                height={640}
+              />
+            </MapErrorBoundary>
           </div>
         ) : activeTab === 'data' ? (
           <DatabaseExplorer
@@ -446,21 +449,23 @@ export default function SupervisorDashboardPage() {
                   <h3 style={{ fontSize: '1.1rem' }}>Live Guard Geofence Tracker</h3>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Premises, patrol points, geofences, and on-duty guard GPS in your territories</p>
                 </div>
-                <PremisesMapPanel
-                  compact
-                  premises={curPremises}
-                  places={curPlaces}
-                  guards={curGuards}
-                  attendance={curAttendance}
-                  checkpoints={curCheckpoints}
-                  guardAlerts={curGuardAlerts}
-                  occurrenceBook={curOB}
-                  activeSos={activeSos}
-                  territories={curTerritories}
-                  shifts={curShifts}
-                  geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
-                  height={480}
-                />
+                <MapErrorBoundary minHeight={480}>
+                  <PremisesMapPanel
+                    compact
+                    premises={curPremises}
+                    places={curPlaces}
+                    guards={curGuards}
+                    attendance={curAttendance}
+                    checkpoints={curCheckpoints}
+                    guardAlerts={curGuardAlerts}
+                    occurrenceBook={curOB}
+                    activeSos={activeSos}
+                    territories={curTerritories}
+                    shifts={curShifts}
+                    geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+                    height={480}
+                  />
+                </MapErrorBoundary>
               </div>
             </div>
 

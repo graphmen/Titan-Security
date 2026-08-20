@@ -1,3 +1,12 @@
+function normalizePlaces(places) {
+  if (!places || typeof places !== 'object' || Array.isArray(places)) return {};
+  const out = {};
+  for (const [premiseId, list] of Object.entries(places)) {
+    out[premiseId] = Array.isArray(list) ? list : [];
+  }
+  return out;
+}
+
 /** Ensure API state always has arrays/objects the dashboard expects — prevents render crashes. */
 export function normalizeClientState(state) {
   if (!state || typeof state !== 'object') return null;
@@ -10,7 +19,7 @@ export function normalizeClientState(state) {
     territories: state.territories || {},
     supervisors: state.supervisors || {},
     premises: state.premises || {},
-    places: state.places || {},
+    places: normalizePlaces(state.places),
     guards: state.guards || {},
     shifts: state.shifts || {},
     attendance: state.attendance || {},

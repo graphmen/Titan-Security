@@ -117,10 +117,16 @@ export function checkpointDisplayStatus(cp) {
   return { tone: 'pending', label: cp.status || 'Pending', color: '#2563eb' };
 }
 
+/** Places are keyed by premise id; tolerate corrupted non-array values from the API. */
+export function placesForPremise(places, premiseId) {
+  const list = places?.[premiseId];
+  return Array.isArray(list) ? list : [];
+}
+
 export function buildPatrolRoutes(places = {}) {
   const routes = [];
-  Object.entries(places).forEach(([premiseId, list]) => {
-    const pts = (list || [])
+  Object.entries(places || {}).forEach(([premiseId, list]) => {
+    const pts = (Array.isArray(list) ? list : [])
       .map((p) => ({ ...p, coords: coordsFrom(p.coordinates) }))
       .filter((p) => p.coords);
     if (pts.length < 2) return;
@@ -185,7 +191,7 @@ export function buildSearchIndex({ premises, guards, places, checkpoints, territ
     items.push({ type: 'Guard', label: g.fullName, sub: g.phone || g.employeeNumber, coords: null, id: g.id, guardId: g.id });
   });
   Object.entries(places || {}).forEach(([premiseId, list]) => {
-    (list || []).forEach((pl) => {
+    (Array.isArray(list) ? list : []).forEach((pl) => {
       const c = coordsFrom(pl.coordinates);
       if (!c) return;
       items.push({ type: 'Place', label: pl.name, sub: pl.type, coords: c, id: pl.id });

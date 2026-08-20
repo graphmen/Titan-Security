@@ -178,7 +178,9 @@ export function countMapStats({
   const mappedPremises = premises.filter((p) => isValidGpsCoord(p.coordinates?.lat, p.coordinates?.lng));
   let placeCount = 0;
   mappedPremises.forEach((p) => {
-    placeCount += (places[p.id] || []).filter((pl) => isValidGpsCoord(pl.coordinates?.lat, pl.coordinates?.lng)).length;
+    const list = places?.[p.id];
+    const placeList = Array.isArray(list) ? list : [];
+    placeCount += placeList.filter((pl) => isValidGpsCoord(pl.coordinates?.lat, pl.coordinates?.lng)).length;
   });
   const gpsCheckpoints = checkpoints.filter((c) => isValidGpsCoord(c.coordinates?.lat, c.coordinates?.lng));
   const onDuty = attendance.filter((a) => a.status === 'On Duty' || a.status === 'Late');

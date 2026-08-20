@@ -46,6 +46,7 @@ import { mergeSystemSettings } from '../lib/systemSettings';
 import { apiFetch } from '../lib/apiClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import MapErrorBoundary from './components/MapErrorBoundary';
 
 const PremisesMapPanel = dynamic(() => import('./components/PremisesMapPanel'), {
   ssr: false,
@@ -684,21 +685,23 @@ export default function DashboardPage() {
           />
         ) : activeTab === 'map' ? (
           <div className="animate-fade-in">
-            <PremisesMapPanel
-              showSidebar
-              premises={curPremises}
-              places={curPlaces}
-              guards={curGuards}
-              attendance={curAttendance}
-              checkpoints={curCheckpoints}
-              guardAlerts={curGuardAlerts}
-              occurrenceBook={curOB}
-              activeSos={activeSos}
-              territories={curTerritories}
-              shifts={curShifts}
-              geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
-              height={640}
-            />
+            <MapErrorBoundary minHeight={640}>
+              <PremisesMapPanel
+                showSidebar
+                premises={curPremises}
+                places={curPlaces}
+                guards={curGuards}
+                attendance={curAttendance}
+                checkpoints={curCheckpoints}
+                guardAlerts={curGuardAlerts}
+                occurrenceBook={curOB}
+                activeSos={activeSos}
+                territories={curTerritories}
+                shifts={curShifts}
+                geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+                height={640}
+              />
+            </MapErrorBoundary>
           </div>
         ) : activeTab === 'command' ? (
           /* ==================== COMMAND CENTRE ==================== */
@@ -787,21 +790,23 @@ export default function DashboardPage() {
                     <RefreshCw size={12} /> Reset Patrol
                   </button>
                 </div>
-                <PremisesMapPanel
-                  compact
-                  premises={curPremises}
-                  places={curPlaces}
-                  guards={curGuards}
-                  attendance={curAttendance}
-                  checkpoints={curCheckpoints}
-                  guardAlerts={curGuardAlerts}
-                  occurrenceBook={curOB}
-                  activeSos={activeSos}
-                  territories={curTerritories}
-                  shifts={curShifts}
-                  geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
-                  height={480}
-                />
+                <MapErrorBoundary minHeight={480}>
+                  <PremisesMapPanel
+                    compact
+                    premises={curPremises}
+                    places={curPlaces}
+                    guards={curGuards}
+                    attendance={curAttendance}
+                    checkpoints={curCheckpoints}
+                    guardAlerts={curGuardAlerts}
+                    occurrenceBook={curOB}
+                    activeSos={activeSos}
+                    territories={curTerritories}
+                    shifts={curShifts}
+                    geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+                    height={480}
+                  />
+                </MapErrorBoundary>
               </div>
             </div>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Layers, Minus, Plus } from 'lucide-react';
+import { ChevronDown, Layers, Minus, Plus, Ruler, Search, Siren } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './premisesMap.css';
@@ -9,7 +9,6 @@ import { isValidGpsCoord } from '../../lib/guards';
 import {
   BASEMAPS,
   DEFAULT_BASEMAP_ID,
-  DEFAULT_LAYER_VISIBILITY,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
   activityColor,
@@ -20,6 +19,25 @@ import {
   resolveObEventCoords,
   territoryBounds,
 } from '../../lib/mapLayers';
+import {
+  ACTIVITY_WINDOWS,
+  EXTENDED_DEFAULT_LAYERS,
+  LAYER_PRESETS,
+  buildPatrolRoutes,
+  buildHeatmapCells,
+  buildSearchIndex,
+  checkpointDisplayStatus,
+  enrichedPremisePopupLines,
+  filterActivityByWindow,
+  filterSearchIndex,
+  formatMeasureDistance,
+  gpsQualityLevel,
+  guardStatusStyle,
+  haversineMeters,
+  resolveHeatmapEvents,
+  territoryStats,
+  todayShifts,
+} from '../../lib/mapEnhancements';
 
 const MARKER_STYLES = {
   premise: { fill: '#1b4332', stroke: '#86efac', label: 'SITE' },
@@ -43,13 +61,15 @@ function svgPin(fill, stroke, label, size = 36) {
     </div>`;
 }
 
-function pinIcon(kind, label = '', extraClass = '') {
-  const style = MARKER_STYLES[kind] || MARKER_STYLES.activity;
-  const pinLabel = kind === 'premise' && label ? label.slice(0, 3).toUpperCase() : style.label;
+function pinIcon(kind, label = '', extraClass = '', colors = null) {
+  const style = colors || MARKER_STYLES[kind] || MARKER_STYLES.activity;
+  const pinLabel = kind === 'premise' && label ? label.slice(0, 3).toUpperCase() : (colors?.label || style.label);
   const size = kind === 'sos' ? 40 : kind === 'activity' ? 28 : kind === 'place' ? 30 : 36;
+  const fill = colors?.fill || style.fill;
+  const stroke = colors?.stroke || style.stroke;
   return L.divIcon({
-    className: `custom-leaflet-marker ${extraClass}`,
-    html: svgPin(style.fill, style.stroke, pinLabel, size),
+    className: `custom-leaflet-marker ${extraClass} ${colors?.pulse ? 'gis-marker-pulse' : ''}`,
+    html: svgPin(fill, stroke, pinLabel, size),
     iconSize: [size, Math.round(size * 1.22)],
     iconAnchor: [size / 2, Math.round(size * 1.22)],
     popupAnchor: [0, -Math.round(size * 1.1)],
@@ -75,12 +95,16 @@ function activityClass(type) {
 const LAYER_DEFS = [
   { key: 'premises', label: 'Protected premises', color: '#40916c' },
   { key: 'geofences', label: 'Clock-in geofences', color: '#86efac' },
+  { key: 'gpsQuality', label: 'GPS accuracy rings', color: '#22c55e' },
   { key: 'places', label: 'Patrol places', color: '#10b981' },
+  { key: 'patrolRoutes', label: 'Patrol routes', color: '#059669' },
   { key: 'checkpoints', label: 'NFC checkpoints', color: '#3b82f6' },
   { key: 'guards', label: 'Live guards', color: '#60a5fa' },
   { key: 'trails', label: 'Movement trails', color: '#2563eb' },
+  { key: 'shiftRoster', label: "Today's shifts", color: '#f59e0b' },
   { key: 'alerts', label: 'Active alerts', color: '#ef4444' },
-  { key: 'activity', label: 'Recent activity (24h)', color: '#a78bfa' },
+  { key: 'activity', label: 'Recent activity', color: '#a78bfa' },
+  { key: 'heatmap', label: 'Activity heatmap', color: '#ec4899' },
   { key: 'territories', label: 'Territory zones', color: '#f59e0b' },
 ];
 
@@ -94,6 +118,7 @@ export default function PremisesMapPanel({
   occurrenceBook = [],
   activeSos = null,
   territories = [],
+  shifts = [],
   geofenceRadiusMeters = 6,
   height = 560,
   showSidebar = false,
@@ -108,10 +133,18 @@ export default function PremisesMapPanel({
   const fitOnceRef = useRef(false);
   const highlightRef = useRef(null);
 
+  const measureLayerRef = useRef(null);
+  const sosFlewRef = useRef(false);
+
   const [basemapId, setBasemapId] = useState(DEFAULT_BASEMAP_ID);
   const [basemapOpen, setBasemapOpen] = useState(false);
-  const [layers, setLayers] = useState(DEFAULT_LAYER_VISIBILITY);
+  const [layers, setLayers] = useState(EXTENDED_DEFAULT_LAYERS);
   const [mapReady, setMapReady] = useState(false);
+  const [activityWindowId, setActivityWindowId] = useState('24h');
+  const [territoryFilter, setTerritoryFilter] = useState('');
+  const [mapSearch, setMapSearch] = useState('');
+  const [measureMode, setMeasureMode] = useState(false);
+  const [measurePoints, setMeasurePoints] = useState([]);
 
   const currentBasemap = BASEMAPS[basemapId] || BASEMAPS[DEFAULT_BASEMAP_ID];
 
@@ -128,23 +161,77 @@ export default function PremisesMapPanel({
     [guards, attendance, premises, checkpoints]
   );
 
-  const mappedPremises = useMemo(
-    () => premises.filter((p) => isValidGpsCoord(p.coordinates?.lat, p.coordinates?.lng)),
-    [premises]
+  const activityWindow = ACTIVITY_WINDOWS.find((w) => w.id === activityWindowId) || ACTIVITY_WINDOWS[1];
+
+  const filteredPremises = useMemo(() => {
+    let list = premises.filter((p) => isValidGpsCoord(p.coordinates?.lat, p.coordinates?.lng));
+    if (territoryFilter) list = list.filter((p) => p.territoryId === territoryFilter);
+    return list;
+  }, [premises, territoryFilter]);
+
+  const mappedPremises = filteredPremises;
+
+  const shiftsToday = useMemo(() => todayShifts(shifts), [shifts]);
+
+  const searchIndex = useMemo(
+    () => buildSearchIndex({ premises, guards, places, checkpoints, territories }),
+    [premises, guards, places, checkpoints, territories]
   );
+
+  const searchResults = useMemo(
+    () => filterSearchIndex(searchIndex, mapSearch),
+    [searchIndex, mapSearch]
+  );
+
+  const filteredAttendance = useMemo(() => {
+    if (!territoryFilter) return attendance;
+    const siteIds = new Set(premises.filter((p) => p.territoryId === territoryFilter).map((p) => p.id));
+    return attendance.filter((a) => siteIds.has(a.premiseId));
+  }, [attendance, premises, territoryFilter]);
+
+  const activityForWindow = useMemo(
+    () => filterActivityByWindow(occurrenceBook, activityWindow.ms).slice(0, 50),
+    [occurrenceBook, activityWindow.ms]
+  );
+
+  const heatmapEvents = useMemo(
+    () => resolveHeatmapEvents(occurrenceBook, ctx, activityWindow.ms),
+    [occurrenceBook, ctx, activityWindow.ms]
+  );
+
+  const onDutyGuards = useMemo(
+    () => filteredAttendance.filter((a) => a.status === 'On Duty' || a.status === 'Late'),
+    [filteredAttendance]
+  );
+
+  const applyPreset = (presetId) => {
+    const preset = LAYER_PRESETS[presetId];
+    if (preset) setLayers({ ...EXTENDED_DEFAULT_LAYERS, ...preset.layers });
+  };
+
+  const resolveSearchTarget = (item) => {
+    if (item.coords) return item.coords;
+    if (item.guardId) {
+      const att = onDutyGuards.find((a) => a.guardId === item.guardId);
+      return coordsFrom(att?.lastCoords) || coordsFrom(att?.clockInCoords);
+    }
+    if (item.territoryId) {
+      const b = territoryBounds(item.territoryId, premises);
+      return b?.center || null;
+    }
+    return null;
+  };
 
   const stats = useMemo(
     () => countMapStats({ premises, places, checkpoints, attendance, guardAlerts, occurrenceBook, activeSos }),
     [premises, places, checkpoints, attendance, guardAlerts, occurrenceBook, activeSos]
   );
 
-  const recentActivity = useMemo(
-    () =>
-      occurrenceBook
-        .filter((ob) => Date.now() - new Date(ob.timestamp).getTime() < 24 * 60 * 60 * 1000)
-        .slice(0, 30),
-    [occurrenceBook]
-  );
+  const recentActivity = activityForWindow;
+
+  const measureDistance = measurePoints.length === 2
+    ? haversineMeters(measurePoints[0], measurePoints[1])
+    : null;
 
   const toggleLayer = (key) => {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -169,6 +256,64 @@ export default function PremisesMapPanel({
     if (!coords || !mapInstance.current) return;
     mapInstance.current.flyTo([coords.lat, coords.lng], zoom, { duration: 0.8 });
   }, []);
+
+  const flyToSos = useCallback(() => {
+    const pos = parseSosCoords(activeSos, attendance, guards);
+    if (pos) flyToCoords(pos, 18);
+  }, [activeSos, attendance, guards, flyToCoords]);
+
+  useEffect(() => {
+    if (!activeSos?.active || sosFlewRef.current) return;
+    const pos = parseSosCoords(activeSos, attendance, guards);
+    if (pos && mapInstance.current) {
+      mapInstance.current.flyTo([pos.lat, pos.lng], 18, { duration: 1 });
+      sosFlewRef.current = true;
+    }
+    if (!activeSos?.active) sosFlewRef.current = false;
+  }, [activeSos, attendance, guards]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || !mapReady) return undefined;
+
+    const onMapClick = (e) => {
+      if (!measureMode) return;
+      setMeasurePoints((prev) => {
+        const next = [...prev, { lat: e.latlng.lat, lng: e.latlng.lng }];
+        return next.length > 2 ? next.slice(-2) : next;
+      });
+    };
+
+    map.on('click', onMapClick);
+    return () => map.off('click', onMapClick);
+  }, [measureMode, mapReady]);
+
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map || !mapReady) return;
+
+    if (measureLayerRef.current) {
+      map.removeLayer(measureLayerRef.current);
+      measureLayerRef.current = null;
+    }
+    if (measurePoints.length === 0) return;
+
+    const fg = L.featureGroup();
+    measurePoints.forEach((pt, i) => {
+      L.circleMarker([pt.lat, pt.lng], {
+        radius: 6, color: '#fbbf24', fillColor: '#f59e0b', fillOpacity: 0.9, weight: 2,
+      }).bindPopup(i === 0 ? 'Point A' : 'Point B').addTo(fg);
+    });
+    if (measurePoints.length === 2) {
+      const dist = haversineMeters(measurePoints[0], measurePoints[1]);
+      L.polyline(
+        measurePoints.map((p) => [p.lat, p.lng]),
+        { color: '#fbbf24', weight: 3, dashArray: '6 4' }
+      ).bindPopup(`Distance: ${formatMeasureDistance(dist)}`).addTo(fg);
+    }
+    fg.addTo(map);
+    measureLayerRef.current = fg;
+  }, [measurePoints, mapReady]);
 
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
@@ -245,18 +390,55 @@ export default function PremisesMapPanel({
 
     if (layers.territories) {
       territories.forEach((t) => {
+        if (territoryFilter && t.id !== territoryFilter) return;
         const bounds = territoryBounds(t.id, premises);
         if (!bounds) return;
+        const ts = territoryStats(t.id, { premises, attendance, guardAlerts });
         const rect = L.rectangle(
           [[bounds.south, bounds.west], [bounds.north, bounds.east]],
           { color: '#f59e0b', weight: 1.5, dashArray: '6 4', fillColor: '#fbbf24', fillOpacity: 0.08 }
         );
         rect.bindPopup(popupHtml(t.name, 'Territory', '#f59e0b', [
-          `${premises.filter((p) => p.territoryId === t.id).length} site(s) in zone`,
+          `${ts.sites} site(s) · ${ts.onDuty} on duty · ${ts.alerts} alert(s)`,
           t.city ? `City: ${t.city}` : null,
         ]));
         rect.addTo(group);
         extendBounds.push([bounds.south, bounds.west], [bounds.north, bounds.east]);
+      });
+    }
+
+    if (layers.patrolRoutes) {
+      buildPatrolRoutes(places).forEach((route) => {
+        if (territoryFilter) {
+          const prem = premises.find((p) => p.id === route.premiseId);
+          if (prem?.territoryId !== territoryFilter) return;
+        }
+        const line = L.polyline(route.points, {
+          color: '#059669', weight: 2, opacity: 0.75, dashArray: '8 6',
+        });
+        const prem = premises.find((p) => p.id === route.premiseId);
+        line.bindPopup(popupHtml(prem?.name || 'Patrol route', 'Patrol route', '#059669', [
+          `${route.names.length} checkpoint(s) linked`,
+          route.names.join(' → '),
+        ]));
+        line.addTo(group);
+        route.points.forEach((pt) => extendBounds.push(pt));
+      });
+    }
+
+    if (layers.heatmap) {
+      const cells = buildHeatmapCells(
+        heatmapEvents.map((e) => ({ lat: e._mapLat, lng: e._mapLng })),
+        filteredAttendance
+      );
+      cells.forEach((cell) => {
+        L.circle([cell.lat, cell.lng], {
+          radius: 40 + cell.intensity * 80,
+          color: '#ec4899',
+          weight: 0,
+          fillColor: '#ec4899',
+          fillOpacity: 0.12 + cell.intensity * 0.35,
+        }).addTo(group);
       });
     }
 
@@ -267,10 +449,22 @@ export default function PremisesMapPanel({
         extendBounds.push(latlng);
         const isSelected = selectedPremiseId === premise.id;
         const territory = territories.find((t) => t.id === premise.territoryId);
-        const onSite = attendance.filter(
+        const onSite = filteredAttendance.filter(
           (a) => a.premiseId === premise.id && (a.status === 'On Duty' || a.status === 'Late')
-        ).length;
+        );
         const placeCount = (places[premise.id] || []).length;
+        const gq = gpsQualityLevel(premise);
+
+        if (layers.gpsQuality) {
+          L.circle(latlng, {
+            radius: gq.level === 'good' ? 12 : gq.level === 'poor' ? 18 : 8,
+            color: gq.color,
+            weight: 2,
+            fillColor: gq.color,
+            fillOpacity: 0.12,
+            dashArray: gq.level === 'none' ? '4 4' : null,
+          }).addTo(group);
+        }
 
         if (layers.geofences) {
           L.circle(latlng, {
@@ -288,16 +482,15 @@ export default function PremisesMapPanel({
             zIndexOffset: isSelected ? 900 : 100,
           });
           marker.bindPopup(
-            popupHtml(premise.name, 'Premises', '#86efac', [
-              premise.address,
-              [premise.suburb, premise.city].filter(Boolean).join(', ') || null,
-              territory ? `Territory: ${territory.name}` : 'Territory: unassigned',
-              premise.coordinates.accuracyMeters
-                ? `GPS ±${premise.coordinates.accuracyMeters}m`
-                : null,
-              `${onSite} guard(s) on duty · ${placeCount} patrol place(s)`,
-              `Geofence radius: ${geofenceRadiusMeters}m`,
-            ], { lat, lng })
+            popupHtml(premise.name, 'Premises', '#86efac', enrichedPremisePopupLines(premise, {
+              territory,
+              onDutyAttendance: onSite,
+              placeCount,
+              geofenceRadiusMeters,
+              guardAlerts,
+              shiftsToday,
+              guards,
+            }), { lat, lng })
           );
           marker.addTo(group);
         }
@@ -318,7 +511,8 @@ export default function PremisesMapPanel({
               place.description || null,
               place.hasNfc ? `NFC: ${place.nfcCode || 'configured'}` : 'No NFC',
               place.schedule ? `Schedule: ${place.schedule}` : null,
-            ])
+              place.coordinates?.accuracyMeters ? `GPS ±${place.coordinates.accuracyMeters}m` : null,
+            ], c)
           );
           marker.addTo(group);
         });
@@ -330,27 +524,57 @@ export default function PremisesMapPanel({
         const c = coordsFrom(cp.coordinates);
         if (!c) return;
         extendBounds.push([c.lat, c.lng]);
-        const scanned = cp.status === 'Scanned';
+        const cpStat = checkpointDisplayStatus(cp);
         const marker = L.marker([c.lat, c.lng], {
-          icon: pinIcon('checkpoint', '', scanned ? 'scanned' : ''),
+          icon: pinIcon('checkpoint', '', cpStat.tone === 'overdue' ? 'gis-marker-pulse' : '', {
+            fill: cpStat.tone === 'ok' ? '#15803d' : cpStat.tone === 'overdue' ? '#b91c1c' : '#1d4ed8',
+            stroke: cpStat.tone === 'ok' ? '#86efac' : cpStat.tone === 'overdue' ? '#fca5a5' : '#93c5fd',
+            label: 'NFC',
+            pulse: cpStat.tone === 'overdue',
+          }),
         });
         marker.bindPopup(
-          popupHtml(cp.name, 'NFC checkpoint', scanned ? '#16a34a' : '#2563eb', [
+          popupHtml(cp.name, 'NFC checkpoint', cpStat.color, [
             cp.premiseName ? `Site: ${cp.premiseName}` : null,
             `Code: ${cp.code || '—'}`,
-            `Status: ${cp.status || 'Pending'}`,
+            `Status: ${cpStat.label}`,
             cp.lastScanned ? `Last scan: ${new Date(cp.lastScanned).toLocaleString()}` : 'Not scanned yet',
             cp.schedule ? `Schedule: ${cp.schedule}` : null,
-          ])
+          ], c)
         );
         marker.addTo(group);
       });
     }
 
+    if (layers.shiftRoster) {
+      shiftsToday.forEach((shift) => {
+        const prem = premises.find((p) => p.id === shift.premiseId);
+        const c = coordsFrom(prem?.coordinates);
+        if (!c) return;
+        const alreadyOn = filteredAttendance.some(
+          (a) => a.guardId === shift.guardId && a.premiseId === shift.premiseId && (a.status === 'On Duty' || a.status === 'Late')
+        );
+        if (alreadyOn) return;
+        const guard = guards.find((g) => g.id === shift.guardId);
+        const offset = [c.lat + 0.00008, c.lng + 0.00008];
+        extendBounds.push(offset);
+        const marker = L.marker(offset, {
+          icon: pinIcon('activity', '', '', {
+            fill: '#b45309', stroke: '#fcd34d', label: 'S', pulse: false,
+          }),
+        });
+        marker.bindPopup(popupHtml(guard?.fullName || 'Scheduled guard', 'Shift roster', '#f59e0b', [
+          prem ? `Site: ${prem.name}` : null,
+          `Date: ${shift.date}`,
+          `${shift.startTime || '—'} – ${shift.endTime || '—'}`,
+          shift.status ? `Status: ${shift.status}` : 'Not clocked in yet',
+        ]));
+        marker.addTo(group);
+      });
+    }
+
     if (layers.trails || layers.guards) {
-      attendance
-        .filter((a) => a.status === 'On Duty' || a.status === 'Late')
-        .forEach((att) => {
+      onDutyGuards.forEach((att) => {
           const guard = guards.find((g) => g.id === att.guardId);
           const premise = premises.find((p) => p.id === att.premiseId);
           const trail = att.movementTrail || [];
@@ -375,17 +599,32 @@ export default function PremisesMapPanel({
             const pos = coordsFrom(att.lastCoords) || coordsFrom(att.clockInCoords);
             if (!pos) return;
             extendBounds.push([pos.lat, pos.lng]);
+            const gStyle = guardStatusStyle(att);
+            if (att.geofenceViolation) {
+              L.circle([pos.lat, pos.lng], {
+                radius: geofenceRadiusMeters * 2,
+                color: '#ef4444',
+                weight: 2,
+                dashArray: '5 5',
+                fillColor: '#ef4444',
+                fillOpacity: 0.08,
+              }).addTo(group);
+            }
             const marker = L.marker([pos.lat, pos.lng], {
-              icon: pinIcon('guard'),
+              icon: pinIcon('guard', '', gStyle.pulse ? 'gis-marker-pulse' : '', gStyle),
             });
+            const premiseCoords = coordsFrom(premise?.coordinates);
+            const distFromSite = premiseCoords ? haversineMeters(pos, premiseCoords) : null;
             marker.bindPopup(
-              popupHtml(guard?.fullName || 'On-duty guard', 'Live guard', '#60a5fa', [
+              popupHtml(guard?.fullName || 'On-duty guard', gStyle.status, gStyle.stroke, [
                 premise ? `Site: ${premise.name}` : null,
                 `Status: ${att.status}`,
                 `Clock-in: ${new Date(att.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
                 att.lateMinutes > 5 ? `Late by ${att.lateMinutes} min` : null,
                 att.needsMovementAck ? '⚠ Movement check required' : null,
                 att.geofenceViolation ? '⚠ Outside geofence' : null,
+                distFromSite != null ? `Distance from site pin: ${formatMeasureDistance(distFromSite)}` : null,
+                att.lastMovementAt ? `Last GPS: ${new Date(att.lastMovementAt).toLocaleTimeString()}` : null,
               ], pos)
             );
             marker.addTo(group);
@@ -465,12 +704,16 @@ export default function PremisesMapPanel({
     premises,
     places,
     guards,
-    attendance,
+    filteredAttendance,
+    onDutyGuards,
     checkpoints,
     guardAlerts,
     recentActivity,
+    heatmapEvents,
+    shiftsToday,
     activeSos,
     territories,
+    territoryFilter,
     geofenceRadiusMeters,
     selectedPremiseId,
     compact,
@@ -481,20 +724,124 @@ export default function PremisesMapPanel({
   const sidebarContent = (
     <>
       <div className="gis-panel">
+        <p className="gis-panel-title">Search map</p>
+        <div className="gis-map-search-wrap">
+          <Search size={14} className="gis-map-search-icon" />
+          <input
+            type="search"
+            className="gis-map-search-input"
+            placeholder="Site, guard, NFC, place…"
+            value={mapSearch}
+            onChange={(e) => setMapSearch(e.target.value)}
+          />
+        </div>
+        {searchResults.length > 0 && (
+          <div className="gis-map-search-results">
+            {searchResults.map((item) => (
+              <button
+                key={`${item.type}-${item.id}`}
+                type="button"
+                className="gis-map-search-item"
+                onClick={() => {
+                  const target = resolveSearchTarget(item);
+                  if (target) flyToCoords(target, 17);
+                  setMapSearch('');
+                }}
+              >
+                <span className="gis-map-search-type">{item.type}</span>
+                <strong>{item.label}</strong>
+                {item.sub && <span>{item.sub}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="gis-panel">
+        <p className="gis-panel-title">View presets</p>
+        <div className="gis-preset-row">
+          {Object.entries(LAYER_PRESETS).map(([id, preset]) => (
+            <button key={id} type="button" className="gis-preset-btn" onClick={() => applyPreset(id)}>
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="gis-panel">
+        <p className="gis-panel-title">Filters</p>
+        <label className="gis-filter-label">
+          Territory
+          <select
+            className="gis-filter-select"
+            value={territoryFilter}
+            onChange={(e) => setTerritoryFilter(e.target.value)}
+          >
+            <option value="">All territories</option>
+            {territories.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="gis-filter-label" style={{ marginTop: '0.5rem' }}>
+          Activity window
+          <select
+            className="gis-filter-select"
+            value={activityWindowId}
+            onChange={(e) => setActivityWindowId(e.target.value)}
+          >
+            {ACTIVITY_WINDOWS.map((w) => (
+              <option key={w.id} value={w.id}>{w.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="gis-panel">
         <p className="gis-panel-title">Live operations</p>
         <div className="gis-stat-grid">
           <div className="gis-stat"><strong>{stats.premises}</strong><span>Sites mapped</span></div>
           <div className="gis-stat"><strong>{stats.onDuty}</strong><span>Guards on duty</span></div>
-          <div className="gis-stat"><strong>{stats.checkpoints}</strong><span>NFC points</span></div>
+          <div className="gis-stat"><strong>{onDutyGuards.filter((a) => a.geofenceViolation).length}</strong><span>Geofence issues</span></div>
           <div className="gis-stat"><strong>{stats.alerts}</strong><span>Active alerts</span></div>
-          <div className="gis-stat"><strong>{stats.places}</strong><span>Patrol places</span></div>
-          <div className="gis-stat"><strong>{stats.activity}</strong><span>Events (24h)</span></div>
+          <div className="gis-stat"><strong>{stats.checkpoints}</strong><span>NFC points</span></div>
+          <div className="gis-stat"><strong>{recentActivity.length}</strong><span>Events ({activityWindow.label})</span></div>
         </div>
         {stats.sos > 0 && (
-          <p style={{ margin: '0.65rem 0 0', fontSize: '0.75rem', color: '#dc2626', fontWeight: 700 }}>
-            SOS panic signal active — check map
-          </p>
+          <button type="button" className="gis-sos-btn" onClick={flyToSos}>
+            <Siren size={14} /> SOS active — fly to location
+          </button>
         )}
+      </div>
+
+      <div className="gis-panel">
+        <p className="gis-panel-title">On-duty guards</p>
+        <div className="gis-site-list">
+          {onDutyGuards.length === 0 ? (
+            <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>No guards on duty right now.</p>
+          ) : (
+            onDutyGuards.map((att) => {
+              const guard = guards.find((g) => g.id === att.guardId);
+              const prem = premises.find((p) => p.id === att.premiseId);
+              const gStyle = guardStatusStyle(att);
+              return (
+                <button
+                  key={att.id}
+                  type="button"
+                  className="gis-site-item"
+                  style={{ borderLeftColor: gStyle.fill }}
+                  onClick={() => {
+                    const pos = coordsFrom(att.lastCoords) || coordsFrom(att.clockInCoords);
+                    if (pos) flyToCoords(pos, 18);
+                  }}
+                >
+                  <strong>{guard?.fullName || 'Guard'}</strong>
+                  <span>{prem?.name || 'Unknown site'} · {gStyle.status}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
       </div>
 
       <div className="gis-panel">
@@ -605,7 +952,23 @@ export default function PremisesMapPanel({
         <button type="button" className="premises-map-ctrl-btn premises-map-ctrl-fit" onClick={fitAll}>
           Fit all sites
         </button>
+        <button
+          type="button"
+          className={`premises-map-ctrl-btn premises-map-ctrl-fit ${measureMode ? 'active' : ''}`}
+          onClick={() => { setMeasureMode((m) => !m); setMeasurePoints([]); }}
+          title="Measure distance"
+        >
+          <Ruler size={14} style={{ marginRight: 4 }} /> Measure
+        </button>
       </div>
+
+      {measureMode && (
+        <div className="premises-map-measure-banner">
+          Click two points on the map to measure distance.
+          {measureDistance != null && ` · ${formatMeasureDistance(measureDistance)}`}
+          <button type="button" onClick={() => setMeasurePoints([])}>Clear</button>
+        </div>
+      )}
 
       <div ref={basemapPanelRef} className={`premises-map-basemap-panel ${basemapOpen ? 'open' : ''}`}>
         {basemapOpen && (

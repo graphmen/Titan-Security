@@ -685,6 +685,7 @@ export default function DashboardPage() {
               occurrenceBook={curOB}
               activeSos={activeSos}
               territories={curTerritories}
+              shifts={curShifts}
               geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
               height={640}
             />
@@ -787,6 +788,7 @@ export default function DashboardPage() {
                   occurrenceBook={curOB}
                   activeSos={activeSos}
                   territories={curTerritories}
+                  shifts={curShifts}
                   geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
                   height={480}
                 />

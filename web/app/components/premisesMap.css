@@ -548,3 +548,170 @@
   bottom: 28px;
   right: 8px;
 }
+
+.gis-marker-pulse {
+  animation: gis-marker-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes gis-marker-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.85; }
+}
+
+.gis-map-search-wrap {
+  position: relative;
+}
+
+.gis-map-search-icon {
+  position: absolute;
+  left: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.gis-map-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.55rem 0.45rem 1.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.gis-map-search-results {
+  margin-top: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.gis-map-search-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.gis-map-search-item:hover {
+  background: #f0fdf4;
+}
+
+.gis-map-search-type {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.gis-map-search-item strong {
+  font-size: 0.75rem;
+  color: #0f172a;
+}
+
+.gis-map-search-item span:last-child {
+  font-size: 0.65rem;
+  color: #64748b;
+}
+
+.gis-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.gis-preset-btn {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.gis-preset-btn:hover {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #1b4332;
+}
+
+.gis-filter-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.gis-filter-select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  background: #fff;
+}
+
+.gis-sos-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  animation: gis-sos-flash 1s ease-in-out infinite;
+}
+
+.premises-map-ctrl-btn.active {
+  background: #1b4332;
+  border-color: #86efac;
+  color: #86efac;
+}
+
+.premises-map-measure-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  background: rgba(180, 83, 9, 0.95);
+  color: #fff;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.premises-map-measure-banner button {
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.65rem;
+  cursor: pointer;
+}

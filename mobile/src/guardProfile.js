@@ -70,6 +70,18 @@ export function findReliefForShift(state, tenantId, shift, excludeGuardId) {
   return { reliefShift, reliefGuard };
 }
 
+export function resolveGuardSupervisor(state, tenantId, guard) {
+  if (!guard) return null;
+  const supervisors = state.supervisors?.[tenantId] || [];
+  if (guard.supervisorId) {
+    const direct = supervisors.find((s) => s.id === guard.supervisorId && s.status === 'Active');
+    if (direct) return direct;
+  }
+  const territoryId = resolveGuardTerritoryId(state, tenantId, guard);
+  const territorySupervisors = getSupervisorsForTerritory(state, tenantId, territoryId);
+  return territorySupervisors.length === 1 ? territorySupervisors[0] : null;
+}
+
 /**
  * Pick the active site for a guard — never falls back to an unassigned tenant premise.
  */
@@ -117,7 +129,8 @@ export function buildGuardProfileContext(state, tenantId, guardId) {
   const territoryId = resolveGuardTerritoryId(state, tenantId, guard);
   const territory = territories.find((t) => t.id === territoryId) || null;
   const territoryPremises = getPremisesForTerritory(state, tenantId, territoryId);
-  const supervisors = getSupervisorsForTerritory(state, tenantId, territoryId);
+  const supervisor = resolveGuardSupervisor(state, tenantId, guard);
+  const supervisors = supervisor ? [supervisor] : [];
 
   const shiftsToday = shifts
     .filter((s) => s.guardId === guardId && s.date === today && s.status !== 'Cancelled')
@@ -155,6 +168,7 @@ export function buildGuardProfileContext(state, tenantId, guardId) {
     territoryId,
     assignedPremises,
     territoryPremises,
+    supervisor,
     supervisors,
     shiftsToday: shiftsToday.map(enrichShift),
     upcomingShifts: upcomingShifts.map(enrichShift),

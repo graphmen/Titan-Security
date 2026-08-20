@@ -17,8 +17,9 @@ export function getPremiseIdSetForTerritories(state, tenantId, territoryIds) {
   return new Set(getPremisesInTerritories(state, tenantId, territoryIds).map((p) => p.id));
 }
 
-export function guardInSupervisorScope(guard, territoryIds, premiseIds) {
+export function guardInSupervisorScope(guard, territoryIds, premiseIds, supervisorId = null) {
   if (!guard) return false;
+  if (supervisorId && guard.supervisorId === supervisorId) return true;
   if (guard.territoryId && territoryIds.has(guard.territoryId)) return true;
   return (guard.assignedPremiseIds || []).some((id) => premiseIds.has(id));
 }
@@ -38,7 +39,7 @@ export function filterStateForSupervisor(state, tenantId, supervisorId) {
   });
 
   const guards = (state.guards?.[tenantId] || []).filter((g) =>
-    guardInSupervisorScope(g, territoryIds, premiseIds)
+    guardInSupervisorScope(g, territoryIds, premiseIds, supervisorId)
   );
   const guardIds = new Set(guards.map((g) => g.id));
 
@@ -96,6 +97,11 @@ export function sanitizeSupervisorPublic(supervisor) {
   if (!supervisor) return null;
   const { loginPin, ...safe } = supervisor;
   return safe;
+}
+
+function updatesWouldReassignSupervisor(updates = {}, actingSupervisorId) {
+  if (!updates || updates.supervisorId == null) return false;
+  return updates.supervisorId !== actingSupervisorId;
 }
 
 const SUPERVISOR_ALLOWED_ACTIONS = new Set([
@@ -173,18 +179,25 @@ export function assertSupervisorMutationAllowed(action, payload, state, tenantId
     case 'RESET_GUARD_PIN': {
       const guardId = payload.guardId;
       if (action === 'CREATE_GUARD') {
-        const tid = payload.territoryId;
+        if (!payload.supervisorId) {
+          return { error: 'Supervisor assignment is required for each guard', status: 400 };
+        }
+        if (payload.supervisorId !== supervisorId) {
+          return { error: 'New guards must be assigned to you as their supervisor', status: 403 };
+        }
         const pids = payload.assignedPremiseIds || [];
-        const territoryOk = tid && territoryIds.has(tid);
         const premiseOk = pids.some((id) => premiseIds.has(id));
-        if (!territoryOk && !premiseOk) {
-          return { error: 'Guard must be assigned within your territories', status: 403 };
+        if (pids.length && !premiseOk) {
+          return { error: 'Assigned premises must be within your territories', status: 403 };
         }
         break;
       }
       const guard = (state.guards?.[tenantId] || []).find((g) => g.id === guardId);
-      if (!guardInSupervisorScope(guard, territoryIds, premiseIds)) {
+      if (!guardInSupervisorScope(guard, territoryIds, premiseIds, supervisorId)) {
         return { error: 'Guard is outside your assigned territories', status: 403 };
+      }
+      if (action === 'UPDATE_GUARD' && updatesWouldReassignSupervisor(payload.updates, supervisorId)) {
+        return { error: 'You cannot reassign a guard to another supervisor', status: 403 };
       }
       break;
     }

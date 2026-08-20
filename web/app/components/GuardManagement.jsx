@@ -34,14 +34,14 @@ import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
 import EmailSetupPanel from './EmailSetupPanel';
 import WhatsAppSetupPanel from './WhatsAppSetupPanel';
 import { matchesSearch, premisesInTerritory } from '../../lib/listFilters';
-import { buildGuardProfileContext } from '../../lib/guardProfile';
+import { buildGuardProfileContext, premisesForSupervisor } from '../../lib/guardProfile';
 import { openManualWhatsAppIfNeeded, resolvePinDelivery } from '../../lib/pinDelivery';
 
 const emptyGuardForm = () => ({
   fullName: '', employeeNumber: '', idNumber: '', phone: '', email: '',
   nextOfKinName: '', nextOfKinPhone: '', nextOfKinRelationship: '',
   licenseNumber: '', licenseExpiry: '', grade: 'B', assignedPremiseIds: [],
-  territoryId: '', city: '', suburb: '',
+  territoryId: '', supervisorId: '', city: '', suburb: '',
 });
 
 const GRADES = ['A', 'B', 'C'];
@@ -159,8 +159,17 @@ export default function GuardManagement({
   const territoryName = (id) => territories.find((t) => t.id === id)?.name || '';
   const selectedTerritory = territories.find((t) => t.id === guardForm.territoryId);
   const suburbOptions = selectedTerritory?.suburbs || [];
-  const formPremises = premisesInTerritory(premises, guardForm.territoryId);
-  const premisesForGuardCard = (g) => premisesInTerritory(premises, g.territoryId);
+  const formSupervisor = supervisors.find((s) => s.id === guardForm.supervisorId);
+  const formPremises = guardForm.supervisorId
+    ? premisesForSupervisor(synthState, tenantId, guardForm.supervisorId)
+    : guardForm.territoryId
+      ? premisesInTerritory(premises, guardForm.territoryId)
+      : [];
+  const supervisorName = (id) => supervisors.find((s) => s.id === id)?.fullName || 'Unassigned';
+  const premisesForGuardCard = (g) => {
+    if (g.supervisorId) return premisesForSupervisor(synthState, tenantId, g.supervisorId);
+    return premisesInTerritory(premises, g.territoryId);
+  };
   const shiftPremises = (() => {
     const guard = guards.find((g) => g.id === shiftForm.guardId);
     return guard?.territoryId ? premisesInTerritory(premises, guard.territoryId) : premises;
@@ -197,6 +206,7 @@ export default function GuardManagement({
   };
 
   const startEditGuard = (g) => {
+    const editProfile = buildGuardProfileContext(synthState, tenantId, g.id);
     setEditingGuardId(g.id);
     setGuardForm({
       fullName: g.fullName,
@@ -212,6 +222,7 @@ export default function GuardManagement({
       grade: g.grade || 'B',
       assignedPremiseIds: [...(g.assignedPremiseIds || [])],
       territoryId: g.territoryId || '',
+      supervisorId: g.supervisorId || editProfile?.supervisor?.id || '',
       city: g.city || '',
       suburb: g.suburb || '',
     });
@@ -235,12 +246,30 @@ export default function GuardManagement({
   const handleTerritoryChange = (territoryId) => {
     const t = territories.find((x) => x.id === territoryId);
     const validPremiseIds = new Set(premisesInTerritory(premises, territoryId).map((p) => p.id));
+    const territorySupervisors = supervisors.filter(
+      (s) => s.status === 'Active' && (s.assignedTerritoryIds || []).includes(territoryId)
+    );
     setGuardForm({
       ...guardForm,
       territoryId,
       city: t?.city || guardForm.city,
       suburb: t?.suburbs?.some((s) => s.name === guardForm.suburb) ? guardForm.suburb : '',
       assignedPremiseIds: guardForm.assignedPremiseIds.filter((id) => validPremiseIds.has(id)),
+      supervisorId:
+        guardForm.supervisorId && territorySupervisors.some((s) => s.id === guardForm.supervisorId)
+          ? guardForm.supervisorId
+          : territorySupervisors.length === 1
+            ? territorySupervisors[0].id
+            : guardForm.supervisorId,
+    });
+  };
+
+  const handleSupervisorChange = (supervisorId) => {
+    const allowed = new Set(premisesForSupervisor(synthState, tenantId, supervisorId).map((p) => p.id));
+    setGuardForm({
+      ...guardForm,
+      supervisorId,
+      assignedPremiseIds: guardForm.assignedPremiseIds.filter((id) => allowed.has(id)),
     });
   };
 
@@ -261,6 +290,10 @@ export default function GuardManagement({
 
   const handleSaveGuard = async (e) => {
     e.preventDefault();
+    if (!guardForm.supervisorId) {
+      alert('Select exactly one supervisor for this guard.');
+      return;
+    }
     const payload = {
       ...guardForm,
       nextOfKin: {
@@ -284,6 +317,7 @@ export default function GuardManagement({
             grade: guardForm.grade,
             assignedPremiseIds: guardForm.assignedPremiseIds,
             territoryId: guardForm.territoryId || null,
+            supervisorId: guardForm.supervisorId,
             city: guardForm.city,
             suburb: guardForm.suburb,
           },
@@ -484,6 +518,21 @@ export default function GuardManagement({
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Full Name *</label><input className="form-input" value={guardForm.fullName} onChange={(e) => setGuardForm({ ...guardForm, fullName: e.target.value })} required /></div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Employee No.</label><input className="form-input" value={guardForm.employeeNumber} onChange={(e) => setGuardForm({ ...guardForm, employeeNumber: e.target.value })} placeholder="Auto" /></div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Grade</label><select className="form-select" value={guardForm.grade} onChange={(e) => setGuardForm({ ...guardForm, grade: e.target.value })}>{GRADES.map((g) => <option key={g}>{g}</option>)}</select></div>
+                  <div className="input-group" style={{ marginBottom: 0 }}>
+                    <label>Supervisor *</label>
+                    <select
+                      className="form-select"
+                      value={guardForm.supervisorId}
+                      onChange={(e) => handleSupervisorChange(e.target.value)}
+                      required
+                    >
+                      <option value="">Select supervisor</option>
+                      {supervisors.filter((s) => s.status === 'Active').map((s) => (
+                        <option key={s.id} value={s.id}>{s.fullName}{s.role ? ` · ${s.role}` : ''}</option>
+                      ))}
+                    </select>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Each guard has exactly one supervisor. Premises can span that supervisor&apos;s territories.</span>
+                  </div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Territory</label><select className="form-select" value={guardForm.territoryId} onChange={(e) => handleTerritoryChange(e.target.value)}><option value="">Select territory</option>{territories.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>City</label><input className="form-input" value={guardForm.city} onChange={(e) => setGuardForm({ ...guardForm, city: e.target.value })} placeholder="e.g. Harare" /></div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Suburb</label><select className="form-select" value={guardForm.suburb} onChange={(e) => setGuardForm({ ...guardForm, suburb: e.target.value })}><option value="">Select suburb</option>{suburbOptions.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}</select></div>
@@ -507,9 +556,16 @@ export default function GuardManagement({
                   </div>
                   <div className="input-group" style={{ marginBottom: 0 }}><label>Next of Kin — Relationship</label><input className="form-input" value={guardForm.nextOfKinRelationship} onChange={(e) => setGuardForm({ ...guardForm, nextOfKinRelationship: e.target.value })} placeholder="e.g. Spouse, Parent, Sibling" /></div>
                   <div className="input-group" style={{ gridColumn: 'span 3', marginBottom: 0 }}>
-                    <label>Assign to Premises {guardForm.territoryId ? `(in ${selectedTerritory?.name || 'territory'})` : ''}</label>
-                    {!guardForm.territoryId ? (
-                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>Select a territory above to see premises in that area only.</p>
+                    <label>
+                      Assign to Premises
+                      {guardForm.supervisorId
+                        ? ` (managed by ${formSupervisor?.fullName || 'supervisor'})`
+                        : guardForm.territoryId
+                          ? ` (in ${selectedTerritory?.name || 'territory'})`
+                          : ''}
+                    </label>
+                    {!guardForm.supervisorId && !guardForm.territoryId ? (
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.35rem 0 0' }}>Select a supervisor above to see available premises.</p>
                     ) : formPremises.length === 0 ? (
                       <p style={{ fontSize: '0.78rem', color: 'var(--text-dimmed)', margin: '0.35rem 0 0' }}>No premises registered in this territory yet.</p>
                     ) : (
@@ -596,6 +652,7 @@ export default function GuardManagement({
                             </span>
                           )}
                           <span><MapPin size={11} style={{ display: 'inline' }} /> Sites: {(g.assignedPremiseIds || []).map(premiseName).join(', ') || 'Unassigned'}</span>
+                          <span><Shield size={11} style={{ display: 'inline' }} /> Supervisor: {supervisorName(g.supervisorId || profile?.supervisor?.id)}</span>
                           <span><FileText size={11} style={{ display: 'inline' }} /> {(g.documents || []).length} docs</span>
                           <span><GraduationCap size={11} style={{ display: 'inline' }} /> {(g.trainings || []).length} trainings</span>
                         </div>
@@ -648,13 +705,16 @@ export default function GuardManagement({
                             ))}
                             {profile?.territory && <span className="badge badge-blue" style={{ fontSize: '0.72rem' }}>Territory: {profile.territory.name}</span>}
                           </div>
-                          {(profile?.supervisors || []).length > 0 && (
+                          {(profile?.supervisor || profile?.supervisors?.[0]) && (
                             <div style={{ marginTop: '0.5rem' }}>
-                              <p style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.35rem' }}>Area Supervisors</p>
-                              {profile.supervisors.map((s) => (
+                              <p style={{ fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.35rem' }}>Supervisor</p>
+                              {[profile.supervisor || profile.supervisors[0]].filter(Boolean).map((s) => (
                                 <div key={s.id} style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.fullName} · {s.phone} · {s.role}</div>
                               ))}
                             </div>
+                          )}
+                          {!profile?.supervisor && !(profile?.supervisors || []).length && (
+                            <p style={{ fontSize: '0.75rem', color: '#d97706', marginTop: '0.5rem' }}>No supervisor assigned — edit this guard and select one.</p>
                           )}
                           {g.nextOfKin?.name && (
                             <div style={{ marginTop: '0.5rem' }}>

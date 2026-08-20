@@ -34,7 +34,7 @@ import {
   dismissGuardAlerts,
   ensureAlertStore,
 } from './guards';
-import { syncGuardTerritoryFromPremises } from './guardProfile';
+import { syncGuardTerritoryFromPremises, validateGuardSupervisorAssignment, filterAssignedPremisesForSupervisor } from './guardProfile';
 import { generateGuardPin, findGuardByPin, validatePinFormat } from './guardAuth';
 import { generateSupervisorPin, findSupervisorByPin } from './supervisorAuth';
 import { sanitizeSupervisorPublic } from './supervisorScope';
@@ -414,12 +414,21 @@ export function processLocalAction(payload) {
         grade = 'B',
         assignedPremiseIds = [],
         territoryId = null,
+        supervisorId = null,
         city = '',
         suburb = '',
       } = payload;
       if (!fullName || !idNumber || !phone) {
         return { error: 'Name, ID number and phone are required', status: 400 };
       }
+      const supCheck = validateGuardSupervisorAssignment(state, tenantId, supervisorId);
+      if (!supCheck.ok) return { error: supCheck.error, status: 400 };
+      const safePremiseIds = filterAssignedPremisesForSupervisor(
+        state,
+        tenantId,
+        supervisorId,
+        Array.isArray(assignedPremiseIds) ? assignedPremiseIds : []
+      );
       if (!email?.trim()) {
         return { error: 'Email is required — login PINs are sent by email for the mobile app', status: 400 };
       }
@@ -440,9 +449,10 @@ export function processLocalAction(payload) {
         grade,
         status: 'Active',
         territoryId: territoryId || null,
+        supervisorId,
         city,
         suburb,
-        assignedPremiseIds: Array.isArray(assignedPremiseIds) ? assignedPremiseIds : [],
+        assignedPremiseIds: safePremiseIds,
         photoUrl: null,
         uniformSize: '',
         documents: [],
@@ -613,6 +623,19 @@ export function processLocalAction(payload) {
       const list = state.guards[tenantId] || [];
       const guard = list.find((g) => g.id === guardId);
       if (!guard) return { error: 'Guard not found', status: 404 };
+      if (updates.supervisorId !== undefined) {
+        const supCheck = validateGuardSupervisorAssignment(state, tenantId, updates.supervisorId);
+        if (!supCheck.ok) return { error: supCheck.error, status: 400 };
+      }
+      const nextSupervisorId = updates.supervisorId ?? guard.supervisorId;
+      if (updates.assignedPremiseIds) {
+        updates.assignedPremiseIds = filterAssignedPremisesForSupervisor(
+          state,
+          tenantId,
+          nextSupervisorId,
+          updates.assignedPremiseIds
+        );
+      }
       Object.assign(guard, updates, { updatedAt: new Date().toISOString() });
       if (updates.assignedPremiseIds) syncGuardTerritoryFromPremises(state, tenantId, guard);
       break;

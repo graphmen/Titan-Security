@@ -1705,10 +1705,10 @@ export default function App() {
               </div>
             )}
 
-            {(guardProfile?.supervisors || []).length > 0 && (
+            {(guardProfile?.supervisor || guardProfile?.supervisors?.[0]) && (
               <div className="mob-card">
-                <div className="mob-card-label">Your Supervisors</div>
-                {guardProfile.supervisors.map((s) => (
+                <div className="mob-card-label">Your Supervisor</div>
+                {[guardProfile.supervisor || guardProfile.supervisors[0]].filter(Boolean).map((s) => (
                   <div key={s.id} className="mob-list-item">
                     <strong style={{ fontSize: '0.88rem' }}>{s.fullName}</strong>
                     <div style={{ fontSize: '0.72rem', color: 'var(--mob-text-muted)' }}>{s.role}</div>

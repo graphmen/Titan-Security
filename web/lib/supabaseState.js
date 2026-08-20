@@ -15,6 +15,7 @@ import {
   getRelationalSummary,
   persistSystemSettingsToDb,
 } from './db/relationalDb';
+import { normalizeGuardSupervisorAssignments } from './guardProfile.js';
 import {
   usesOperationalDbWrite,
   persistOperationalActionToDb,
@@ -47,6 +48,9 @@ export function invalidateSupabaseCache() {
 export async function loadFreshStateFromDatabase() {
   await ensureMinimalTenantInDb();
   const state = await loadAppStateFromRelationalDb();
+  for (const tenantId of Object.keys(state.guards || {})) {
+    normalizeGuardSupervisorAssignments(state, tenantId);
+  }
   globalThis.__titanState = state;
   globalThis.__titanFreshLoadAt = Date.now();
   return state;

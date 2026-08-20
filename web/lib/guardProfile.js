@@ -27,6 +27,57 @@ export function getSupervisorsForTerritory(state, tenantId, territoryId) {
   );
 }
 
+/** Premises a supervisor may assign guards to (all territories they manage). */
+export function premisesForSupervisor(state, tenantId, supervisorId) {
+  if (!supervisorId) return [];
+  const supervisor = (state.supervisors?.[tenantId] || []).find((s) => s.id === supervisorId);
+  if (!supervisor) return [];
+  const territoryIds = new Set(supervisor.assignedTerritoryIds || []);
+  if (!territoryIds.size) return state.premises?.[tenantId] || [];
+  return (state.premises?.[tenantId] || []).filter((p) => territoryIds.has(p.territoryId));
+}
+
+export function resolveGuardSupervisor(state, tenantId, guard) {
+  if (!guard) return null;
+  const supervisors = state.supervisors?.[tenantId] || [];
+  if (guard.supervisorId) {
+    const direct = supervisors.find((s) => s.id === guard.supervisorId && s.status === 'Active');
+    if (direct) return direct;
+  }
+  const territoryId = resolveGuardTerritoryId(state, tenantId, guard);
+  const territorySupervisors = getSupervisorsForTerritory(state, tenantId, territoryId);
+  return territorySupervisors.length === 1 ? territorySupervisors[0] : null;
+}
+
+/** Backfill supervisorId when exactly one supervisor matches the guard territory. */
+export function normalizeGuardSupervisorAssignments(state, tenantId) {
+  const guards = state.guards?.[tenantId] || [];
+  for (const guard of guards) {
+    if (guard.supervisorId) continue;
+    const territoryId = resolveGuardTerritoryId(state, tenantId, guard);
+    const candidates = getSupervisorsForTerritory(state, tenantId, territoryId);
+    if (candidates.length === 1) guard.supervisorId = candidates[0].id;
+  }
+}
+
+export function validateGuardSupervisorAssignment(state, tenantId, supervisorId) {
+  if (!supervisorId) {
+    return { ok: false, error: 'Each guard must be assigned exactly one supervisor' };
+  }
+  const supervisor = (state.supervisors?.[tenantId] || []).find(
+    (s) => s.id === supervisorId && s.status === 'Active'
+  );
+  if (!supervisor) {
+    return { ok: false, error: 'Supervisor not found or inactive' };
+  }
+  return { ok: true, supervisor };
+}
+
+export function filterAssignedPremisesForSupervisor(state, tenantId, supervisorId, assignedPremiseIds = []) {
+  const allowed = new Set(premisesForSupervisor(state, tenantId, supervisorId).map((p) => p.id));
+  return assignedPremiseIds.filter((id) => allowed.has(id));
+}
+
 export function resolveGuardTerritoryId(state, tenantId, guard) {
   if (!guard) return null;
   if (guard.territoryId) return guard.territoryId;
@@ -104,7 +155,8 @@ export function buildGuardProfileContext(state, tenantId, guardId) {
   const territoryId = resolveGuardTerritoryId(state, tenantId, guard);
   const territory = territories.find((t) => t.id === territoryId) || null;
   const territoryPremises = getPremisesForTerritory(state, tenantId, territoryId);
-  const supervisors = getSupervisorsForTerritory(state, tenantId, territoryId);
+  const supervisor = resolveGuardSupervisor(state, tenantId, guard);
+  const supervisors = supervisor ? [supervisor] : [];
 
   const shiftsToday = shifts
     .filter((s) => s.guardId === guardId && s.date === today && s.status !== 'Cancelled')
@@ -142,6 +194,7 @@ export function buildGuardProfileContext(state, tenantId, guardId) {
     territoryId,
     assignedPremises,
     territoryPremises,
+    supervisor,
     supervisors,
     shiftsToday: shiftsToday.map(enrichShift),
     upcomingShifts: upcomingShifts.map(enrichShift),

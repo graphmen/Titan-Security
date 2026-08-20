@@ -103,17 +103,8 @@ export default function SupervisorManagement({ tenantId, territories = [], super
     reader.readAsDataURL(file);
   };
 
-  const guardsForSupervisor = (supervisorId) => {
-    const sup = supervisors.find((s) => s.id === supervisorId);
-    if (!sup?.assignedTerritoryIds?.length) return guards.filter((g) => g.status === 'Active');
-    const territorySet = new Set(sup.assignedTerritoryIds);
-    const premiseIds = premises.filter((p) => territorySet.has(p.territoryId)).map((p) => p.id);
-    return guards.filter(
-      (g) =>
-        g.status === 'Active' &&
-        (territorySet.has(g.territoryId) || (g.assignedPremiseIds || []).some((id) => premiseIds.includes(id)))
-    );
-  };
+  const guardsForSupervisor = (supervisorId) =>
+    guards.filter((g) => g.status === 'Active' && g.supervisorId === supervisorId);
 
   const handleSupervisorWhatsApp = async (e) => {
     e.preventDefault();

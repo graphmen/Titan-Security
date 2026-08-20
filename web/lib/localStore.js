@@ -8,6 +8,7 @@ import {
   generatePremiseId,
   generatePlaceId,
   syncCheckpointFromPlace,
+  syncAllPlaceCheckpoints,
   removeCheckpointForPlace,
 } from './premises';
 import {
@@ -1175,8 +1176,7 @@ export function processLocalAction(payload) {
         };
       }
       place.updatedAt = new Date().toISOString();
-      removeCheckpointForPlace(state, tenantId, placeId);
-      if (place.hasNfc) syncCheckpointFromPlace(state, tenantId, premise, place);
+      syncCheckpointFromPlace(state, tenantId, premise, place);
       break;
     }
     case 'DELETE_PLACE': {

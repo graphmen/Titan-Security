@@ -29,6 +29,7 @@ import {
   waToRow,
   rowToWa,
 } from './mappers';
+import { syncCheckpointFromPlace, syncAllPlaceCheckpoints } from '../premises.js';
 
 /** Server-side DB client — service role when configured, otherwise anon. */
 const db = supabaseAdmin;
@@ -314,6 +315,40 @@ export async function loadAppStateFromRelationalDb() {
   return filterLegacyDemoFromLoadedState(state);
 }
 
+/** Back-fill patrol checkpoints from GPS places saved without checkpoint rows. */
+export async function ensurePlaceCheckpointsSynced(state) {
+  let added = 0;
+  for (const tenantId of Object.keys(state.tenants || {})) {
+    const existingPlaceIds = new Set(
+      (state.checkpoints?.[tenantId] || []).map((c) => c.placeId).filter(Boolean)
+    );
+    syncAllPlaceCheckpoints(state, tenantId);
+    const toPersist = (state.checkpoints?.[tenantId] || []).filter(
+      (cp) => cp.placeId && !existingPlaceIds.has(cp.placeId)
+    );
+    if (toPersist.length) {
+      await requireDbOk(
+        await db.from('checkpoints').upsert(toPersist.map((c) => checkpointToRow(c, tenantId))),
+        'checkpoints backfill from places'
+      );
+      added += toPersist.length;
+    }
+  }
+  return added;
+}
+
+async function upsertCheckpointForPlace(state, tenantId, premiseId, placeId) {
+  const premise = (state.premises?.[tenantId] || []).find((p) => p.id === premiseId);
+  const place = (state.places?.[premiseId] || []).find((p) => p.id === placeId);
+  if (!premise || !place) return;
+  const cp = syncCheckpointFromPlace(state, tenantId, premise, place);
+  if (!cp) return;
+  await requireDbOk(
+    await db.from('checkpoints').upsert(checkpointToRow(cp, tenantId)),
+    'checkpoints upsert from place'
+  );
+}
+
 /** Wipe all operational data — direct SQL first (bypasses RLS), then Supabase API fallback. */
 export async function wipeEntireOperationalDatabase() {
   const usedDirectSql = await wipeOperationalTablesDirectSql();
@@ -565,6 +600,7 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
       const place = (state.places?.[premiseId] || []).find((p) => p.id === placeId);
       if (!place) throw new Error('Place not found in memory after save');
       await requireDbOk(await db.from('places').upsert(placeToRow(place, tenantId)), 'places upsert');
+      await upsertCheckpointForPlace(state, tenantId, premiseId, placeId);
       break;
     }
     case 'CREATE_SHIFT':

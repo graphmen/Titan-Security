@@ -19,16 +19,19 @@ export function geoToCanvas(premiseCoords, placeCoords, fallbackIndex = 0) {
 }
 
 export function syncCheckpointFromPlace(state, tenantId, premise, place) {
-  if (!place.hasNfc) return;
+  if (!place?.id || !premise?.id) return null;
 
   if (!state.checkpoints[tenantId]) state.checkpoints[tenantId] = [];
 
   const coords = geoToCanvas(premise.coordinates, place.coordinates, state.checkpoints[tenantId].length);
   const existing = state.checkpoints[tenantId].find((cp) => cp.placeId === place.id);
+  const code = place.hasNfc
+    ? (place.nfcCode || `NFC-${place.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)}`)
+    : (place.nfcCode || `GPS-${place.id.slice(-6).toUpperCase()}`);
   const checkpointData = {
     id: existing?.id || `${tenantId}-cp-${place.id.slice(-6)}`,
     name: place.name,
-    code: place.nfcCode,
+    code,
     status: existing?.status || 'Pending',
     lastScanned: existing?.lastScanned || null,
     coords,
@@ -37,13 +40,26 @@ export function syncCheckpointFromPlace(state, tenantId, premise, place) {
     premiseId: premise.id,
     placeId: place.id,
     premiseName: premise.name,
+    hasNfc: !!place.hasNfc,
   };
 
   if (existing) {
     Object.assign(existing, checkpointData);
-  } else {
-    state.checkpoints[tenantId].push(checkpointData);
+    return existing;
   }
+  state.checkpoints[tenantId].push(checkpointData);
+  return checkpointData;
+}
+
+/** Ensure every GPS patrol place has a matching mobile patrol checkpoint. */
+export function syncAllPlaceCheckpoints(state, tenantId) {
+  let synced = 0;
+  for (const premise of state.premises?.[tenantId] || []) {
+    for (const place of state.places?.[premise.id] || []) {
+      if (syncCheckpointFromPlace(state, tenantId, premise, place)) synced += 1;
+    }
+  }
+  return synced;
 }
 
 export function removeCheckpointForPlace(state, tenantId, placeId) {

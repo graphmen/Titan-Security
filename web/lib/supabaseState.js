@@ -4,6 +4,7 @@ import {
   loadAppStateFromRelationalDb,
   saveAppStateToRelationalDb,
   ensureMinimalTenantInDb,
+  ensurePlaceCheckpointsSynced,
   applyDirectRowDelete,
   applyDirectRowUpsert,
   usesDirectRowUpsert,
@@ -16,6 +17,7 @@ import {
   persistSystemSettingsToDb,
 } from './db/relationalDb';
 import { normalizeGuardSupervisorAssignments } from './guardProfile.js';
+import { syncAllPlaceCheckpoints } from './premises.js';
 import {
   usesOperationalDbWrite,
   persistOperationalActionToDb,
@@ -48,9 +50,11 @@ export function invalidateSupabaseCache() {
 export async function loadFreshStateFromDatabase() {
   await ensureMinimalTenantInDb();
   const state = await loadAppStateFromRelationalDb();
-  for (const tenantId of Object.keys(state.guards || {})) {
+  for (const tenantId of Object.keys(state.tenants || {})) {
     normalizeGuardSupervisorAssignments(state, tenantId);
+    syncAllPlaceCheckpoints(state, tenantId);
   }
+  await ensurePlaceCheckpointsSynced(state);
   globalThis.__titanState = state;
   globalThis.__titanFreshLoadAt = Date.now();
   return state;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Shield, 
   MapPin, 
@@ -897,9 +897,22 @@ export default function App() {
   );
   const activePremise = premises.find((p) => p.id === premiseId);
   const allCheckpoints = state?.checkpoints[tenantId] || [];
-  const checkpoints = premiseId
-    ? allCheckpoints.filter((cp) => cp.premiseId === premiseId)
-    : allCheckpoints;
+  const checkpoints = useMemo(() => {
+    const linked = premiseId
+      ? allCheckpoints.filter((cp) => cp.premiseId === premiseId)
+      : allCheckpoints;
+    if (linked.length > 0 || !premiseId) return linked;
+    return (state?.places?.[premiseId] || []).map((place) => ({
+      id: `${tenantId}-cp-${place.id.slice(-6)}`,
+      name: place.name,
+      schedule: place.schedule || 'Every 2 hours',
+      status: 'Pending',
+      lastScanned: null,
+      premiseId,
+      placeId: place.id,
+      coordinates: place.coordinates,
+    }));
+  }, [allCheckpoints, premiseId, state?.places, tenantId]);
   const templates = state?.checklistTemplates[tenantId] || [];
   const offlineCount = offlineQueue.patrols.length + offlineQueue.incidents.length + offlineQueue.visitors.length + offlineQueue.checklists.length;
 

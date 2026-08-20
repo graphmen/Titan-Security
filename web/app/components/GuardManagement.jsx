@@ -77,6 +77,7 @@ export default function GuardManagement({
   };
   const [tab, setTab] = useState('guards');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [showGuardForm, setShowGuardForm] = useState(false);
   const [showShiftForm, setShowShiftForm] = useState(false);
   const [expandedGuardId, setExpandedGuardId] = useState(null);
@@ -114,6 +115,7 @@ export default function GuardManagement({
 
   const postAction = async (action, data) => {
     setSaving(true);
+    setSaveError('');
     try {
       const res = await apiFetch('/api/state', {
         method: 'POST',
@@ -125,7 +127,7 @@ export default function GuardManagement({
       onRefresh?.();
       return json;
     } catch (e) {
-      alert(e.message || 'Could not save');
+      setSaveError(e.message || 'Could not save');
       return null;
     } finally {
       setSaving(false);
@@ -468,6 +470,11 @@ export default function GuardManagement({
         onCancel={() => setDeleteTarget(null)}
         confirming={saving}
       />
+      {saveError && (
+        <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.65rem 1rem', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '1rem' }}>
+          {saveError}
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
         <div className="glass-panel" style={{ padding: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <Users size={22} style={{ color: 'var(--color-primary)' }} />
@@ -960,10 +967,24 @@ export default function GuardManagement({
 
       {tab === 'alerts' && (
         <div className="glass-panel" style={{ padding: '1.25rem' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Supervisor Alerts</h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-            No-movement (45 min), geofence exit, license expiry, and shift swap notifications.
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>Supervisor Alerts</h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                No-movement, license expiry, and shift swap notifications. Geofence-exit alerts are paused for now.
+              </p>
+            </div>
+            {guardAlerts.some((a) => a.type === 'geofence_exit' && a.status === 'Active') && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem' }}
+                onClick={() => postAction('DISMISS_ALERTS_BY_TYPE', { alertType: 'geofence_exit' })}
+              >
+                Clear all geofence alerts
+              </button>
+            )}
+          </div>
           {guardAlerts.length === 0 ? (
             <p style={{ textAlign: 'center', color: 'var(--text-dimmed)', padding: '2rem' }}>No alerts recorded.</p>
           ) : (

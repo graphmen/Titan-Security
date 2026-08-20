@@ -160,7 +160,7 @@ export default function SystemSettings({
             />
             <div className="sys-settings-info-card">
               <MapPin size={14} />
-              <span>Also used for geofence-exit alerts while guards are on duty.</span>
+              <span>Used for GPS clock-in verification. Boundary-exit alerts while on duty are currently disabled.</span>
             </div>
           </div>
         );

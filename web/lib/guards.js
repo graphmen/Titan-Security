@@ -1,4 +1,4 @@
-import { normalizeGeofenceRadius, GEOFENCE_DEFAULT_METERS } from './systemSettings.js';
+import { normalizeGeofenceRadius, GEOFENCE_DEFAULT_METERS, isGeofenceExitAlertsEnabled } from './systemSettings.js';
 
 export function generateGuardId() {
   return `GRD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
@@ -88,7 +88,7 @@ export function pushGuardAlert(state, tenantId, alert) {
       a.type === alert.type &&
       a.guardId === alert.guardId &&
       (alert.premiseId ? a.premiseId === alert.premiseId : true) &&
-      (a.status === 'Active' || a.status === 'Dismissed' || a.status === 'Resolved')
+      a.status === 'Active'
   );
   if (exists) return null;
   const entry = {
@@ -134,17 +134,25 @@ export function evaluateGuardMonitoring(state, tenantId, guardId, coords) {
   const premise = (state.premises?.[tenantId] || []).find((p) => p.id === record.premiseId);
   const guardName = getGuardName(state, tenantId, guardId);
   const geofenceRadius = geofenceRadiusFromState(state);
+  const geofenceExitEnabled = isGeofenceExitAlertsEnabled(state);
 
-  if (coords?.lat != null && coords?.lng != null && premise && !isWithinPremiseGeofence(coords, premise.coordinates, geofenceRadius)) {
-    pushGuardAlert(state, tenantId, {
-      type: 'geofence_exit',
-      severity: 'critical',
-      guardId,
-      guardName,
-      premiseId: record.premiseId,
-      message: `${guardName} left the premises boundary during an active shift.`,
-    });
-    record.geofenceViolation = true;
+  if (!geofenceExitEnabled) {
+    record.geofenceViolation = false;
+  } else if (coords?.lat != null && coords?.lng != null && premise) {
+    if (!isWithinPremiseGeofence(coords, premise.coordinates, geofenceRadius)) {
+      pushGuardAlert(state, tenantId, {
+        type: 'geofence_exit',
+        severity: 'critical',
+        guardId,
+        guardName,
+        premiseId: record.premiseId,
+        message: `${guardName} left the premises boundary during an active shift.`,
+      });
+      record.geofenceViolation = true;
+    } else {
+      record.geofenceViolation = false;
+      dismissGuardAlerts(state, tenantId, guardId, 'geofence_exit');
+    }
   }
 
   const noMovementMs = noMovementMsFromState(state);

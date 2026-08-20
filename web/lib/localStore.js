@@ -990,6 +990,21 @@ export function processLocalAction(payload) {
       }
       break;
     }
+    case 'DISMISS_ALERTS_BY_TYPE': {
+      const { alertType } = payload;
+      if (!alertType) return { error: 'Alert type required', status: 400 };
+      ensureAlertStore(state, tenantId);
+      const now = new Date().toISOString();
+      let count = 0;
+      state.guardAlerts[tenantId].forEach((a) => {
+        if (a.type === alertType && a.status === 'Active') {
+          a.status = 'Dismissed';
+          a.resolvedAt = now;
+          count += 1;
+        }
+      });
+      return { success: true, dismissedCount: count };
+    }
     case 'CREATE_PREMISE': {
       const {
         name,
@@ -1318,6 +1333,7 @@ export function processLocalAction(payload) {
       const allowed = [
         'sirenAlertsEnabled',
         'geofenceRadiusMeters',
+        'geofenceExitAlertsEnabled',
         'noMovementAlertMinutes',
         'licenseExpiryWarningDays',
       ];

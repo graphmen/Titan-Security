@@ -41,6 +41,25 @@ async function requireDbOk(result, context) {
   return result;
 }
 
+function isMissingSupervisorIdColumn(error) {
+  const msg = String(error?.message || error || '').toLowerCase();
+  return msg.includes('supervisor_id') && (msg.includes('schema cache') || msg.includes('column'));
+}
+
+/** Upsert guard row; omits supervisor_id if DB migration 008 has not been applied yet. */
+export async function upsertGuardRow(guard, tenantId, context = 'guards upsert') {
+  const row = guardToRow(guard, tenantId);
+  let result = await db.from('guards').upsert(row);
+  if (result.error && isMissingSupervisorIdColumn(result.error)) {
+    const { supervisor_id: _omit, ...fallbackRow } = row;
+    console.warn(
+      '[Titan] guards.supervisor_id column missing — run web/supabase/008_guard_supervisor_id.sql on Supabase'
+    );
+    result = await db.from('guards').upsert(fallbackRow);
+  }
+  await requireDbOk(result, context);
+}
+
 export function isDestructiveDbAction(action) {
   return action === 'CLEAR_TENANT_DEMO_DATA'
     || (typeof action === 'string' && action.startsWith('DELETE_'));
@@ -547,7 +566,7 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
         || (state.guards?.[tenantId] || []).slice(-1)[0]?.id;
       const guard = (state.guards?.[tenantId] || []).find((g) => g.id === guardId);
       if (!guard) throw new Error('Guard not found in memory after save');
-      await requireDbOk(await db.from('guards').upsert(guardToRow(guard, tenantId)), 'guards upsert');
+      await upsertGuardRow(guard, tenantId, 'guards upsert');
       await requireDbOk(await db.from('guard_premises').delete().eq('guard_id', guard.id), 'guard_premises clear');
       const gpRows = (guard.assignedPremiseIds || []).map((pid) => ({
         guard_id: guard.id,
@@ -571,7 +590,7 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
       for (const guardId of guardIds) {
         const guard = (state.guards?.[tenantId] || []).find((g) => g.id === guardId);
         if (!guard) continue;
-        await requireDbOk(await db.from('guards').upsert(guardToRow(guard, tenantId)), 'guards bulk upsert');
+        await upsertGuardRow(guard, tenantId, 'guards bulk upsert');
         await requireDbOk(await db.from('guard_premises').delete().eq('guard_id', guard.id), 'guard_premises clear');
         const gpRows = (guard.assignedPremiseIds || []).map((pid) => ({
           guard_id: guard.id,
@@ -711,8 +730,9 @@ async function syncTenantEntities(state, tenantId, { allowDiffDeletes = false } 
   const guardIdSet = new Set(guardIds);
   const shiftIdsSet = new Set((state.shifts?.[tenantId] || []).map((s) => s.id));
   if (guards.length) {
-    const { error } = await db.from('guards').upsert(guards.map((g) => guardToRow(g, tenantId)));
-    if (error) throw error;
+    for (const guard of guards) {
+      await upsertGuardRow(guard, tenantId, 'guards sync');
+    }
   }
   if (allowDiffDeletes) {
     await deleteMissing('guards', 'tenant_id', tenantId, guardIds);

@@ -9,6 +9,8 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   companyShortName: 'Titan',
   sirenAlertsEnabled: true,
   geofenceRadiusMeters: GEOFENCE_DEFAULT_METERS,
+  /** Parked — re-enable when boundary-exit alerting is ready for production. */
+  geofenceExitAlertsEnabled: false,
   noMovementAlertMinutes: 45,
   licenseExpiryWarningDays: 60,
 };
@@ -48,4 +50,8 @@ export function getLicenseExpiryWarningDays(state) {
 
 export function isSirenEnabled(state) {
   return mergeSystemSettings(state?.systemSettings).sirenAlertsEnabled !== false;
+}
+
+export function isGeofenceExitAlertsEnabled(state) {
+  return mergeSystemSettings(state?.systemSettings).geofenceExitAlertsEnabled === true;
 }

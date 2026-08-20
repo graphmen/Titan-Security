@@ -41,6 +41,7 @@ export const ADMIN_ONLY_ACTIONS = new Set([
   'RESET_STATE',
   'SWITCH_TENANT',
   'RESEND_WHATSAPP',
+  'DISMISS_ALERTS_BY_TYPE',
 ]);
 
 export const GUARD_MOBILE_ACTIONS = new Set([

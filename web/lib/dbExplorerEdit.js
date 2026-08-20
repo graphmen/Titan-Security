@@ -73,6 +73,7 @@ export const TABLE_EDIT_CONFIG = {
       'companyShortName',
       'sirenAlertsEnabled',
       'geofenceRadiusMeters',
+      'geofenceExitAlertsEnabled',
       'noMovementAlertMinutes',
       'licenseExpiryWarningDays',
     ],

@@ -18,6 +18,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import java.util.concurrent.atomic.AtomicReference;
 
 @CapacitorPlugin(
     name = "TitanLocation",
@@ -40,7 +41,7 @@ public class TitanLocationPlugin extends Plugin {
 
     @PluginMethod
     public void requestPermissions(PluginCall call) {
-        if (getPermissionState("location") == PermissionState.GRANTED) {
+        if (hasFineLocation()) {
             call.resolve(permissionStatus());
             return;
         }
@@ -54,23 +55,52 @@ public class TitanLocationPlugin extends Plugin {
 
     @PluginMethod
     public void getCurrentPosition(PluginCall call) {
-        if (getPermissionState("location") != PermissionState.GRANTED) {
+        if (!hasFineLocation()) {
             requestPermissionForAlias("location", call, "locationPermsCallback");
             return;
         }
-        fetchLocation(call);
+        fetchLocationQuick(call);
+    }
+
+    /** Watch GPS until accuracy meets maxAccuracyMeters (premise capture / clock-in). */
+    @PluginMethod
+    public void getHighAccuracyPosition(PluginCall call) {
+        if (!hasFineLocation()) {
+            requestPermissionForAlias("location", call, "highAccuracyPermsCallback");
+            return;
+        }
+        float maxAccuracy = call.getFloat("maxAccuracyMeters", 15f);
+        int timeoutMs = call.getInt("timeoutMs", 45000);
+        watchForBestAccuracy(call, maxAccuracy, timeoutMs);
     }
 
     @PermissionCallback
     private void locationPermsCallback(PluginCall call) {
-        if (getPermissionState("location") != PermissionState.GRANTED) {
-            call.reject("Location permission denied — enable GPS in your phone Settings");
+        if (!hasFineLocation()) {
+            call.reject("Precise location permission denied — enable GPS in your phone Settings");
             return;
         }
-        fetchLocation(call);
+        fetchLocationQuick(call);
     }
 
-    private void fetchLocation(PluginCall call) {
+    @PermissionCallback
+    private void highAccuracyPermsCallback(PluginCall call) {
+        if (!hasFineLocation()) {
+            call.reject("Precise location permission denied — enable GPS in your phone Settings");
+            return;
+        }
+        float maxAccuracy = call.getFloat("maxAccuracyMeters", 15f);
+        int timeoutMs = call.getInt("timeoutMs", 45000);
+        watchForBestAccuracy(call, maxAccuracy, timeoutMs);
+    }
+
+    private boolean hasFineLocation() {
+        return ActivityCompat.checkSelfPermission(
+            getContext(), Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void fetchLocationQuick(PluginCall call) {
         Context ctx = getContext();
         LocationManager lm = (LocationManager) ctx.getSystemService(Context.LOCATION_SERVICE);
         if (lm == null) {
@@ -78,53 +108,23 @@ public class TitanLocationPlugin extends Plugin {
             return;
         }
 
-        boolean gpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER);
-        boolean networkEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-        if (!gpsEnabled && !networkEnabled) {
+        if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             call.reject("GPS is off — enable location services in Settings");
             return;
         }
 
-        if (ActivityCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-            && ActivityCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            call.reject("Location permission denied");
-            return;
-        }
-
-        Location last = null;
-        if (gpsEnabled) {
-            last = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-        }
-        if (last == null && networkEnabled) {
-            last = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-        }
-
-        if (last != null && System.currentTimeMillis() - last.getTime() < 60000) {
+        Location last = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        if (last != null && last.hasAccuracy() && last.getAccuracy() <= 25f
+            && System.currentTimeMillis() - last.getTime() < 30000) {
             resolveLocation(call, last);
             return;
         }
 
-        String provider = gpsEnabled ? LocationManager.GPS_PROVIDER : LocationManager.NETWORK_PROVIDER;
         Handler handler = new Handler(Looper.getMainLooper());
-        Location finalLast = last;
-
-        Runnable timeout = () -> {
-            Location fallback = finalLast;
-            if (fallback == null && networkEnabled) {
-                fallback = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-            }
-            if (fallback != null) {
-                resolveLocation(call, fallback);
-            } else {
-                call.reject("GPS timed out — move to an open area and try again");
-            }
-        };
-        handler.postDelayed(timeout, 20000);
-
         LocationListener listener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
-                handler.removeCallbacks(timeout);
+                handler.removeCallbacksAndMessages(null);
                 lm.removeUpdates(this);
                 resolveLocation(call, location);
             }
@@ -139,14 +139,94 @@ public class TitanLocationPlugin extends Plugin {
             public void onProviderDisabled(String provider) {}
         };
 
-        lm.requestSingleUpdate(provider, listener, Looper.getMainLooper());
+        handler.postDelayed(() -> {
+            lm.removeUpdates(listener);
+            if (last != null) {
+                resolveLocation(call, last);
+            } else {
+                call.reject("GPS timed out — move to an open area and try again");
+            }
+        }, 20000);
+
+        lm.requestLocationUpdates(
+            LocationManager.GPS_PROVIDER, 500L, 0f, listener, Looper.getMainLooper()
+        );
+    }
+
+    private void watchForBestAccuracy(PluginCall call, float maxAccuracyMeters, long timeoutMs) {
+        Context ctx = getContext();
+        LocationManager lm = (LocationManager) ctx.getSystemService(Context.LOCATION_SERVICE);
+        if (lm == null) {
+            call.reject("GPS unavailable on this device");
+            return;
+        }
+
+        if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            call.reject("GPS is off — enable location services in Settings");
+            return;
+        }
+
+        Location cached = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+        if (cached != null && cached.hasAccuracy() && cached.getAccuracy() <= maxAccuracyMeters
+            && System.currentTimeMillis() - cached.getTime() < 15000) {
+            resolveLocation(call, cached);
+            return;
+        }
+
+        Handler handler = new Handler(Looper.getMainLooper());
+        AtomicReference<Location> bestRef = new AtomicReference<>();
+
+        LocationListener listener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                if (!location.hasAccuracy()) return;
+                Location current = bestRef.get();
+                if (current == null || location.getAccuracy() < current.getAccuracy()) {
+                    bestRef.set(location);
+                }
+                if (location.getAccuracy() <= maxAccuracyMeters) {
+                    handler.removeCallbacksAndMessages(null);
+                    lm.removeUpdates(this);
+                    resolveLocation(call, location);
+                }
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+            @Override
+            public void onProviderEnabled(String provider) {}
+
+            @Override
+            public void onProviderDisabled(String provider) {}
+        };
+
+        Runnable onTimeout = () -> {
+            lm.removeUpdates(listener);
+            Location best = bestRef.get();
+            if (best != null && best.hasAccuracy()) {
+                int acc = Math.round(best.getAccuracy());
+                int target = Math.round(maxAccuracyMeters);
+                call.reject(
+                    "GPS accuracy ±" + acc + "m — need ±" + target
+                        + "m or better. Move to open sky and retry."
+                );
+            } else {
+                call.reject("Could not get a GPS fix — enable location and try outdoors");
+            }
+        };
+
+        handler.postDelayed(onTimeout, timeoutMs);
+        lm.requestLocationUpdates(
+            LocationManager.GPS_PROVIDER, 500L, 0f, listener, Looper.getMainLooper()
+        );
     }
 
     private void resolveLocation(PluginCall call, Location loc) {
         JSObject coords = new JSObject();
         coords.put("latitude", loc.getLatitude());
         coords.put("longitude", loc.getLongitude());
-        coords.put("accuracy", loc.getAccuracy());
+        coords.put("accuracy", loc.hasAccuracy() ? loc.getAccuracy() : null);
         JSObject ret = new JSObject();
         ret.put("coords", coords);
         call.resolve(ret);
@@ -154,7 +234,8 @@ public class TitanLocationPlugin extends Plugin {
 
     private JSObject permissionStatus() {
         JSObject ret = new JSObject();
-        ret.put("location", getPermissionState("location").toString().toLowerCase());
+        String status = hasFineLocation() ? "granted" : getPermissionState("location").toString().toLowerCase();
+        ret.put("location", status);
         return ret;
     }
 }

@@ -19,6 +19,7 @@
   --mob-gradient-hero: linear-gradient(135deg, #0b2818 0%, #1b4332 45%, #2d6a4f 100%);
   --mob-gradient-card: linear-gradient(145deg, #ffffff 0%, #f4fbf7 100%);
   --mob-gradient-btn: linear-gradient(135deg, #1b4332 0%, #40916c 100%);
+  --mob-gradient-primary: linear-gradient(135deg, #1b4332 0%, #40916c 100%);
   --mob-gradient-shift: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 55%, #a7f3d0 100%);
 
   --mob-radius-lg: 22px;
@@ -2261,7 +2262,9 @@ body {
 }
 
 .pin-submit-btn:disabled {
-  opacity: 0.45;
+  background: var(--mob-border);
+  color: var(--mob-text-dimmed);
+  opacity: 1;
   cursor: not-allowed;
   box-shadow: none;
 }

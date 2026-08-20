@@ -92,10 +92,10 @@ async function webGetPositionWithRetries() {
 
 async function ensureNativePermissions() {
   const status = await Geolocation.checkPermissions();
-  if (status.location === 'granted' || status.coarseLocation === 'granted') return;
+  if (status.location === 'granted') return;
   const req = await Geolocation.requestPermissions();
-  if (req.location !== 'granted' && req.coarseLocation !== 'granted') {
-    throw new Error('Location permission denied — enable GPS in your phone Settings');
+  if (req.location !== 'granted') {
+    throw new Error('Precise location permission required — enable GPS in your phone Settings');
   }
 }
 
@@ -126,6 +126,15 @@ async function capacitorGetPosition() {
 async function titanGetPosition() {
   const pos = await TitanLocation.getCurrentPosition();
   return mapPosition({ coords: pos.coords });
+}
+
+async function titanWatchBestPosition(maxAccuracyMeters, timeoutMs = 45000) {
+  const pos = await TitanLocation.getHighAccuracyPosition({ maxAccuracyMeters, timeoutMs });
+  const mapped = mapPosition({ coords: pos.coords });
+  if (mapped.accuracy == null) {
+    throw new Error('Could not get a GPS fix — enable location and try outdoors');
+  }
+  return mapped;
 }
 
 function canUseCapacitorGeolocation() {
@@ -172,9 +181,9 @@ async function readNativePermissionStatus() {
   if (canUseCapacitorGeolocation()) {
     try {
       const status = await Geolocation.checkPermissions();
-      if (status.location === 'granted' || status.coarseLocation === 'granted') return 'granted';
-      if (status.location === 'denied' || status.coarseLocation === 'denied') return 'denied';
-      return status.location || status.coarseLocation || 'prompt';
+      if (status.location === 'granted') return 'granted';
+      if (status.location === 'denied') return 'denied';
+      return status.location || 'prompt';
     } catch (_) {
       /* fall through */
     }
@@ -219,8 +228,8 @@ export async function requestLocationPermission() {
   if (canUseCapacitorGeolocation()) {
     try {
       const req = await Geolocation.requestPermissions();
-      const granted = req.location === 'granted' || req.coarseLocation === 'granted';
-      return { granted, status: granted ? 'granted' : req.location || req.coarseLocation || 'denied' };
+      const granted = req.location === 'granted';
+      return { granted, status: granted ? 'granted' : req.location || 'denied' };
     } catch (err) {
       if (!isPluginNotImplemented(err)) {
         return { granted: false, status: 'denied' };
@@ -322,75 +331,57 @@ export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 8;
 
 /** High-accuracy GPS for registering premises or patrol places on site. */
 export async function getLocationForPremiseCapture() {
+  const perm = await requestLocationPermission();
+  if (!perm.granted) {
+    throw new Error('Precise location permission required — enable GPS in your phone Settings');
+  }
+
+  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('TitanLocation')) {
+    try {
+      return await titanWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, 45000);
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) throw err;
+    }
+  }
+
   if (Capacitor.isNativePlatform()) {
-    const perm = await requestLocationPermission();
-    if (!perm.granted) {
-      throw new Error('Location permission denied — enable GPS in your phone Settings');
-    }
-
-    if (Capacitor.isPluginAvailable('TitanLocation')) {
-      try {
-        const pos = await titanGetPosition();
-        if (pos.accuracy != null && pos.accuracy <= PREMISE_MAX_ACCURACY_METERS) return pos;
-        if (pos.accuracy != null) {
-          throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${PREMISE_MAX_ACCURACY_METERS}m or better. Move to open sky and retry.`);
-        }
-        return pos;
-      } catch (err) {
-        if (!isPluginNotImplemented(err)) throw err;
-      }
-    }
-
     try {
       if (canUseCapacitorGeolocation()) {
-        const pos = await nativeGetPosition(true, 35000);
-        if (pos.accuracy != null && pos.accuracy <= PREMISE_MAX_ACCURACY_METERS) return pos;
-        if (pos.accuracy != null) {
-          throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${PREMISE_MAX_ACCURACY_METERS}m or better. Move to open sky and retry.`);
-        }
-        return pos;
+        await ensureNativePermissions();
+        return webWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, 45000);
       }
     } catch (err) {
       if (!isPluginNotImplemented(err)) throw err;
     }
   }
-  return webWatchBestPosition(PREMISE_MAX_ACCURACY_METERS);
+  return webWatchBestPosition(PREMISE_MAX_ACCURACY_METERS, 45000);
 }
 
 /** High-accuracy GPS for guard clock-in geofencing (5–8m zone). */
 export async function getLocationForClockIn(maxAccuracyMeters = GUARD_CLOCKIN_MAX_ACCURACY_METERS) {
   const target = Math.min(GUARD_CLOCKIN_MAX_ACCURACY_METERS, maxAccuracyMeters);
+  const perm = await requestLocationPermission();
+  if (!perm.granted) {
+    throw new Error('Precise location permission required — enable GPS in your phone Settings');
+  }
+
+  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('TitanLocation')) {
+    try {
+      return await titanWatchBestPosition(target, 45000);
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) throw err;
+    }
+  }
+
   if (Capacitor.isNativePlatform()) {
-    const perm = await requestLocationPermission();
-    if (!perm.granted) {
-      throw new Error('Location permission denied — enable GPS in your phone Settings');
-    }
-
-    if (Capacitor.isPluginAvailable('TitanLocation')) {
-      try {
-        const pos = await titanGetPosition();
-        if (pos.accuracy != null && pos.accuracy <= target) return pos;
-        if (pos.accuracy != null) {
-          throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${target}m or better to clock in.`);
-        }
-        return pos;
-      } catch (err) {
-        if (!isPluginNotImplemented(err)) throw err;
-      }
-    }
-
     try {
       if (canUseCapacitorGeolocation()) {
-        const pos = await nativeGetPosition(true, 35000);
-        if (pos.accuracy != null && pos.accuracy <= target) return pos;
-        if (pos.accuracy != null) {
-          throw new Error(`GPS accuracy ±${Math.round(pos.accuracy)}m — need ±${target}m or better to clock in.`);
-        }
-        return pos;
+        await ensureNativePermissions();
+        return webWatchBestPosition(target, 45000);
       }
     } catch (err) {
       if (!isPluginNotImplemented(err)) throw err;
     }
   }
-  return webWatchBestPosition(target);
+  return webWatchBestPosition(target, 45000);
 }

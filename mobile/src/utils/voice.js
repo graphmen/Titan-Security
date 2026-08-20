@@ -1,7 +1,13 @@
+import { requestMicrophonePermission } from './permissions';
+
 /** Start recording audio from the device microphone. Returns { stop(): Promise<string|null> }. */
 export async function startVoiceMemo() {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('Microphone not available on this device');
+  }
+  const mic = await requestMicrophonePermission();
+  if (!mic.granted) {
+    throw new Error('Microphone permission denied — enable Microphone in your phone Settings');
   }
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const recorder = new MediaRecorder(stream);

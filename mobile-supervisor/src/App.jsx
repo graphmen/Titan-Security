@@ -73,6 +73,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     let cancelled = false;
     (async () => {
       const { needsPrompt, autoRequested } = await initLocationPermissionFlow(APP_VERSION_CODE);
@@ -82,7 +83,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated || !supervisorId) return;
@@ -195,8 +196,7 @@ export default function App() {
 
   if (!isAuthenticated) {
     return (
-      <>
-        {locationPrompt}
+      <div className="phone-container">
         <PinLogin
           tenantId={tenantId}
           apiBase={apiBase}
@@ -204,7 +204,7 @@ export default function App() {
           onToggleTheme={toggleTheme}
           onLogin={handleLogin}
         />
-      </>
+      </div>
     );
   }
 

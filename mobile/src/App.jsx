@@ -152,7 +152,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (splashVisible) return;
+    if (!isAuthenticated) return;
     let cancelled = false;
     (async () => {
       const { needsPrompt, autoRequested } = await initLocationPermissionFlow(APP_VERSION_CODE);
@@ -162,7 +162,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [splashVisible]);
+  }, [isAuthenticated]);
 
   const saveQueueToStorage = (newQueue) => {
     setOfflineQueue(newQueue);
@@ -259,7 +259,7 @@ export default function App() {
         lng,
         accuracyMeters: accuracy,
       });
-      showToast('Shift started — you are on duty');
+      showToast('On duty — now scan each patrol point below');
       fetchState();
     } catch (e) {
       showToast(e.message || 'Clock-in failed', 'error');
@@ -444,6 +444,10 @@ export default function App() {
 
   // NFC Tap
   const handleNfcTap = async (checkpointId, cpName) => {
+    if (!isOnDuty) {
+      showToast('Clock in first to log patrol points', 'error');
+      return;
+    }
     playNfcScan();
     scanRadius.current = 2;
     
@@ -462,7 +466,7 @@ export default function App() {
         });
         if (res.ok) {
           playNfcSuccess();
-          showToast(`Checked in: ${cpName}`);
+          showToast(`Patrol point logged: ${cpName}`);
           fetchState();
         }
       } catch (e) {
@@ -979,6 +983,7 @@ export default function App() {
           appName="Titan Monitor"
           onDone={() => setLocPermVisible(false)}
           autoRequested={locPermAutoRequested}
+          includeMicrophone
         />
       )}
       {toast && (
@@ -1031,17 +1036,17 @@ export default function App() {
         <div className="sos-overlay" style={{ background: 'rgba(180, 83, 9, 0.95)' }}>
           <AlertTriangle size={56} style={{ color: '#ffffff' }} />
           <h2 style={{ color: '#ffffff', fontSize: '1.35rem', fontWeight: 800, marginTop: '1rem' }}>
-            Patrol Check Required
+            Patrol Check — Are You OK?
           </h2>
           <p style={{ color: '#fef3c7', fontSize: '0.9rem', margin: '1rem 1.5rem 1.5rem', lineHeight: 1.45, textAlign: 'center' }}>
-            No movement detected for 45+ minutes. Confirm you are awake, on patrol, and OK. Your supervisor has been notified.
+            No movement detected for 45+ minutes. Confirm you are awake and on site. Your supervisor has been notified.
           </p>
           <button
             className="mob-btn"
             style={{ width: '240px', background: '#ffffff', color: '#b45309', border: 'none', fontSize: '1rem', fontWeight: 700 }}
             onClick={handleMovementAck}
           >
-            I'm OK — Continue Patrol
+            I'm OK
           </button>
         </div>
       )}
@@ -1097,7 +1102,7 @@ export default function App() {
               onDuty={isOnDuty}
             />
             <div className="mob-guard-select-wrap">
-              <div className="mob-guard-label">On Duty</div>
+              <div className="mob-guard-label">{isOnDuty ? 'On duty' : 'Signed in'}</div>
               <div className="mob-guard-name">{activeGuard?.fullName || guardName}</div>
               <div style={{ fontSize: '0.68rem', color: 'var(--mob-text-muted)', marginTop: '0.1rem' }}>
                 {activeGuard?.employeeNumber}{activeGuard?.suburb ? ` · ${activeGuard.suburb}` : ''}
@@ -1166,46 +1171,46 @@ export default function App() {
               <div className="mob-victory-banner">
                 <Sparkles size={22} />
                 <div>
-                  <strong>Patrol Complete!</strong>
-                  <span>All {checkpoints.length} checkpoints scanned — great work.</span>
+                  <strong>Patrol complete!</strong>
+                  <span>All {checkpoints.length} patrol points logged.</span>
                 </div>
               </div>
             )}
-            <div className="mob-stat-row">
-              <div className={`mob-stat-chip ${isOnDuty ? 'highlight' : ''}`}>
-                <div className="value">{isOnDuty ? 'LIVE' : 'OFF'}</div>
-                <div className="label">Status</div>
+
+            <div className="mob-duty-steps">
+              <div className={`mob-duty-step ${isOnDuty ? 'done' : 'active'}`}>
+                <strong>1.</strong> Clock in
               </div>
+              <div className={`mob-duty-step ${isOnDuty ? (patrolComplete ? 'done' : 'active') : ''}`}>
+                <strong>2.</strong> Scan points ({scannedCount}/{checkpoints.length})
+              </div>
+              <div className={`mob-duty-step ${patrolComplete ? 'done' : ''}`}>
+                <strong>3.</strong> Complete
+              </div>
+            </div>
+
+            {!isOnDuty && checkpoints.length > 0 && (
+              <p className="mob-duty-hint">Clock in above, then log each patrol point when you reach it.</p>
+            )}
+
+            <div className="mob-stat-row">
               <div className="mob-stat-chip">
                 <div className="value">{scannedCount}/{checkpoints.length}</div>
-                <div className="label">Scanned</div>
+                <div className="label">Points logged</div>
               </div>
               <div className="mob-stat-chip">
                 <div className="value">{patrolPercent}%</div>
                 <div className="label">Progress</div>
               </div>
-            </div>
-
-            <div className="mob-card radar-card elevated">
-              <div className="radar-header">
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--mob-text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <Compass size={14} /> Live Radar
-                </span>
-                <span className="mob-gps-live">
-                  <span className="mob-live-dot" style={{ width: 6, height: 6 }} /> GPS Sync
-                </span>
+              <div className={`mob-stat-chip ${isOnDuty ? 'highlight' : ''}`}>
+                <div className="value">{isOnDuty ? 'ON' : 'OFF'}</div>
+                <div className="label">Shift</div>
               </div>
-              <canvas 
-                ref={mapCanvasRef} 
-                width={340} 
-                height={200} 
-                style={{ display: 'block', maxWidth: '100%', background: isDark ? '#0f1f17' : '#f0fdf4', borderRadius: '12px', border: '1px solid var(--mob-border)' }}
-              />
             </div>
 
             <h3 className="mob-section-title">
               <span className="mob-section-icon patrol"><Shield size={16} /></span>
-              {activePremise ? `${activePremise.name} Patrol` : 'Scan Checkpoints'}
+              {activePremise ? `${activePremise.name} — Patrol points` : 'Patrol points'}
             </h3>
 
             {checkpoints.length === 0 ? (
@@ -1213,38 +1218,35 @@ export default function App() {
                 <div className="mob-empty-icon">📍</div>
                 {premises.length === 0
                   ? 'No premises registered yet. Ask your supervisor to register sites on the web dashboard.'
-                  : 'No NFC patrol points for this premises. Add places with NFC tags on the web dashboard.'}
+                  : 'No patrol points for this site. Ask your supervisor to add patrol points on the dashboard.'}
               </div>
             ) : (
               checkpoints.map(cp => (
                 <div
                   key={cp.id}
-                  className={`mob-card mob-checkpoint ${cp.status === 'Scanned' ? 'done' : cp.lastScanned ? '' : 'overdue'}`}
+                  className={`mob-card mob-checkpoint ${cp.status === 'Scanned' ? 'done' : ''} ${!isOnDuty ? 'mob-checkpoint-locked' : ''}`}
                 >
                   <div className="mob-checkpoint-body">
                     <h4>{cp.name}</h4>
-                    <div className="mob-checkpoint-meta">NFC: {cp.code}</div>
-                    {cp.coordinates?.lat ? (
-                      <div className="mob-checkpoint-meta">GPS: {cp.coordinates.lat}, {cp.coordinates.lng}</div>
-                    ) : null}
                     <div className="mob-checkpoint-tags">
                       <span className="mob-tag">{cp.schedule}</span>
                       {cp.lastScanned ? (
                         <span className="mob-tag success">✓ {new Date(cp.lastScanned).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       ) : (
-                        <span className="mob-tag danger">Overdue</span>
+                        <span className="mob-tag">{isOnDuty ? 'Not scanned' : 'Clock in first'}</span>
                       )}
                     </div>
                   </div>
                   
                   <button 
                     onClick={() => handleNfcTap(cp.id, cp.name)}
+                    disabled={!isOnDuty}
                     className={`mob-btn mob-nfc-btn ${cp.status === 'Scanned' ? 'done' : ''}`}
                   >
                     {cp.status === 'Scanned' ? (
                       <><Check size={12} /> Done</>
                     ) : (
-                      <><Zap size={12} /> Tap</>
+                      <><Zap size={12} /> Log scan</>
                     )}
                   </button>
                 </div>

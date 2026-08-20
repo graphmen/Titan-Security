@@ -1,6 +1,8 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Camera } from '@capacitor/camera';
 import { requestLocationPermission, checkLocationPermission } from './location';
+
+const TitanPermissions = registerPlugin('TitanPermissions');
 
 function isPluginNotImplemented(err) {
   const msg = String(err?.message || err).toLowerCase();
@@ -14,33 +16,58 @@ export async function requestCameraPermission() {
   }
 
   if (!Capacitor.isPluginAvailable('Camera')) {
-    return { granted: true, status: 'prompt' };
+    return { granted: false, status: 'prompt' };
   }
 
   try {
     const current = await Camera.checkPermissions();
-    if (current.camera === 'granted' || current.photos === 'granted') {
+    if (current.camera === 'granted') {
       return { granted: true, status: 'granted' };
     }
     const req = await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
-    const granted = req.camera === 'granted' || req.photos === 'granted';
-    return { granted, status: req.camera || req.photos || 'denied' };
+    const granted = req.camera === 'granted';
+    return { granted, status: req.camera || 'denied' };
   } catch (err) {
     if (isPluginNotImplemented(err)) {
-      return { granted: true, status: 'prompt' };
+      return { granted: false, status: 'prompt' };
     }
     return { granted: false, status: 'denied' };
   }
 }
 
-/** Request location + camera permissions (used on app install/update). */
-export async function requestEssentialPermissions() {
+/** Ask for microphone access before voice memos. */
+export async function requestMicrophonePermission() {
+  if (!Capacitor.isNativePlatform()) {
+    return { granted: true, status: 'granted' };
+  }
+
+  if (Capacitor.isPluginAvailable('TitanPermissions')) {
+    try {
+      const result = await TitanPermissions.requestMicrophone();
+      const granted = !!result?.granted || result?.microphone === 'granted';
+      return { granted, status: result?.microphone || 'denied' };
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) {
+        return { granted: false, status: 'denied' };
+      }
+    }
+  }
+
+  return { granted: false, status: 'denied' };
+}
+
+/** Request essential permissions (used after sign-in). */
+export async function requestEssentialPermissions({ includeMicrophone = false } = {}) {
   const location = await requestLocationPermission();
   const camera = await requestCameraPermission();
+  const microphone = includeMicrophone
+    ? await requestMicrophonePermission()
+    : { granted: true, status: 'granted' };
   return {
     location,
     camera,
-    allGranted: location.granted && camera.granted,
+    microphone,
+    allGranted: location.granted && camera.granted && microphone.granted,
   };
 }
 

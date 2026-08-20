@@ -23,8 +23,8 @@ export default function LocationPermissionPrompt({ appName, onDone, autoRequeste
     setBusy(true);
     setDenied(false);
     try {
-      const { location } = await requestEssentialPermissions();
-      if (location.granted) {
+      const result = await requestEssentialPermissions();
+      if (result.allGranted) {
         finishGranted();
       } else {
         setDenied(true);
@@ -50,10 +50,10 @@ export default function LocationPermissionPrompt({ appName, onDone, autoRequeste
         </div>
         <h2 id="loc-perm-title" className="loc-perm-title">Permissions required</h2>
         <p className="loc-perm-text">
-          {appName} needs location and camera access to capture site coordinates and profile photos.
+          {appName} needs precise location and camera access to capture site coordinates and profile photos.
         </p>
         <ul className="loc-perm-list">
-          <li><Building2 size={14} /> Location — register premises and important places</li>
+          <li><Building2 size={14} /> Precise location — register premises and patrol points</li>
           <li><MapPin size={14} /> Enable guard geofence clock-in at your sites</li>
           <li><Camera size={14} /> Camera — supervisor profile and site photos</li>
         </ul>
@@ -61,7 +61,7 @@ export default function LocationPermissionPrompt({ appName, onDone, autoRequeste
         {denied && (
           <p className="loc-perm-denied">
             <Settings size={14} />
-            A permission was denied. Open Settings → Apps → {appName} → Permissions, then allow Location and Camera.
+            A permission was denied. Open Settings → Apps → {appName} → Permissions, then allow Location (Precise) and Camera.
           </p>
         )}
 

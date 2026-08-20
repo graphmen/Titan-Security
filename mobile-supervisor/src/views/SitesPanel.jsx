@@ -22,6 +22,7 @@ export default function SitesPanel({
 
   const captureGps = async (target, premiseId = null) => {
     setGpsCapturing(target);
+    showToast('Hold still outdoors — acquiring GPS…', 'info');
     try {
       const { lat, lng, accuracy } = await getLocationForPremiseCapture();
       const coords = {

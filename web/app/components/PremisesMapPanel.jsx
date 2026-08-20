@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Layers, Minus, Plus } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './premisesMap.css';
@@ -103,12 +104,24 @@ export default function PremisesMapPanel({
   const mapInstance = useRef(null);
   const overlayRef = useRef(null);
   const basemapRef = useRef(null);
+  const basemapPanelRef = useRef(null);
   const fitOnceRef = useRef(false);
   const highlightRef = useRef(null);
 
   const [basemapId, setBasemapId] = useState(DEFAULT_BASEMAP_ID);
+  const [basemapOpen, setBasemapOpen] = useState(false);
   const [layers, setLayers] = useState(DEFAULT_LAYER_VISIBILITY);
   const [mapReady, setMapReady] = useState(false);
+
+  const currentBasemap = BASEMAPS[basemapId] || BASEMAPS[DEFAULT_BASEMAP_ID];
+
+  const selectBasemap = (id) => {
+    setBasemapId(id);
+    setBasemapOpen(false);
+  };
+
+  const zoomIn = () => mapInstance.current?.zoomIn();
+  const zoomOut = () => mapInstance.current?.zoomOut();
 
   const ctx = useMemo(
     () => ({ guards, attendance, premises, checkpoints }),
@@ -163,13 +176,10 @@ export default function PremisesMapPanel({
     const map = L.map(mapRef.current, {
       center: DEFAULT_MAP_CENTER,
       zoom: DEFAULT_MAP_ZOOM,
-      zoomControl: !compact,
+      zoomControl: false,
       attributionControl: true,
     });
 
-    if (compact) {
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
-    }
     L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 
     overlayRef.current = L.featureGroup().addTo(map);
@@ -195,6 +205,17 @@ export default function PremisesMapPanel({
       fitOnceRef.current = false;
     };
   }, [compact]);
+
+  useEffect(() => {
+    if (!basemapOpen) return undefined;
+    const close = (e) => {
+      if (basemapPanelRef.current && !basemapPanelRef.current.contains(e.target)) {
+        setBasemapOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [basemapOpen]);
 
   useEffect(() => {
     const map = mapInstance.current;
@@ -574,50 +595,63 @@ export default function PremisesMapPanel({
         </div>
       </div>
 
-      <div className="premises-map-toolbar">
-        <button type="button" className="premises-map-btn" onClick={fitAll}>
+      <div className="premises-map-controls-tr">
+        <button type="button" className="premises-map-ctrl-btn" onClick={zoomIn} title="Zoom in" aria-label="Zoom in">
+          <Plus size={16} />
+        </button>
+        <button type="button" className="premises-map-ctrl-btn" onClick={zoomOut} title="Zoom out" aria-label="Zoom out">
+          <Minus size={16} />
+        </button>
+        <button type="button" className="premises-map-ctrl-btn premises-map-ctrl-fit" onClick={fitAll}>
           Fit all sites
         </button>
       </div>
 
-      <div className="premises-map-basemap-bar">
-        {Object.values(BASEMAPS).map((b) => (
-          <button
-            key={b.id}
-            type="button"
-            className={`premises-map-basemap-btn ${basemapId === b.id ? 'active' : ''}`}
-            onClick={() => setBasemapId(b.id)}
-            title={b.label}
-          >
-            <span>{b.icon}</span>
-            <span className="premises-map-basemap-label">{b.label}</span>
-          </button>
-        ))}
+      <div ref={basemapPanelRef} className={`premises-map-basemap-panel ${basemapOpen ? 'open' : ''}`}>
+        {basemapOpen && (
+          <div className="premises-map-basemap-list" role="listbox" aria-label="Basemap options">
+            {Object.values(BASEMAPS).map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                role="option"
+                aria-selected={basemapId === b.id}
+                className={`premises-map-basemap-option ${basemapId === b.id ? 'active' : ''}`}
+                onClick={() => selectBasemap(b.id)}
+              >
+                <span>{b.icon}</span>
+                <span>{b.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          className="premises-map-basemap-toggle"
+          onClick={() => setBasemapOpen((o) => !o)}
+          aria-expanded={basemapOpen}
+          aria-label="Toggle basemap menu"
+        >
+          <Layers size={14} />
+          <span>{currentBasemap.icon}</span>
+          <span className="premises-map-basemap-toggle-label">{currentBasemap.label}</span>
+          <ChevronDown size={14} className={`premises-map-basemap-chevron ${basemapOpen ? 'open' : ''}`} />
+        </button>
       </div>
 
-      <div className="premises-map-legend">
-        <span className="premises-map-legend-item">
-          <span className="premises-map-legend-dot" style={{ background: '#40916c' }} /> Premises
-        </span>
-        <span className="premises-map-legend-item">
-          <span className="premises-map-legend-dot" style={{ background: '#10b981' }} /> Places
-        </span>
-        <span className="premises-map-legend-item">
-          <span className="premises-map-legend-dot" style={{ background: '#3b82f6' }} /> NFC
-        </span>
-        <span className="premises-map-legend-item">
-          <span className="premises-map-legend-dot" style={{ background: '#60a5fa' }} /> Guards
-        </span>
-        <span className="premises-map-legend-item">
-          <span className="premises-map-legend-line" style={{ background: '#2563eb' }} /> Trails
-        </span>
-        <span className="premises-map-legend-item">
-          <span className="premises-map-legend-dot" style={{ background: '#ef4444' }} /> Alerts
-        </span>
-        <span className="premises-map-legend-item">
-          <span className="premises-map-legend-dot" style={{ background: '#a78bfa' }} /> Activity
-        </span>
-      </div>
+      {compact && (
+        <div className="premises-map-legend">
+          <span className="premises-map-legend-item">
+            <span className="premises-map-legend-dot" style={{ background: '#40916c' }} /> Premises
+          </span>
+          <span className="premises-map-legend-item">
+            <span className="premises-map-legend-dot" style={{ background: '#60a5fa' }} /> Guards
+          </span>
+          <span className="premises-map-legend-item">
+            <span className="premises-map-legend-dot" style={{ background: '#ef4444' }} /> Alerts
+          </span>
+        </div>
+      )}
     </div>
   );
 

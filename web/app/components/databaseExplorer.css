@@ -228,37 +228,6 @@
   align-items: center;
 }
 
-/* View mode tabs */
-.db-explorer-view-tabs {
-  display: flex;
-  gap: 0.25rem;
-  margin-left: auto;
-}
-
-.db-explorer-view-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.35rem 0.65rem;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  border-radius: 8px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: #64748b;
-  cursor: pointer;
-}
-
-.db-explorer-view-tab:hover {
-  background: #f8fafc;
-}
-
-.db-explorer-view-tab.active {
-  background: #1b4332;
-  border-color: #1b4332;
-  color: #fff;
-}
-
 /* Inline editing */
 .db-explorer-edit-active {
   background: #fef3c7 !important;
@@ -342,78 +311,4 @@
   border-radius: 8px;
   resize: vertical;
   box-sizing: border-box;
-}
-
-/* SQL console */
-.sql-console {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.sql-console-head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-}
-
-.sql-console-head h3 {
-  margin: 0;
-  font-size: 0.95rem;
-  color: #1b4332;
-}
-
-.sql-console-presets {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.sql-console-editor {
-  width: 100%;
-  min-height: 160px;
-  padding: 0.75rem;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.78rem;
-  line-height: 1.5;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  resize: vertical;
-  box-sizing: border-box;
-  background: #0f172a;
-  color: #e2e8f0;
-}
-
-.sql-console-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.sql-console-error {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.65rem 0.85rem;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  color: #b91c1c;
-  font-size: 0.78rem;
-}
-
-.sql-console-meta {
-  font-size: 0.72rem;
-  color: #64748b;
-  margin-bottom: 0.5rem;
-}
-
-.sql-console-results {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 0.75rem;
-  background: #fff;
 }

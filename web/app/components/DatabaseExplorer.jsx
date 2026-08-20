@@ -12,11 +12,8 @@ import {
   Pencil,
   Save,
   X,
-  Terminal,
-  Table2,
 } from 'lucide-react';
 import ListSearchBar from './ListSearchBar';
-import SqlConsole from './SqlConsole';
 import {
   buildExplorerCatalog,
   filterRows,
@@ -48,7 +45,6 @@ export default function DatabaseExplorer({
     [state, tenantId]
   );
 
-  const [viewMode, setViewMode] = useState('browse');
   const [activeTableId, setActiveTableId] = useState(catalog.tables[0]?.id || 'premises');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
@@ -209,22 +205,6 @@ export default function DatabaseExplorer({
         <span className="badge badge-blue">{catalog.totalRows} total records</span>
         <span className="badge badge-green">{catalog.tables.length} collections</span>
         <span className="badge badge-blue">Tenant: {catalog.tenantId}</span>
-        <div className="db-explorer-view-tabs">
-          <button
-            type="button"
-            className={`db-explorer-view-tab ${viewMode === 'browse' ? 'active' : ''}`}
-            onClick={() => setViewMode('browse')}
-          >
-            <Table2 size={13} /> Browse
-          </button>
-          <button
-            type="button"
-            className={`db-explorer-view-tab ${viewMode === 'sql' ? 'active' : ''}`}
-            onClick={() => setViewMode('sql')}
-          >
-            <Terminal size={13} /> SQL console
-          </button>
-        </div>
         {onRefresh && (
           <button type="button" className="btn-secondary" style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem' }} onClick={onRefresh} disabled={refreshing}>
             <RefreshCw size={12} className={refreshing ? 'spin' : ''} /> Refresh data
@@ -233,12 +213,7 @@ export default function DatabaseExplorer({
         {copyMsg && <span style={{ fontSize: '0.75rem', color: 'var(--color-success)' }}>{copyMsg}</span>}
       </div>
 
-      {viewMode === 'sql' ? (
-        <div className="glass-panel" style={{ padding: '1rem' }}>
-          <SqlConsole dataSource={dataSource} />
-        </div>
-      ) : (
-        <div className="db-explorer">
+      <div className="db-explorer">
           <aside className="db-explorer-sidebar">
             <div className="db-explorer-sidebar-head">
               <h3><Database size={14} style={{ display: 'inline', marginRight: '0.35rem' }} />Collections</h3>
@@ -451,7 +426,6 @@ export default function DatabaseExplorer({
             </div>
           </aside>
         </div>
-      )}
     </div>
   );
 }

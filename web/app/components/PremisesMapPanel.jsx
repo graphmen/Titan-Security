@@ -7,6 +7,7 @@ import './premisesMap.css';
 import { isValidGpsCoord } from '../../lib/guards';
 import {
   BASEMAPS,
+  DEFAULT_BASEMAP_ID,
   DEFAULT_LAYER_VISIBILITY,
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
@@ -19,6 +20,57 @@ import {
   territoryBounds,
 } from '../../lib/mapLayers';
 
+const MARKER_STYLES = {
+  premise: { fill: '#1b4332', stroke: '#86efac', label: 'SITE' },
+  place: { fill: '#047857', stroke: '#6ee7b7', label: 'P' },
+  checkpoint: { fill: '#1d4ed8', stroke: '#93c5fd', label: 'NFC' },
+  guard: { fill: '#1e40af', stroke: '#60a5fa', label: 'G' },
+  alert: { fill: '#b91c1c', stroke: '#fca5a5', label: '!' },
+  sos: { fill: '#7f1d1d', stroke: '#f87171', label: 'SOS' },
+  activity: { fill: '#6d28d9', stroke: '#c4b5fd', label: '•' },
+};
+
+function svgPin(fill, stroke, label, size = 36) {
+  const h = Math.round(size * 1.22);
+  return `
+    <div style="filter: drop-shadow(0px 5px 10px rgba(0,0,0,0.45));">
+      <svg width="${size}" height="${h}" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17 0C7.61116 0 0 7.61116 0 17C0 26.5 17 42 17 42C17 42 34 26.5 34 17C34 7.61116 26.3888 0 17 0Z" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>
+        <circle cx="17" cy="16" r="8" fill="#0f172a"/>
+        <text x="17" y="19.5" fill="${stroke}" font-size="${label.length > 2 ? 6 : 7.5}" font-weight="900" font-family="sans-serif" text-anchor="middle">${label}</text>
+      </svg>
+    </div>`;
+}
+
+function pinIcon(kind, label = '', extraClass = '') {
+  const style = MARKER_STYLES[kind] || MARKER_STYLES.activity;
+  const pinLabel = kind === 'premise' && label ? label.slice(0, 3).toUpperCase() : style.label;
+  const size = kind === 'sos' ? 40 : kind === 'activity' ? 28 : kind === 'place' ? 30 : 36;
+  return L.divIcon({
+    className: `custom-leaflet-marker ${extraClass}`,
+    html: svgPin(style.fill, style.stroke, pinLabel, size),
+    iconSize: [size, Math.round(size * 1.22)],
+    iconAnchor: [size / 2, Math.round(size * 1.22)],
+    popupAnchor: [0, -Math.round(size * 1.1)],
+  });
+}
+
+function popupHtml(title, tag, tagColor, lines, coords = null) {
+  const body = lines.filter(Boolean).map((l) => `<p>${l}</p>`).join('');
+  const tagEl = tag ? `<span class="popup-tag" style="background:${tagColor}33;color:${tagColor}">${tag}</span>` : '';
+  const coordsEl = coords
+    ? `<button type="button" class="popup-coords-btn" data-coords="${coords.lat},${coords.lng}">Copy GPS</button>`
+    : '';
+  return `<div class="premises-map-popup">${tagEl}<h4>${title}</h4>${body}${coordsEl}</div>`;
+}
+
+function activityClass(type) {
+  if (type === 'SOS Panic Alarm') return 'sos';
+  if (type === 'Patrol Tap') return 'patrol';
+  if (type === 'Shift Clock-In' || type === 'Shift Clock-Out') return 'clock';
+  return '';
+}
+
 const LAYER_DEFS = [
   { key: 'premises', label: 'Protected premises', color: '#40916c' },
   { key: 'geofences', label: 'Clock-in geofences', color: '#86efac' },
@@ -30,38 +82,6 @@ const LAYER_DEFS = [
   { key: 'activity', label: 'Recent activity (24h)', color: '#a78bfa' },
   { key: 'territories', label: 'Territory zones', color: '#f59e0b' },
 ];
-
-function pinIcon(kind, label = '', extraClass = '') {
-  const emoji = {
-    premise: '🏢',
-    place: '📍',
-    checkpoint: '📡',
-    guard: '🛡️',
-    alert: '⚠️',
-    sos: '🆘',
-    activity: '•',
-  }[kind] || '•';
-
-  return L.divIcon({
-    className: '',
-    html: `<div class="gis-pin ${kind} ${extraClass}"><div class="gis-pin-body"><span>${emoji}</span></div>${label ? `<div class="gis-pin-label">${label}</div>` : ''}</div>`,
-    iconSize: label ? [120, 52] : [40, 40],
-    iconAnchor: label ? [60, 40] : [20, 36],
-  });
-}
-
-function popupHtml(title, tag, tagColor, lines) {
-  const body = lines.filter(Boolean).map((l) => `<p>${l}</p>`).join('');
-  const tagEl = tag ? `<span class="popup-tag" style="background:${tagColor}22;color:${tagColor}">${tag}</span>` : '';
-  return `<div class="premises-map-popup">${tagEl}<h4>${title}</h4>${body}</div>`;
-}
-
-function activityClass(type) {
-  if (type === 'SOS Panic Alarm') return 'sos';
-  if (type === 'Patrol Tap') return 'patrol';
-  if (type === 'Shift Clock-In' || type === 'Shift Clock-Out') return 'clock';
-  return '';
-}
 
 export default function PremisesMapPanel({
   premises = [],
@@ -86,7 +106,7 @@ export default function PremisesMapPanel({
   const fitOnceRef = useRef(false);
   const highlightRef = useRef(null);
 
-  const [basemapId, setBasemapId] = useState('light');
+  const [basemapId, setBasemapId] = useState(DEFAULT_BASEMAP_ID);
   const [layers, setLayers] = useState(DEFAULT_LAYER_VISIBILITY);
   const [mapReady, setMapReady] = useState(false);
 
@@ -150,10 +170,22 @@ export default function PremisesMapPanel({
     if (compact) {
       L.control.zoom({ position: 'bottomright' }).addTo(map);
     }
+    L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 
     overlayRef.current = L.featureGroup().addTo(map);
     mapInstance.current = map;
     setMapReady(true);
+
+    map.on('popupopen', (e) => {
+      const btn = e.popup.getElement()?.querySelector('.popup-coords-btn');
+      if (!btn) return;
+      btn.onclick = () => {
+        const text = btn.getAttribute('data-coords') || '';
+        navigator.clipboard?.writeText(text);
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy GPS'; }, 1500);
+      };
+    });
 
     return () => {
       map.remove();
@@ -168,11 +200,12 @@ export default function PremisesMapPanel({
     const map = mapInstance.current;
     if (!map || !mapReady) return;
 
-    const cfg = BASEMAPS[basemapId] || BASEMAPS.light;
+    const cfg = BASEMAPS[basemapId] || BASEMAPS[DEFAULT_BASEMAP_ID];
     if (basemapRef.current) map.removeLayer(basemapRef.current);
     basemapRef.current = L.tileLayer(cfg.url, {
       attribution: cfg.attribution,
       maxZoom: cfg.maxZoom,
+      subdomains: cfg.subdomains,
     }).addTo(map);
   }, [basemapId, mapReady]);
 
@@ -230,11 +263,11 @@ export default function PremisesMapPanel({
 
         if (layers.premises) {
           const marker = L.marker(latlng, {
-            icon: pinIcon('premise', compact ? '' : premise.name.slice(0, 18)),
+            icon: pinIcon('premise', premise.name.slice(0, 3)),
             zIndexOffset: isSelected ? 900 : 100,
           });
           marker.bindPopup(
-            popupHtml(premise.name, 'Premises', '#1b4332', [
+            popupHtml(premise.name, 'Premises', '#86efac', [
               premise.address,
               [premise.suburb, premise.city].filter(Boolean).join(', ') || null,
               territory ? `Territory: ${territory.name}` : 'Territory: unassigned',
@@ -243,7 +276,7 @@ export default function PremisesMapPanel({
                 : null,
               `${onSite} guard(s) on duty · ${placeCount} patrol place(s)`,
               `Geofence radius: ${geofenceRadiusMeters}m`,
-            ])
+            ], { lat, lng })
           );
           marker.addTo(group);
         }
@@ -322,17 +355,17 @@ export default function PremisesMapPanel({
             if (!pos) return;
             extendBounds.push([pos.lat, pos.lng]);
             const marker = L.marker([pos.lat, pos.lng], {
-              icon: pinIcon('guard', compact ? '' : (guard?.fullName?.split(' ')[0] || 'Guard')),
+              icon: pinIcon('guard'),
             });
             marker.bindPopup(
-              popupHtml(guard?.fullName || 'On-duty guard', 'Live guard', '#2563eb', [
+              popupHtml(guard?.fullName || 'On-duty guard', 'Live guard', '#60a5fa', [
                 premise ? `Site: ${premise.name}` : null,
                 `Status: ${att.status}`,
                 `Clock-in: ${new Date(att.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
                 att.lateMinutes > 5 ? `Late by ${att.lateMinutes} min` : null,
                 att.needsMovementAck ? '⚠ Movement check required' : null,
                 att.geofenceViolation ? '⚠ Outside geofence' : null,
-              ])
+              ], pos)
             );
             marker.addTo(group);
           }
@@ -367,13 +400,13 @@ export default function PremisesMapPanel({
           fillColor: '#ef4444',
           fillOpacity: 0.15,
         }).addTo(group);
-        const sosMarker = L.marker([sosPos.lat, sosPos.lng], { icon: pinIcon('sos', 'SOS') });
+        const sosMarker = L.marker([sosPos.lat, sosPos.lng], { icon: pinIcon('sos') });
         sosMarker.bindPopup(
-          popupHtml('SOS PANIC', 'Emergency', '#dc2626', [
+          popupHtml('SOS PANIC', 'Emergency', '#f87171', [
             activeSos.guardName ? `Guard: ${activeSos.guardName}` : null,
             activeSos.message || 'Emergency signal active',
             activeSos.timestamp ? `Since ${new Date(activeSos.timestamp).toLocaleTimeString()}` : null,
-          ])
+          ], sosPos)
         );
         sosMarker.addTo(group);
       }
@@ -444,6 +477,27 @@ export default function PremisesMapPanel({
       </div>
 
       <div className="gis-panel">
+        <p className="gis-panel-title">Sites on map</p>
+        <div className="gis-site-list">
+          {mappedPremises.length === 0 ? (
+            <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>No GPS-verified sites yet.</p>
+          ) : (
+            mappedPremises.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`gis-site-item ${selectedPremiseId === p.id ? 'active' : ''}`}
+                onClick={() => flyToCoords(p.coordinates, 17)}
+              >
+                <strong>{p.name}</strong>
+                <span>{p.coordinates.accuracyMeters ? `±${p.coordinates.accuracyMeters}m` : 'GPS locked'}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="gis-panel">
         <p className="gis-panel-title">Map layers</p>
         <div className="gis-layer-list">
           {LAYER_DEFS.map(({ key, label, color }) => (
@@ -511,28 +565,34 @@ export default function PremisesMapPanel({
 
       <div className="premises-map-hud">
         <strong>Titan GIS Operations Map</strong>
-        <p>
-          {stats.premises} sites · {stats.onDuty} on duty · {stats.checkpoints} checkpoints
-          {stats.sos ? ' · SOS ACTIVE' : ''}
-        </p>
+        <div className="premises-map-hud-stats">
+          <span><em>{stats.premises}</em> sites</span>
+          <span><em>{stats.onDuty}</em> on duty</span>
+          <span><em>{stats.checkpoints}</em> NFC</span>
+          <span><em>{stats.alerts}</em> alerts</span>
+          {stats.sos > 0 && <span className="sos-flash">SOS ACTIVE</span>}
+        </div>
       </div>
 
       <div className="premises-map-toolbar">
-        <div className="premises-map-toolbar-row">
-          <select
-            className="premises-map-basemap-select"
-            value={basemapId}
-            onChange={(e) => setBasemapId(e.target.value)}
-            aria-label="Basemap"
+        <button type="button" className="premises-map-btn" onClick={fitAll}>
+          Fit all sites
+        </button>
+      </div>
+
+      <div className="premises-map-basemap-bar">
+        {Object.values(BASEMAPS).map((b) => (
+          <button
+            key={b.id}
+            type="button"
+            className={`premises-map-basemap-btn ${basemapId === b.id ? 'active' : ''}`}
+            onClick={() => setBasemapId(b.id)}
+            title={b.label}
           >
-            {Object.values(BASEMAPS).map((b) => (
-              <option key={b.id} value={b.id}>{b.label}</option>
-            ))}
-          </select>
-          <button type="button" className="premises-map-btn" onClick={fitAll}>
-            Fit all
+            <span>{b.icon}</span>
+            <span className="premises-map-basemap-label">{b.label}</span>
           </button>
-        </div>
+        ))}
       </div>
 
       <div className="premises-map-legend">

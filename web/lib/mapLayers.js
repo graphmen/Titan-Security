@@ -1,44 +1,54 @@
 import { isValidGpsCoord } from './guards.js';
 
-/** Free basemaps — no API keys required. */
+/** Basemaps aligned with ZRP ZPCS visualiser — no API key required. */
 export const BASEMAPS = {
-  streets: {
-    id: 'streets',
-    label: 'Streets',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19,
+  'google-hybrid': {
+    id: 'google-hybrid',
+    label: 'Google Satellite Hybrid',
+    icon: '🛰️',
+    url: 'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    attribution: '&copy; Google Maps',
+    maxZoom: 21,
   },
-  light: {
-    id: 'light',
-    label: 'Light',
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OSM &copy; CARTO',
-    maxZoom: 20,
+  'google-streets': {
+    id: 'google-streets',
+    label: 'Google Streets',
+    icon: '🗺️',
+    url: 'https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    attribution: '&copy; Google Maps',
+    maxZoom: 21,
   },
-  dark: {
-    id: 'dark',
-    label: 'Dark',
+  'google-terrain': {
+    id: 'google-terrain',
+    label: 'Google Terrain',
+    icon: '⛰️',
+    url: 'https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+    subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    attribution: '&copy; Google Maps',
+    maxZoom: 21,
+  },
+  'carto-dark': {
+    id: 'carto-dark',
+    label: 'Dark Matter GIS',
+    icon: '🌙',
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OSM &copy; CARTO',
+    subdomains: ['a', 'b', 'c', 'd'],
+    attribution: '&copy; CARTO &copy; OpenStreetMap',
     maxZoom: 20,
   },
-  satellite: {
-    id: 'satellite',
-    label: 'Satellite',
+  'esri-sat': {
+    id: 'esri-sat',
+    label: 'Esri World Imagery',
+    icon: '🌍',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri',
+    attribution: '&copy; Esri World Imagery',
     maxZoom: 19,
-  },
-  terrain: {
-    id: 'terrain',
-    label: 'Terrain',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenTopoMap (&copy; OSM)',
-    maxZoom: 17,
   },
 };
 
+export const DEFAULT_BASEMAP_ID = 'google-hybrid';
 export const DEFAULT_MAP_CENTER = [-17.8292, 31.0522];
 export const DEFAULT_MAP_ZOOM = 12;
 

@@ -34,7 +34,7 @@ function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
   return Promise.race([
     promise,
     new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Supabase request timed out')), ms);
+      setTimeout(() => reject(new Error('Database request timed out')), ms);
     }),
   ]);
 }

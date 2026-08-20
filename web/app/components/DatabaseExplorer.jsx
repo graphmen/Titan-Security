@@ -162,7 +162,7 @@ export default function DatabaseExplorer({
     <div className="animate-fade-in">
       <div className="db-explorer-summary">
         <span className={`badge ${dataSource === 'supabase' ? 'badge-green' : 'badge-yellow'}`}>
-          {dataSource === 'supabase' ? 'Supabase live' : 'In-memory demo'}
+          {dataSource === 'supabase' ? 'Live database' : 'In-memory demo'}
         </span>
         <span className="badge badge-blue">{catalog.totalRows} total records</span>
         <span className="badge badge-green">{catalog.tables.length} collections</span>
@@ -205,7 +205,7 @@ export default function DatabaseExplorer({
               <h3>{activeTable?.label || 'Table'}</h3>
               {activeTable?.supabaseTable && (
                 <p style={{ margin: '0.25rem 0 0', fontSize: '0.72rem', color: '#64748b' }}>
-                  Supabase: <code>{activeTable.supabaseTable}</code>
+                  Table: <code>{activeTable.supabaseTable}</code>
                   {activeTable.description ? ` · ${activeTable.description}` : ''}
                   {tableEditable && editMode && (
                     <span className="db-explorer-edit-badge"> · Edit mode — double-click a cell</span>

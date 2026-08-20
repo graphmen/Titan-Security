@@ -9,6 +9,7 @@ import { deliverPinNotifications } from '../../../lib/pinDeliveryServer';
 import { sanitizeStateForClient, shouldIncludePinsForRequest } from '../../../lib/stateSanitize';
 import { filterStateForSupervisor, assertSupervisorMutationAllowed } from '../../../lib/supervisorScope';
 import { authorizeStateMutation, getSessionFromRequest } from '../../../lib/webAuth';
+import { normalizeClientState } from '../../../lib/normalizeClientState';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -34,10 +35,10 @@ function jsonResponse(data, status = 200, origin, req, session = null) {
     if (data.state) {
       payload = {
         ...data,
-        state: sanitizeStateForClient(data.state, { includeGuardPins: includePins, includeSupervisorPins: includePins }),
+        state: sanitizeStateForClient(normalizeClientState(data.state), { includeGuardPins: includePins, includeSupervisorPins: includePins }),
       };
     } else if (data.guards || data.premises || data.tenants || data.supervisors) {
-      payload = sanitizeStateForClient(data, { includeGuardPins: includePins, includeSupervisorPins: includePins });
+      payload = sanitizeStateForClient(normalizeClientState(data), { includeGuardPins: includePins, includeSupervisorPins: includePins });
     }
   }
   return NextResponse.json(payload, {

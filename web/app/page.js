@@ -426,12 +426,22 @@ export default function DashboardPage() {
     );
   }
 
-  const curCheckpoints = state.checkpoints[state.activeTenantId] || [];
-  const curOB = state.occurrenceBook.filter(item => item.tenantId === state.activeTenantId);
-  const curVisitors = state.visitors.filter(item => item.tenantId === state.activeTenantId);
-  const curTemplates = state.checklistTemplates[state.activeTenantId] || [];
-  const curSubmissions = state.checklistSubmissions.filter(item => item.tenantId === state.activeTenantId);
-  const activeSos = state.activeSosAlerts[state.activeTenantId];
+  if (!state) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem', background: '#f8fafc' }}>
+        <p style={{ color: 'var(--color-danger)', fontWeight: 500 }}>{error || 'Cannot reach Titan server. Check your connection and refresh.'}</p>
+        <button type="button" className="btn-primary" onClick={() => { setLoading(true); fetchState(); }}>Try again</button>
+      </div>
+    );
+  }
+
+  const tenantKey = state.activeTenantId || 'titan';
+  const curCheckpoints = state.checkpoints?.[tenantKey] || [];
+  const curOB = (state.occurrenceBook || []).filter((item) => item.tenantId === tenantKey);
+  const curVisitors = (state.visitors || []).filter((item) => item.tenantId === tenantKey);
+  const curTemplates = state.checklistTemplates?.[tenantKey] || [];
+  const curSubmissions = (state.checklistSubmissions || []).filter((item) => item.tenantId === tenantKey);
+  const activeSos = state.activeSosAlerts?.[tenantKey];
 
   const curPremises = state.premises?.[state.activeTenantId] || [];
   const curPlaces = state.places || {};

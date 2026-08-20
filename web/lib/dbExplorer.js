@@ -20,12 +20,19 @@ const PREFERRED_COLUMNS = [
   'territoryId',
   'status',
   'type',
+  'description',
+  'coordinates',
+  'hasNfc',
+  'nfcCode',
+  'schedule',
   'timestamp',
   'createdAt',
   'clockIn',
   'phone',
   'email',
   'address',
+  'city',
+  'suburb',
   'severity',
   'date',
 ];
@@ -70,7 +77,7 @@ export function sanitizeRecord(raw, depth = 0) {
   return out;
 }
 
-export function inferColumns(rows, maxCols = 6) {
+export function inferColumns(rows) {
   if (!rows?.length) return ['id'];
   const keys = new Set();
   rows.slice(0, 20).forEach((row) => {
@@ -80,7 +87,7 @@ export function inferColumns(rows, maxCols = 6) {
   keys.forEach((k) => {
     if (!ordered.includes(k)) ordered.push(k);
   });
-  return ordered.slice(0, maxCols);
+  return ordered;
 }
 
 export function filterRows(rows, query) {
@@ -385,6 +392,12 @@ export function formatCell(value) {
   if (value == null || value === '') return '—';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'number') return String(value);
+  if (typeof value === 'object') {
+    const lat = value.lat ?? value.latitude;
+    const lng = value.lng ?? value.longitude;
+    if (lat != null && lng != null) return `${lat}, ${lng}`;
+    return truncateValue(value, 80);
+  }
   if (typeof value === 'string') {
     if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
       try {

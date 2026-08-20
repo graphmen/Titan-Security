@@ -26,7 +26,6 @@ import {
   isTableEditable,
   isFieldEditable,
   buildCellUpdate,
-  buildRowJsonUpdate,
 } from '../../lib/dbExplorerEdit';
 import { apiFetch } from '../../lib/apiClient';
 import './databaseExplorer.css';
@@ -48,15 +47,12 @@ export default function DatabaseExplorer({
   const [activeTableId, setActiveTableId] = useState(catalog.tables[0]?.id || 'premises');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [selectedIndex, setSelectedIndex] = useState(null);
   const [copyMsg, setCopyMsg] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editingCell, setEditingCell] = useState(null);
   const [editDraft, setEditDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [jsonDraft, setJsonDraft] = useState('');
-  const [jsonEditing, setJsonEditing] = useState(false);
 
   const activeTable = catalog.tables.find((t) => t.id === activeTableId) || catalog.tables[0];
   const tableEditable = isTableEditable(activeTable?.id);
@@ -70,15 +66,12 @@ export default function DatabaseExplorer({
   const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pageRows = filteredRows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
-  const selectedRow = selectedIndex != null ? pageRows[selectedIndex] : null;
 
   const selectTable = (id) => {
     setActiveTableId(id);
     setSearch('');
     setPage(0);
-    setSelectedIndex(null);
     setEditingCell(null);
-    setJsonEditing(false);
     setSaveError('');
   };
 
@@ -157,37 +150,6 @@ export default function DatabaseExplorer({
     }
   };
 
-  const startJsonEdit = () => {
-    if (!selectedRow) return;
-    setJsonDraft(JSON.stringify(selectedRow, null, 2));
-    setJsonEditing(true);
-    setSaveError('');
-  };
-
-  const cancelJsonEdit = () => {
-    setJsonEditing(false);
-    setJsonDraft('');
-    setSaveError('');
-  };
-
-  const saveJsonEdit = async () => {
-    if (!selectedRow) return;
-    let parsed;
-    try {
-      parsed = JSON.parse(jsonDraft);
-    } catch {
-      setSaveError('Invalid JSON — fix syntax before saving');
-      return;
-    }
-    const { payload, error } = buildRowJsonUpdate(activeTable.id, selectedRow, parsed, tenantId);
-    if (error) {
-      setSaveError(error);
-      return;
-    }
-    const ok = await postAction(payload);
-    if (ok) setJsonEditing(false);
-  };
-
   if (!catalog.tables.length) {
     return (
       <div className="db-explorer-empty glass-panel" style={{ padding: '3rem' }}>
@@ -255,7 +217,7 @@ export default function DatabaseExplorer({
             <div className="db-explorer-toolbar">
               <ListSearchBar
                 value={search}
-                onChange={(v) => { setSearch(v); setPage(0); setSelectedIndex(null); }}
+                onChange={(v) => { setSearch(v); setPage(0); }}
                 placeholder="Search rows…"
                 style={{ flex: 1, minWidth: 180, marginBottom: 0 }}
               />
@@ -306,11 +268,7 @@ export default function DatabaseExplorer({
                       </thead>
                       <tbody>
                         {pageRows.map((row, idx) => (
-                          <tr
-                            key={row.id || `${safePage}-${idx}`}
-                            className={selectedIndex === idx ? 'selected' : ''}
-                            onClick={() => { setSelectedIndex(idx); setJsonEditing(false); }}
-                          >
+                          <tr key={row.id || `${safePage}-${idx}`}>
                             <td>{safePage * PAGE_SIZE + idx + 1}</td>
                             {activeTable.columns.map((col) => {
                               const isEditing = editingCell?.rowIdx === idx && editingCell?.col === col;
@@ -372,59 +330,6 @@ export default function DatabaseExplorer({
               )}
             </div>
           </section>
-
-          <aside className="db-explorer-detail">
-            <div className="db-explorer-detail-head">
-              <h3>Record detail</h3>
-            </div>
-            <div className="db-explorer-detail-body">
-              {selectedRow ? (
-                <>
-                  <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
-                    <button type="button" className="btn-secondary" style={{ padding: '0.3rem 0.55rem', fontSize: '0.7rem' }} onClick={() => copyJson(selectedRow, 'Record')}>
-                      <Copy size={11} /> Copy JSON
-                    </button>
-                    {tableEditable && !jsonEditing && (
-                      <button type="button" className="btn-secondary" style={{ padding: '0.3rem 0.55rem', fontSize: '0.7rem' }} onClick={startJsonEdit}>
-                        <Pencil size={11} /> Edit JSON
-                      </button>
-                    )}
-                    {jsonEditing && (
-                      <>
-                        <button type="button" className="btn-primary" style={{ padding: '0.3rem 0.55rem', fontSize: '0.7rem' }} onClick={saveJsonEdit} disabled={saving}>
-                          <Save size={11} /> {saving ? 'Saving…' : 'Save'}
-                        </button>
-                        <button type="button" className="btn-secondary" style={{ padding: '0.3rem 0.55rem', fontSize: '0.7rem' }} onClick={cancelJsonEdit} disabled={saving}>
-                          <X size={11} /> Cancel
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {jsonEditing ? (
-                    <textarea
-                      className="db-explorer-json-editor"
-                      value={jsonDraft}
-                      onChange={(e) => setJsonDraft(e.target.value)}
-                      spellCheck={false}
-                      rows={18}
-                    />
-                  ) : (
-                    <pre className="db-explorer-json">{JSON.stringify(selectedRow, null, 2)}</pre>
-                  )}
-                  {jsonEditing && (
-                    <p style={{ fontSize: '0.68rem', color: '#64748b', margin: '0.5rem 0 0' }}>
-                      Only whitelisted fields are saved. PINs, coordinates, and media cannot be edited here.
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
-                  Select a row to inspect the full JSON record. Sensitive fields (PINs, photos) are redacted.
-                  {tableEditable && ' Turn on Edit rows to change values inline or via JSON.'}
-                </p>
-              )}
-            </div>
-          </aside>
         </div>
     </div>
   );

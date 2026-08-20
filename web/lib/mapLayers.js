@@ -105,7 +105,7 @@ export function resolveObEventCoords(ob, { guards, attendance, premises, checkpo
     const cp = checkpoints.find(
       (c) => c.name && ob.description?.includes(c.name)
     );
-    const cpCoords = coordsFrom(c.coordinates);
+    const cpCoords = coordsFrom(cp?.coordinates);
     if (cpCoords) return cpCoords;
   }
 

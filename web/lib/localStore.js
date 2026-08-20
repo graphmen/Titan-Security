@@ -30,6 +30,7 @@ import {
   recordGuardMovement,
   evaluateGuardMonitoring,
   evaluateLicenseExpiryAlerts,
+  evaluateShiftCompliance,
   refreshGuardScores,
   pushGuardAlert,
   dismissGuardAlerts,
@@ -223,7 +224,9 @@ export function getLocalState() {
 
 export function getLocalStateWithMonitoring() {
   const state = getLocalState();
-  evaluateLicenseExpiryAlerts(state, state.activeTenantId);
+  const tenantId = state.activeTenantId;
+  evaluateLicenseExpiryAlerts(state, tenantId);
+  evaluateShiftCompliance(state, tenantId);
   return state;
 }
 
@@ -829,24 +832,49 @@ export function processLocalAction(payload) {
         attachments: { photo: null, voice: null },
         premiseId,
       });
+      dismissGuardAlerts(state, tenantId, guardId, 'missed_clock_in');
       break;
     }
     case 'GUARD_CLOCK_OUT': {
-      const { guardId, lat, lng } = payload;
+      const { guardId, lat, lng, accuracyMeters } = payload;
       if (!guardId) return { error: 'Guard required', status: 400 };
 
       const record = getActiveAttendanceForGuard(state, tenantId, guardId);
       if (!record) return { error: 'Not clocked in', status: 404 };
 
+      const premise = (state.premises[tenantId] || []).find((p) => p.id === record.premiseId);
+      const coords = { lat: parseFloat(lat), lng: parseFloat(lng) };
+      const geofenceRadius = getGeofenceRadius(state);
+      const premiseCoords = premise?.coordinates;
+
+      if (!premise) return { error: 'Premise not found', status: 404 };
+      if (!isValidGpsCoord(premiseCoords?.lat, premiseCoords?.lng)) {
+        return {
+          error: 'This premises has no GPS coordinates — ask a supervisor to capture GPS on site first',
+          status: 403,
+        };
+      }
+      if (!isValidGpsCoord(coords.lat, coords.lng)) {
+        return { error: 'Could not verify your GPS location — enable location and try again', status: 403 };
+      }
+      if (!isClockInAccuracyAcceptable(accuracyMeters, geofenceRadius)) {
+        return { error: clockInAccuracyError(accuracyMeters, geofenceRadius), status: 403 };
+      }
+      if (!isWithinPremiseGeofence(coords, premiseCoords, geofenceRadius)) {
+        return {
+          error: `You must be at the premises to clock out (within ${geofenceRadius}m GPS geofence)`,
+          status: 403,
+        };
+      }
+
       record.clockOut = new Date().toISOString();
-      record.clockOutCoords = { lat: parseFloat(lat), lng: parseFloat(lng) };
+      record.clockOutCoords = coords;
       record.status = 'Clocked Out';
 
       const shift = (state.shifts[tenantId] || []).find((s) => s.id === record.shiftId);
       if (shift) shift.status = 'Completed';
 
       const guard = (state.guards[tenantId] || []).find((g) => g.id === guardId);
-      const premise = (state.premises[tenantId] || []).find((p) => p.id === record.premiseId);
 
       state.occurrenceBook.unshift({
         id: `ob-att-out-${Date.now()}`,
@@ -855,11 +883,12 @@ export function processLocalAction(payload) {
         guardName: guard?.fullName || 'Guard',
         guardId,
         type: 'Shift Clock-Out',
-        description: `Clocked out from ${premise?.name || 'premises'}. Shift ended.`,
+        description: `Clocked out from ${premise?.name || 'premises'} at site geofence. Shift ended.`,
         status: 'Resolved',
         attachments: { photo: null, voice: null },
         premiseId: record.premiseId,
       });
+      dismissGuardAlerts(state, tenantId, guardId, 'missed_clock_out');
       break;
     }
     case 'GUARD_HEARTBEAT': {

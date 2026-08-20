@@ -1,4 +1,4 @@
-import { normalizeGeofenceRadius, GEOFENCE_DEFAULT_METERS, isGeofenceExitAlertsEnabled } from './systemSettings.js';
+import { normalizeGeofenceRadius, GEOFENCE_DEFAULT_METERS, isGeofenceExitAlertsEnabled, getShiftTimingSettings } from './systemSettings.js';
 
 export function generateGuardId() {
   return `GRD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
@@ -88,6 +88,7 @@ export function pushGuardAlert(state, tenantId, alert) {
       a.type === alert.type &&
       a.guardId === alert.guardId &&
       (alert.premiseId ? a.premiseId === alert.premiseId : true) &&
+      (alert.shiftId ? a.shiftId === alert.shiftId : true) &&
       a.status === 'Active'
   );
   if (exists) return null;
@@ -176,6 +177,95 @@ export function evaluateGuardMonitoring(state, tenantId, guardId, coords) {
     if (record.movementTrail.length > 50) record.movementTrail.shift();
     record.lastCoords = coords;
   }
+}
+
+export function getShiftStartDate(shift) {
+  if (!shift?.date || !shift?.startTime) return null;
+  const d = new Date(`${shift.date}T${shift.startTime}:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function getShiftEndDate(shift) {
+  const start = getShiftStartDate(shift);
+  if (!shift?.date || !shift?.endTime || !start) return null;
+  let end = new Date(`${shift.date}T${shift.endTime}:00`);
+  if (Number.isNaN(end.getTime())) return null;
+  if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+  return end;
+}
+
+/** Alert supervisors when guards miss clock-in; alert guards when they miss clock-out. */
+export function evaluateShiftCompliance(state, tenantId) {
+  const { missedClockInGraceMinutes, missedClockOutGraceMinutes } = getShiftTimingSettings(state);
+  const now = Date.now();
+  const today = todayDateStr();
+  const shifts = state.shifts?.[tenantId] || [];
+  const attendance = state.attendance?.[tenantId] || [];
+  const premises = state.premises?.[tenantId] || [];
+
+  const isOnDuty = (guardId, shift) =>
+    attendance.some(
+      (a) =>
+        a.guardId === guardId &&
+        (a.status === 'On Duty' || a.status === 'Late') &&
+        (shift?.id ? a.shiftId === shift.id || a.premiseId === shift.premiseId : true)
+    );
+
+  shifts.forEach((shift) => {
+    if (shift.status === 'Cancelled' || shift.status === 'Completed') return;
+    if (shift.date !== today) return;
+
+    const start = getShiftStartDate(shift);
+    if (!start) return;
+
+    const missedInAt = start.getTime() + missedClockInGraceMinutes * 60 * 1000;
+    if (now >= missedInAt && shift.status === 'Scheduled' && !isOnDuty(shift.guardId, shift)) {
+      const guardName = getGuardName(state, tenantId, shift.guardId);
+      const premise = premises.find((p) => p.id === shift.premiseId);
+      pushGuardAlert(state, tenantId, {
+        type: 'missed_clock_in',
+        severity: 'critical',
+        guardId: shift.guardId,
+        guardName,
+        premiseId: shift.premiseId,
+        shiftId: shift.id,
+        message: `${guardName} has not clocked in at ${premise?.name || 'site'} (${shift.startTime}–${shift.endTime}).`,
+      });
+    }
+  });
+
+  attendance
+    .filter((a) => a.status === 'On Duty' || a.status === 'Late')
+    .forEach((att) => {
+      const shift =
+        (att.shiftId && shifts.find((s) => s.id === att.shiftId)) ||
+        shifts.find(
+          (s) =>
+            s.guardId === att.guardId &&
+            s.premiseId === att.premiseId &&
+            s.status === 'Active' &&
+            (s.date === today || s.date === att.clockIn?.slice(0, 10))
+        );
+      if (!shift) return;
+
+      const end = getShiftEndDate(shift);
+      if (!end) return;
+
+      const missedOutAt = end.getTime() + missedClockOutGraceMinutes * 60 * 1000;
+      if (now < missedOutAt) return;
+
+      const guardName = getGuardName(state, tenantId, att.guardId);
+      const premise = premises.find((p) => p.id === att.premiseId);
+      pushGuardAlert(state, tenantId, {
+        type: 'missed_clock_out',
+        severity: 'warning',
+        guardId: att.guardId,
+        guardName,
+        premiseId: att.premiseId,
+        shiftId: shift.id,
+        message: `${guardName} has not clocked out from ${premise?.name || 'site'} — shift ended at ${shift.endTime}. Return to site geofence to clock out.`,
+      });
+    });
 }
 
 export function evaluateLicenseExpiryAlerts(state, tenantId) {

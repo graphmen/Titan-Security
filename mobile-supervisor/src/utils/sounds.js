@@ -82,6 +82,17 @@ export function playMovementAlertBeep() {
   } catch (_) { /* ignore */ }
 }
 
+/** Supervisor alert — missed clock-in etc. */
+export function playSupervisorAlertBeep() {
+  try {
+    [0, 0.45, 0.9].forEach((delay) => {
+      tone({ freq: 880, type: 'sawtooth', start: delay, vol: 0.14, dur: 0.22 });
+      tone({ freq: 660, type: 'sawtooth', start: delay + 0.1, vol: 0.12, dur: 0.18 });
+    });
+    if (navigator.vibrate) navigator.vibrate([30, 50, 30, 50, 30]);
+  } catch (_) { /* ignore */ }
+}
+
 /** Generic short success (photos, etc.) */
 export function playSuccessBeep() {
   playNfcSuccess();

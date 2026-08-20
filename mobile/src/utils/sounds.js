@@ -82,6 +82,38 @@ export function playMovementAlertBeep() {
   } catch (_) { /* ignore */ }
 }
 
+/** 30-minute shift reminder — ascending chime */
+export function playShiftReminderBeep() {
+  try {
+    tone({ freq: 523, vol: 0.16, dur: 0.12 });
+    tone({ freq: 659, start: 0.12, vol: 0.18, dur: 0.12 });
+    tone({ freq: 784, start: 0.24, vol: 0.2, dur: 0.18 });
+    if (navigator.vibrate) navigator.vibrate([20, 40, 30]);
+  } catch (_) { /* ignore */ }
+}
+
+/** Missed clock-out reminder — urgent double tone */
+export function playMissedClockOutBeep() {
+  try {
+    [0, 0.4].forEach((delay) => {
+      tone({ freq: 330, type: 'square', start: delay, vol: 0.16, dur: 0.3 });
+      tone({ freq: 440, type: 'square', start: delay + 0.15, vol: 0.14, dur: 0.25 });
+    });
+    if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
+  } catch (_) { /* ignore */ }
+}
+
+/** Supervisor alert — attention siren (3 pulses) */
+export function playSupervisorAlertBeep() {
+  try {
+    [0, 0.45, 0.9].forEach((delay) => {
+      tone({ freq: 880, type: 'sawtooth', start: delay, vol: 0.14, dur: 0.22 });
+      tone({ freq: 660, type: 'sawtooth', start: delay + 0.1, vol: 0.12, dur: 0.18 });
+    });
+    if (navigator.vibrate) navigator.vibrate([30, 50, 30, 50, 30]);
+  } catch (_) { /* ignore */ }
+}
+
 /** Generic short success (photos, etc.) */
 export function playSuccessBeep() {
   playNfcSuccess();

@@ -13,6 +13,12 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   geofenceExitAlertsEnabled: false,
   noMovementAlertMinutes: 45,
   licenseExpiryWarningDays: 60,
+  /** Minutes before shift start — guard app plays a reminder sound. */
+  shiftClockInReminderMinutes: 30,
+  /** Minutes after scheduled start before supervisor is alerted (no clock-in). */
+  missedClockInGraceMinutes: 30,
+  /** Minutes after scheduled end before guard is reminded to clock out. */
+  missedClockOutGraceMinutes: 30,
 };
 
 export function mergeSystemSettings(raw) {
@@ -54,4 +60,17 @@ export function isSirenEnabled(state) {
 
 export function isGeofenceExitAlertsEnabled(state) {
   return mergeSystemSettings(state?.systemSettings).geofenceExitAlertsEnabled === true;
+}
+
+export function getShiftTimingSettings(state) {
+  const s = mergeSystemSettings(state?.systemSettings);
+  const num = (v, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  return {
+    clockInReminderMinutes: num(s.shiftClockInReminderMinutes, 30),
+    missedClockInGraceMinutes: num(s.missedClockInGraceMinutes, 30),
+    missedClockOutGraceMinutes: num(s.missedClockOutGraceMinutes, 30),
+  };
 }

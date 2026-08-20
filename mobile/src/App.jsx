@@ -56,6 +56,8 @@ import {
   playNfcSuccess,
   playSuccessBeep,
   playMovementAlertBeep,
+  playShiftReminderBeep,
+  playMissedClockOutBeep,
 } from './utils/sounds';
 
 export default function App() {
@@ -123,6 +125,9 @@ export default function App() {
 
   const [swapForm, setSwapForm] = useState({ shiftId: '', targetGuardId: '', reason: '' });
   const movementAlertPlayed = useRef(false);
+  const missedClockOutPlayed = useRef(false);
+  const shiftReminderPlayed = useRef(new Set());
+  const hasLoadedStateRef = useRef(false);
   const voiceRecorderRef = useRef(null);
   const { theme, toggleTheme, isDark } = useTheme();
   const [splashVisible, setSplashVisible] = useState(true);
@@ -191,6 +196,7 @@ export default function App() {
         const myName = loggedInGuard?.fullName || allGuardsFromState(data)?.find((g) => g.id === guardId)?.fullName;
         const isMySos = activeSos && myName && activeSos.guardName === myName;
         setSosActive(!!isMySos);
+        hasLoadedStateRef.current = true;
       }
     } catch (e) {
       console.warn('API connection failed:', e.message);
@@ -303,19 +309,21 @@ export default function App() {
   const handleClockOut = async () => {
     if (!guardId) return;
     try {
-      const { lat, lng } = await getLocation();
+      const { lat, lng, accuracy } = await getLocationForClockIn();
       await postStateAction(apiBase, {
         action: 'GUARD_CLOCK_OUT',
         guardId,
         tenantId,
         lat,
         lng,
+        accuracyMeters: accuracy,
       });
-      showToast('Shift ended — clocked out');
+      showToast('Shift ended — clocked out at premises');
       movementAlertPlayed.current = false;
+      missedClockOutPlayed.current = false;
       fetchState();
     } catch (e) {
-      showToast(e.message || 'Clock-out failed', 'error');
+      showToast(e.message || 'Clock-out failed — you must be at the premises geofence', 'error');
     }
   };
 
@@ -951,6 +959,69 @@ export default function App() {
       movementAlertPlayed.current = false;
     }
   }, [myAttendance?.needsMovementAck]);
+
+  // Missed clock-out alert from server (30 min after shift end)
+  useEffect(() => {
+    if (!guardId || !state || !hasLoadedStateRef.current) return;
+    const alerts = (state.guardAlerts?.[tenantId] || []).filter(
+      (a) => a.guardId === guardId && a.status === 'Active' && a.type === 'missed_clock_out'
+    );
+    if (alerts.length > 0 && !missedClockOutPlayed.current) {
+      playMissedClockOutBeep();
+      missedClockOutPlayed.current = true;
+      showToast('Shift ended — return to premises geofence to clock out', 'error');
+    }
+    if (alerts.length === 0) {
+      missedClockOutPlayed.current = false;
+    }
+  }, [state, guardId, tenantId]);
+
+  // 30-minute pre-shift clock-in reminder (local scheduler)
+  useEffect(() => {
+    if (!isAuthenticated || !guardId || !state || isOnDuty) return undefined;
+
+    const reminderMins = Number(state.systemSettings?.shiftClockInReminderMinutes) || 30;
+    const today = new Date().toISOString().slice(0, 10);
+    const shifts = (state.shifts?.[tenantId] || []).filter(
+      (s) => s.guardId === guardId && s.date === today && s.status === 'Scheduled'
+    );
+
+    const checkReminders = () => {
+      const now = Date.now();
+      shifts.forEach((shift) => {
+        const start = new Date(`${shift.date}T${shift.startTime}:00`).getTime();
+        if (Number.isNaN(start)) return;
+        const reminderAt = start - reminderMins * 60 * 1000;
+        const key = `${shift.id}_pre${reminderMins}`;
+        if (now >= reminderAt && now < start && !shiftReminderPlayed.current.has(key)) {
+          shiftReminderPlayed.current.add(key);
+          playShiftReminderBeep();
+          const minsLeft = Math.max(1, Math.round((start - now) / 60000));
+          showToast(`Shift starts in ~${minsLeft} min — go to premises to clock in`, 'info');
+          try {
+            localStorage.setItem(`titan_shift_reminder_${key}`, '1');
+          } catch {
+            /* ignore */
+          }
+        }
+      });
+    };
+
+    shifts.forEach((shift) => {
+      const key = `${shift.id}_pre${reminderMins}`;
+      try {
+        if (localStorage.getItem(`titan_shift_reminder_${key}`)) {
+          shiftReminderPlayed.current.add(key);
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+
+    checkReminders();
+    const timer = setInterval(checkReminders, 60000);
+    return () => clearInterval(timer);
+  }, [isAuthenticated, guardId, state, isOnDuty, tenantId]);
 
   const getGreeting = () => {
     const h = new Date().getHours();

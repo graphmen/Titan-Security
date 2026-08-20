@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Building2,
@@ -24,6 +24,7 @@ import LocationPermissionPrompt from './components/LocationPermissionPrompt';
 import { postSupervisorAction, fetchSupervisorState } from './utils/api';
 import { pickProfilePhoto } from './utils/camera';
 import { initLocationPermissionFlow } from './utils/location';
+import { playSupervisorAlertBeep } from './utils/sounds';
 
 export default function App() {
   const apiBase = DEFAULT_API_URL.replace(/\/$/, '');
@@ -51,6 +52,8 @@ export default function App() {
   const [locPermVisible, setLocPermVisible] = useState(false);
   const [locPermAutoRequested, setLocPermAutoRequested] = useState(false);
   const [showUpdateScreen, setShowUpdateScreen] = useState(false);
+  const seenAlertIdsRef = useRef(new Set());
+  const hasLoadedAlertsRef = useRef(false);
 
   const { theme, toggleTheme, isDark } = useTheme();
 
@@ -64,6 +67,23 @@ export default function App() {
     try {
       const data = await fetchSupervisorState(apiBase, tenantId, supervisorId);
       setState(data);
+
+      const alerts = (data.guardAlerts?.[tenantId] || []).filter((a) => a.status === 'Active');
+      if (hasLoadedAlertsRef.current) {
+        const sirenOn = data.systemSettings?.sirenAlertsEnabled !== false;
+        for (const alert of alerts) {
+          if (!seenAlertIdsRef.current.has(alert.id)) {
+            seenAlertIdsRef.current.add(alert.id);
+            if (sirenOn && (alert.type === 'missed_clock_in' || alert.severity === 'critical')) {
+              playSupervisorAlertBeep();
+            }
+          }
+        }
+      } else {
+        alerts.forEach((a) => seenAlertIdsRef.current.add(a.id));
+        hasLoadedAlertsRef.current = true;
+      }
+
       const sup = data.supervisor || (data.supervisors?.[tenantId] || [])[0];
       if (sup) {
         setLoggedInSupervisor(sup);

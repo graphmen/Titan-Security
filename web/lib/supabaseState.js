@@ -22,7 +22,7 @@ import {
   usesOperationalDbWrite,
   persistOperationalActionToDb,
 } from './db/operationalWrites.js';
-import { evaluateLicenseExpiryAlerts } from './guards';
+import { evaluateLicenseExpiryAlerts, evaluateShiftCompliance } from './guards';
 import { getWhatsAppStatus } from './whatsapp';
 import { getEmailStatus } from './email';
 import { deliverPinNotifications } from './pinDeliveryServer';
@@ -63,6 +63,7 @@ export async function loadFreshStateFromDatabase() {
 function buildAppStateResponse(state) {
   const tenantId = state.activeTenantId || 'titan';
   evaluateLicenseExpiryAlerts(state, tenantId);
+  evaluateShiftCompliance(state, tenantId);
   return {
     ...state,
     dataSource: 'supabase',

@@ -339,6 +339,39 @@ export function buildExplorerCatalog(state, tenantId) {
   return { tables, totalRows, tenantId: tid };
 }
 
+function csvEscape(value) {
+  if (value == null) return '';
+  const s = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+/** Convert rows to CSV text. Uses all keys from first rows if columns omitted. */
+export function rowsToCsv(rows, columns) {
+  if (!rows?.length) return '';
+  let cols = columns;
+  if (!cols?.length) {
+    const keys = new Set();
+    rows.slice(0, 50).forEach((row) => Object.keys(row || {}).forEach((k) => keys.add(k)));
+    cols = [...keys];
+  }
+  const lines = [cols.join(',')];
+  rows.forEach((row) => {
+    lines.push(cols.map((c) => csvEscape(row[c])).join(','));
+  });
+  return lines.join('\n');
+}
+
+export function downloadTextFile(filename, content, mime = 'text/plain;charset=utf-8') {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function groupTablesByCategory(tables) {
   const groups = {};
   tables.forEach((t) => {

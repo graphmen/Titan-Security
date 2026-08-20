@@ -227,3 +227,193 @@
   gap: 0.35rem;
   align-items: center;
 }
+
+/* View mode tabs */
+.db-explorer-view-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.db-explorer-view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.db-explorer-view-tab:hover {
+  background: #f8fafc;
+}
+
+.db-explorer-view-tab.active {
+  background: #1b4332;
+  border-color: #1b4332;
+  color: #fff;
+}
+
+/* Inline editing */
+.db-explorer-edit-active {
+  background: #fef3c7 !important;
+  border-color: #f59e0b !important;
+  color: #92400e !important;
+}
+
+.db-explorer-edit-badge {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.db-explorer-table th.editable-col {
+  color: #1b4332;
+  background: #ecfdf5;
+}
+
+.db-explorer-table td.editable-cell {
+  cursor: cell;
+}
+
+.db-explorer-table td.editable-cell:hover {
+  background: #fffbeb;
+  outline: 1px dashed #fcd34d;
+}
+
+.db-explorer-cell-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 140px;
+}
+
+.db-explorer-cell-editor input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.72rem;
+  font-family: inherit;
+  border: 1px solid #40916c;
+  border-radius: 4px;
+}
+
+.db-explorer-cell-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem;
+  border: none;
+  background: #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #475569;
+}
+
+.db-explorer-cell-btn.save {
+  background: #40916c;
+  color: #fff;
+}
+
+.db-explorer-cell-btn:hover {
+  opacity: 0.85;
+}
+
+.db-explorer-save-error {
+  padding: 0.45rem 1rem;
+  font-size: 0.75rem;
+  color: #b91c1c;
+  background: #fef2f2;
+  border-bottom: 1px solid #fecaca;
+}
+
+.db-explorer-json-editor {
+  width: 100%;
+  min-height: 280px;
+  padding: 0.5rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  border: 1px solid #40916c;
+  border-radius: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+/* SQL console */
+.sql-console {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sql-console-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.sql-console-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #1b4332;
+}
+
+.sql-console-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sql-console-editor {
+  width: 100%;
+  min-height: 160px;
+  padding: 0.75rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.sql-console-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.sql-console-error {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.85rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #b91c1c;
+  font-size: 0.78rem;
+}
+
+.sql-console-meta {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+}
+
+.sql-console-results {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: #fff;
+}

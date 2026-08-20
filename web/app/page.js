@@ -499,7 +499,7 @@ export default function DashboardPage() {
               className={`sidebar-nav-item ${activeTab === 'map' ? 'active' : ''}`}
               onClick={() => selectTab('map')}
             >
-              <MapPinned size={18} /> Site Map
+              <MapPinned size={18} /> GIS Operations Map
             </button>
           </li>
           <li>
@@ -561,7 +561,7 @@ export default function DashboardPage() {
           <div className="page-header-main">
             <h1 className="page-title">
               {activeTab === 'supervisors' ? 'Supervisor & Territory Management'
-                : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'map' ? 'Protected Premises Map' : activeTab === 'command' ? 'Command Centre Operations' : 'Master Administration'}
+                : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'map' ? 'GIS Operations Map' : activeTab === 'command' ? 'Command Centre Operations' : 'Master Administration'}
             </h1>
             <p className="page-subtitle">
               {activeTab === 'supervisors'
@@ -571,7 +571,7 @@ export default function DashboardPage() {
                 : activeTab === 'premises'
                 ? 'Register sites under protection, add important places, and set up NFC patrol points for guards.'
                 : activeTab === 'map'
-                ? 'Live map of all protected premises, geofences, and on-duty guards.'
+                ? 'GIS operations map — premises, patrol routes, live guards, NFC scans, alerts, and activity in one view.'
                 : activeTab === 'command' 
                 ? 'Real-time patrol monitoring, incident updates, and visitor tracking logs.' 
                 : 'Configure onboarding templates, review custom checklists, and manage server data.'}
@@ -662,26 +662,20 @@ export default function DashboardPage() {
           />
         ) : activeTab === 'map' ? (
           <div className="animate-fade-in">
-            <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>All Protected Premises</h3>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', margin: 0 }}>
-                Every registered site with GPS appears here. Geofence circles show the clock-in zone ({systemSettings.geofenceRadiusMeters}m).
-                {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-                  ? ' Switch basemap style using the control on the map.'
-                  : ' Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY for Google basemaps (Roadmap, Satellite, Hybrid, Terrain).'}
-              </p>
-            </div>
-            <div className="glass-panel" style={{ padding: '1rem' }}>
-              <PremisesMapPanel
-                premises={curPremises}
-                places={curPlaces}
-                guards={curGuards}
-                attendance={curAttendance}
-                geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
-                height={560}
-                showPlaces
-              />
-            </div>
+            <PremisesMapPanel
+              showSidebar
+              premises={curPremises}
+              places={curPlaces}
+              guards={curGuards}
+              attendance={curAttendance}
+              checkpoints={curCheckpoints}
+              guardAlerts={curGuardAlerts}
+              occurrenceBook={curOB}
+              activeSos={activeSos}
+              territories={curTerritories}
+              geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
+              height={640}
+            />
           </div>
         ) : activeTab === 'command' ? (
           /* ==================== COMMAND CENTRE ==================== */
@@ -771,10 +765,16 @@ export default function DashboardPage() {
                   </button>
                 </div>
                 <PremisesMapPanel
+                  compact
                   premises={curPremises}
                   places={curPlaces}
                   guards={curGuards}
                   attendance={curAttendance}
+                  checkpoints={curCheckpoints}
+                  guardAlerts={curGuardAlerts}
+                  occurrenceBook={curOB}
+                  activeSos={activeSos}
+                  territories={curTerritories}
                   geofenceRadiusMeters={systemSettings.geofenceRadiusMeters}
                   height={480}
                 />

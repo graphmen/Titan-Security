@@ -70,6 +70,38 @@ export function findReliefForShift(state, tenantId, shift, excludeGuardId) {
   return { reliefShift, reliefGuard };
 }
 
+/**
+ * Pick the active site for a guard — never falls back to an unassigned tenant premise.
+ */
+export function resolveGuardPremiseId({
+  guard,
+  premises = [],
+  premiseId = '',
+  guardProfile = null,
+  attendance = [],
+  guardId = '',
+}) {
+  const assignedIds = guard?.assignedPremiseIds || [];
+  if (assignedIds.length === 0) return '';
+
+  const onDuty = attendance.find(
+    (a) =>
+      a.guardId === guardId &&
+      (a.status === 'On Duty' || a.status === 'Late') &&
+      assignedIds.includes(a.premiseId)
+  );
+  if (onDuty?.premiseId) return onDuty.premiseId;
+
+  const shiftPremise =
+    guardProfile?.currentShift?.premiseId || guardProfile?.focusShift?.premiseId;
+  if (shiftPremise && assignedIds.includes(shiftPremise)) return shiftPremise;
+
+  if (premiseId && assignedIds.includes(premiseId)) return premiseId;
+
+  const firstAssigned = premises.find((p) => assignedIds.includes(p.id));
+  return firstAssigned?.id || assignedIds[0] || '';
+}
+
 export function buildGuardProfileContext(state, tenantId, guardId) {
   const guards = state.guards?.[tenantId] || [];
   const guard = guards.find((g) => g.id === guardId);

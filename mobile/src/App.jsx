@@ -34,7 +34,7 @@ import {
   TrendingUp,
   Loader2,
 } from 'lucide-react';
-import { buildGuardProfileContext } from './guardProfile';
+import { buildGuardProfileContext, resolveGuardPremiseId } from './guardProfile';
 import SplashScreen from './components/SplashScreen';
 import PinLogin from './components/PinLogin';
 import ChangePin from './components/ChangePin';
@@ -222,31 +222,58 @@ export default function App() {
     }
   }, [state, guardId, tenantId, isAuthenticated]);
 
-  // Auto-select first premise when tenant changes
+  // Keep active site aligned with guard assignments (never default to first tenant site)
   useEffect(() => {
-    const premises = state?.premises?.[tenantId] || [];
-    if (premises.length === 0) {
-      setPremiseId('');
+    if (!isAuthenticated || !guardId || !state) return;
+    const guard = (state.guards?.[tenantId] || []).find((g) => g.id === guardId) || loggedInGuard;
+    if (!guard) return;
+
+    const profile = buildGuardProfileContext(state, tenantId, guardId);
+    const resolved = resolveGuardPremiseId({
+      guard,
+      premises: state.premises?.[tenantId] || [],
+      premiseId,
+      guardProfile: profile,
+      attendance: state.attendance?.[tenantId] || [],
+      guardId,
+    });
+
+    if (resolved === premiseId) return;
+    setPremiseId(resolved);
+    if (resolved) {
+      localStorage.setItem('titan_premise_id', resolved);
+    } else {
+      localStorage.removeItem('titan_premise_id');
+    }
+  }, [state, tenantId, guardId, loggedInGuard, isAuthenticated, premiseId]);
+
+  const selectPremise = (id) => {
+    if (!id) return;
+    const guard = loggedInGuard || (state?.guards?.[tenantId] || []).find((g) => g.id === guardId);
+    const assigned = guard?.assignedPremiseIds || [];
+    if (assigned.length && !assigned.includes(id)) {
+      showToast('That site is not assigned to you', 'error');
       return;
     }
-    const valid = premises.some((p) => p.id === premiseId);
-    if (!valid) {
-      const first = premises[0].id;
-      setPremiseId(first);
-      localStorage.setItem('titan_premise_id', first);
-    }
-  }, [state, tenantId, premiseId]);
+    setPremiseId(id);
+    localStorage.setItem('titan_premise_id', id);
+  };
 
   const handleClockIn = async () => {
     if (!guardId) {
       showToast('Sign in again to clock in', 'error');
       return;
     }
-    const targetPremise =
-      premiseId ||
-      guardProfile?.currentShift?.premiseId ||
-      guardProfile?.focusShift?.premiseId ||
-      myPremises[0]?.id;
+    const guard = loggedInGuard || (state?.guards?.[tenantId] || []).find((g) => g.id === guardId);
+    const profile = state && guardId ? buildGuardProfileContext(state, tenantId, guardId) : null;
+    const targetPremise = resolveGuardPremiseId({
+      guard,
+      premises: state?.premises?.[tenantId] || [],
+      premiseId,
+      guardProfile: profile,
+      attendance: state?.attendance?.[tenantId] || [],
+      guardId,
+    });
     if (!targetPremise) {
       showToast('No premises assigned — contact your supervisor', 'error');
       return;
@@ -882,15 +909,6 @@ export default function App() {
   const answeredCount = Object.keys(checklistAnswers).length;
   const completionPercent = checklistFieldsCount > 0 ? Math.round((answeredCount / checklistFieldsCount) * 100) : 0;
 
-  // Auto-select premises from current or upcoming shift
-  useEffect(() => {
-    const targetPremise = guardProfile?.currentShift?.premiseId || guardProfile?.focusShift?.premiseId;
-    if (!targetPremise || targetPremise === premiseId) return;
-    if ((activeGuard?.assignedPremiseIds || []).includes(targetPremise)) {
-      setPremiseId(targetPremise);
-      localStorage.setItem('titan_premise_id', targetPremise);
-    }
-  }, [guardProfile?.currentShift?.id, guardProfile?.focusShift?.id, guardId]);
 
   // Movement heartbeat while on duty
   useEffect(() => {
@@ -938,10 +956,20 @@ export default function App() {
     } catch {
       /* ignore quota errors */
     }
-    const assigned = guard.assignedPremiseIds || [];
-    if (assigned.length && !assigned.includes(premiseId)) {
-      setPremiseId(assigned[0]);
-      localStorage.setItem('titan_premise_id', assigned[0]);
+    const resolved = resolveGuardPremiseId({
+      guard,
+      premises: state?.premises?.[tenantId] || [],
+      premiseId,
+      guardProfile: state ? buildGuardProfileContext(state, tenantId, guard.id) : null,
+      attendance: state?.attendance?.[tenantId] || [],
+      guardId: guard.id,
+    });
+    if (resolved) {
+      setPremiseId(resolved);
+      localStorage.setItem('titan_premise_id', resolved);
+    } else {
+      setPremiseId('');
+      localStorage.removeItem('titan_premise_id');
     }
     if (options.mustChangePin) {
       setPendingGuard(guard);
@@ -1196,9 +1224,29 @@ export default function App() {
       <div className="mob-content">
 
         <div className="mob-greeting-row">
-          <div className="mob-greeting" style={{ marginBottom: 0 }}>
-            <h2>{getGreeting()}, {guardName.split(' ')[0] || 'Guard'} 👋</h2>
-            <p>{activePremise ? `${activePremise.name}${activePremise.suburb ? ` · ${activePremise.suburb}` : ''}` : 'Select your premises to begin'}</p>
+          <div className="mob-greeting-col">
+            <div className="mob-greeting" style={{ marginBottom: 0 }}>
+              <h2>{getGreeting()}, {guardName.split(' ')[0] || 'Guard'} 👋</h2>
+              <p>
+                {activePremise
+                  ? `${activePremise.name}${activePremise.suburb ? ` · ${activePremise.suburb}` : ''}`
+                  : myPremises.length === 0
+                    ? 'No site assigned — contact your supervisor'
+                    : 'Select your site to begin'}
+              </p>
+            </div>
+            {myPremises.length > 1 && (
+              <select
+                className="mob-select mob-site-select"
+                value={premiseId || ''}
+                onChange={(e) => selectPremise(e.target.value)}
+                aria-label="Active site"
+              >
+                {myPremises.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <button
             className={`mob-refresh-btn ${refreshing ? 'spinning' : ''}`}
@@ -1271,9 +1319,11 @@ export default function App() {
             {checkpoints.length === 0 ? (
               <div className="mob-empty">
                 <div className="mob-empty-icon">📍</div>
-                {premises.length === 0
-                  ? 'No premises registered yet. Ask your supervisor to register sites on the web dashboard.'
-                  : 'No patrol points for this site. Ask your supervisor to add patrol points on the dashboard.'}
+                {myPremises.length === 0
+                  ? 'No premises assigned to you. Ask your supervisor to assign you to a site on the dashboard.'
+                  : !premiseId
+                    ? 'Select your assigned site above to view patrol points.'
+                    : 'No patrol points for this site. Ask your supervisor to add patrol points on the dashboard.'}
               </div>
             ) : (
               checkpoints.map(cp => (
@@ -1685,10 +1735,18 @@ export default function App() {
                 <p style={{ fontSize: '0.82rem', color: 'var(--mob-text-muted)', margin: 0 }}>No premises assigned — ask your supervisor.</p>
               ) : (
                 guardProfile.assignedPremises.map((p) => (
-                  <div key={p.id} className="mob-list-item">
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`mob-list-item mob-site-pick ${premiseId === p.id ? 'active' : ''}`}
+                    onClick={() => selectPremise(p.id)}
+                  >
                     <strong>{p.name}</strong>
                     <div style={{ fontSize: '0.72rem', color: 'var(--mob-text-muted)' }}>{[p.suburb, p.city].filter(Boolean).join(', ')}</div>
-                  </div>
+                    {premiseId === p.id && (
+                      <span style={{ fontSize: '0.65rem', color: 'var(--mob-accent)', fontWeight: 700 }}>Active site</span>
+                    )}
+                  </button>
                 ))
               )}
             </div>

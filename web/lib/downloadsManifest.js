@@ -26,10 +26,10 @@ export const FALLBACK_MANIFEST = {
     appId: 'monitor',
     name: 'Titan Monitor',
     description: 'Guard field app - patrol, clock-in, SOS, and NFC checkpoints.',
-    version: '1.0.21',
-    versionCode: 21,
+    version: '1.0.22',
+    versionCode: 22,
     apkFile: 'titan-monitor-latest.apk',
-    notes: 'GPS cluster averaging for tighter ±5m fixes on clock-in and patrol.',
+    notes: 'Patrol and clock-in now use your assigned site only — no more wrong premise from the list.',
   },
   supervisor: {
     appId: 'supervisor',

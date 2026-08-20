@@ -4,7 +4,8 @@
 
 | File | Description |
 |------|-------------|
-| **Titan-Protection-User-Manual.docx** | Full user manual (Word) — open in Microsoft Word |
+| **Titan-Protection-System-Manual.docx** | Full user manual (Word) — open in Microsoft Word |
+| **Titan-Protection-Phase-2-Implementation-Plan.docx** | Phase 2 guard monitoring enhancement plan (Word, with diagrams) |
 | **Titan-Protection-User-Manual.pdf** | PDF export of the user manual |
 | **Titan-Protection-System-Walkthrough.html** | Auto-playing presentation for screen recording |
 | **generate_user_manual.py** | Script to regenerate the Word manual |
@@ -62,6 +63,18 @@ python docs/export_manual_pdf.py
 ```
 
 Output: `docs/Titan-Protection-User-Manual.pdf`
+
+---
+
+## Regenerating the Phase 2 Implementation Plan
+
+```powershell
+python scripts/generate-phase2-plan.py
+```
+
+Output: `docs/Titan-Protection-Phase-2-Implementation-Plan.docx`
+
+Includes 10 architecture/process diagrams (roadmap, NFC flow, push notifications, geofence, welfare checks, status board, timeline, and more).
 
 ---
 

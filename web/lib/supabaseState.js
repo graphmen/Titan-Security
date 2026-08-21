@@ -255,8 +255,11 @@ export async function runSupabaseAction(payload, adminSessionKey = null) {
   globalThis.__titanState = state;
   globalThis.__titanFreshLoadAt = Date.now();
 
-  if (result?.guard) return { ...result, whatsapp, email, state };
-  if (result?.supervisor && !result?.generatedPin) return { ...result, whatsapp, email, state };
+  const loginOnly = action === 'GUARD_LOGIN' || action === 'SUPERVISOR_LOGIN';
+  const withState = (payload) => (loginOnly ? payload : { ...payload, state });
+
+  if (result?.guard) return withState({ ...result, whatsapp, email });
+  if (result?.supervisor && !result?.generatedPin) return withState({ ...result, whatsapp, email });
   if (result?.generatedPin) return { ...result, whatsapp, email, state };
   if (result?.waLink) return { ...result, whatsapp, email, state };
   return { success: true, whatsapp, email, state };

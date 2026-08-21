@@ -44,7 +44,7 @@ export default function PinLogin({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'GUARD_LOGIN', tenantId, pin: code }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000),
       });
       const json = await res.json().catch(() => ({}));
 

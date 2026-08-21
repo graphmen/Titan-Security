@@ -529,7 +529,7 @@ export async function POST(req) {
       return jsonResponse({ error: result.error }, result.status || 400, origin);
     }
     const { whatsapp, email } = await deliverPinNotifications(result, effectivePayload.action, tenantId);
-    if (result.guard || result.generatedPin) {
+    if (result.guard || result.supervisor || result.generatedPin) {
       return jsonResponse({ ...result, whatsapp, email }, 200, origin, req);
     }
     return jsonResponse({ ...result, whatsapp, email, state: getLocalState() }, 200, origin, req);

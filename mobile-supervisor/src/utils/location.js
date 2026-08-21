@@ -103,14 +103,19 @@ function webWatchBestPosition(maxAccuracyMeters, timeoutMs = 45000, options = {}
         finish(() => resolve(pick));
         return;
       }
+      const fallbackMax = options.fallbackMaxMeters ?? PREMISE_FALLBACK_ACCURACY_METERS;
+      if (best?.accuracy != null && best.accuracy <= fallbackMax) {
+        finish(() => resolve(best));
+        return;
+      }
       if (qualifiedSamples.length > 0) {
         finish(() => reject(new Error(
-          'GPS still settling — readings not tight enough. Hold still in open sky 10–15s and retry.'
+          'GPS still settling — hold still in open sky 5–10s and retry.'
         )));
         return;
       }
       if (best?.accuracy != null) {
-        finish(() => reject(new Error(`GPS accuracy ±${Math.round(best.accuracy)}m — need ±${maxAccuracyMeters}m or better. Move to open sky, hold still 10–15s, and retry.`)));
+        finish(() => reject(new Error(`GPS accuracy ±${Math.round(best.accuracy)}m — need ±${maxAccuracyMeters}m or better. Move to open sky and retry.`)));
         return;
       }
       finish(() => reject(new Error('Could not get a GPS fix — enable location and try outdoors')));
@@ -403,13 +408,14 @@ export async function getLocation() {
   return webGetPositionWithRetries();
 }
 
-export const PREMISE_MAX_ACCURACY_METERS = 5;
+export const PREMISE_MAX_ACCURACY_METERS = 15;
+export const PREMISE_FALLBACK_ACCURACY_METERS = 25;
 export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 5;
 export const PREMISE_CAPTURE_TIMEOUT_MS = 45000;
-export const PREMISE_GPS_WARMUP_MS = 6000;
-export const PREMISE_GPS_STABILIZE_MS = 5000;
-export const PREMISE_GPS_MIN_SAMPLES = 4;
-export const PREMISE_GPS_MAX_SPREAD_METERS = 3;
+export const PREMISE_GPS_WARMUP_MS = 3000;
+export const PREMISE_GPS_STABILIZE_MS = 2500;
+export const PREMISE_GPS_MIN_SAMPLES = 2;
+export const PREMISE_GPS_MAX_SPREAD_METERS = 8;
 
 const premiseCaptureOptions = {
   warmupMs: PREMISE_GPS_WARMUP_MS,

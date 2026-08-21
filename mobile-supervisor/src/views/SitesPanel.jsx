@@ -17,10 +17,10 @@ function SiteLoadingBanner({ title, subtitle }) {
 
 function getLoadingState(gpsCapturing) {
   if (gpsCapturing === 'premise') {
-    return { title: 'Acquiring GPS…', subtitle: 'Hold still — averaging multiple readings for ±5m (about 10–15s)' };
+    return { title: 'Acquiring GPS…', subtitle: `Hold still outdoors — target ±${PREMISE_MAX_ACCURACY_METERS}m (about 5–10s)` };
   }
   if (gpsCapturing === 'place') {
-    return { title: 'Acquiring GPS…', subtitle: 'Stand at the patrol point and hold still (about 10–15s)' };
+    return { title: 'Acquiring GPS…', subtitle: 'Stand at the patrol point and hold still (about 5–10s)' };
   }
   if (typeof gpsCapturing === 'string' && gpsCapturing.startsWith('update-')) {
     return { title: 'Updating site GPS…', subtitle: 'Hold still — locking a precise averaged fix' };
@@ -52,7 +52,7 @@ export default function SitesPanel({
 
   const captureGps = async (target, premiseId = null) => {
     setGpsCapturing(target === 'update' && premiseId ? `update-${premiseId}` : target);
-    showToast('Hold still outdoors — GPS warming up (±5m target)…', 'info');
+    showToast(`Hold still outdoors — GPS warming up (±${PREMISE_MAX_ACCURACY_METERS}m target)…`, 'info');
     try {
       const { lat, lng, accuracy } = await getLocationForPremiseCapture();
       const coords = {
@@ -90,10 +90,11 @@ export default function SitesPanel({
       showToast('Name, address and territory required', 'error');
       return;
     }
-    if (!premiseForm.lat || !premiseForm.lng || !premiseForm.accuracyMeters) {
-      showToast(`Capture GPS on site first (±${PREMISE_MAX_ACCURACY_METERS}m required)`, 'error');
+    if (!premiseForm.lat || !premiseForm.lng) {
+      showToast(`Capture GPS on site first (±${PREMISE_MAX_ACCURACY_METERS}m target)`, 'error');
       return;
     }
+    const accuracyMeters = parseFloat(premiseForm.accuracyMeters) || PREMISE_MAX_ACCURACY_METERS;
     setSaving('premise');
     const savedTerritory = premiseForm.territoryId;
     try {
@@ -109,7 +110,7 @@ export default function SitesPanel({
             ownerContact: premiseForm.ownerContact,
             lat: parseFloat(premiseForm.lat),
             lng: parseFloat(premiseForm.lng),
-            accuracyMeters: parseFloat(premiseForm.accuracyMeters),
+            accuracyMeters: parseFloat(premiseForm.accuracyMeters) || accuracyMeters,
           },
         }, { backgroundRefresh: true });
         showToast('Site updated');
@@ -124,7 +125,7 @@ export default function SitesPanel({
           ownerContact: premiseForm.ownerContact,
           lat: parseFloat(premiseForm.lat),
           lng: parseFloat(premiseForm.lng),
-          accuracyMeters: parseFloat(premiseForm.accuracyMeters),
+          accuracyMeters: parseFloat(premiseForm.accuracyMeters) || accuracyMeters,
         }, { backgroundRefresh: true });
         showToast(`Site registered: ${premiseForm.name}`);
       }
@@ -159,10 +160,11 @@ export default function SitesPanel({
       showToast('Select a site and enter place name', 'error');
       return;
     }
-    if (!placeForm.lat || !placeForm.lng || !placeForm.accuracyMeters) {
-      showToast(`Capture GPS at the patrol point (±${PREMISE_MAX_ACCURACY_METERS}m required)`, 'error');
+    if (!placeForm.lat || !placeForm.lng) {
+      showToast(`Capture GPS at the patrol point (±${PREMISE_MAX_ACCURACY_METERS}m target)`, 'error');
       return;
     }
+    const placeAccuracy = parseFloat(placeForm.accuracyMeters) || PREMISE_MAX_ACCURACY_METERS;
     setSaving('place');
     try {
       await onAction('CREATE_PLACE', {
@@ -172,7 +174,7 @@ export default function SitesPanel({
         description: placeForm.description,
         lat: parseFloat(placeForm.lat),
         lng: parseFloat(placeForm.lng),
-        accuracyMeters: parseFloat(placeForm.accuracyMeters),
+        accuracyMeters: placeAccuracy,
         hasNfc: placeForm.hasNfc,
         schedule: placeForm.schedule,
       }, { backgroundRefresh: true });

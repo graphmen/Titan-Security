@@ -266,16 +266,17 @@ export default function PremisesRegistration({
     const isNew = !editingPremiseId;
 
     if (isNew || coordsChanged) {
-      if (!premiseForm.lat || !premiseForm.lng || !premiseForm.accuracyMeters) {
-        alert(`Capture GPS on site first (±${PREMISE_MAX_ACCURACY_METERS}m accuracy required).`);
+      if (!premiseForm.lat || !premiseForm.lng) {
+        alert(`Capture GPS on site first (±${PREMISE_MAX_ACCURACY_METERS}m accuracy target).`);
         return;
       }
     }
 
+    const resolvedAccuracy = parseFloat(premiseForm.accuracyMeters) || (coordsChanged || isNew ? null : existing?.coordinates?.accuracyMeters);
     const payload = isNew || coordsChanged
       ? {
           ...premiseForm,
-          accuracyMeters: parseFloat(premiseForm.accuracyMeters),
+          accuracyMeters: resolvedAccuracy || PREMISE_MAX_ACCURACY_METERS,
         }
       : {
           name: premiseForm.name,
@@ -296,13 +297,15 @@ export default function PremisesRegistration({
   const handleSavePlace = async (e) => {
     e.preventDefault();
     if (!selectedPremiseId || !placeForm.name) return;
-    if (!placeForm.lat || !placeForm.lng || !placeForm.accuracyMeters) {
-      alert(`Capture GPS at the patrol point (±${PREMISE_MAX_ACCURACY_METERS}m accuracy required).`);
+    if (!placeForm.lat || !placeForm.lng) {
+      alert(`Capture GPS at the patrol point (±${PREMISE_MAX_ACCURACY_METERS}m accuracy target).`);
       return;
     }
     const payload = {
       ...placeForm,
-      accuracyMeters: parseFloat(placeForm.accuracyMeters),
+      accuracyMeters: parseFloat(placeForm.accuracyMeters)
+        || selectedPremise?.coordinates?.accuracyMeters
+        || PREMISE_MAX_ACCURACY_METERS,
     };
     const ok = editingPlaceId
       ? await postAction('UPDATE_PLACE', { premiseId: selectedPremiseId, placeId: editingPlaceId, ...payload })

@@ -13,3 +13,14 @@ CREATE INDEX IF NOT EXISTS idx_guard_alerts_dedupe
   ON public.guard_alerts(tenant_id, guard_id, type, premise_id, shift_id, status);
 
 -- After running: reload Master Admin → Master Admin tab → Reload from database
+
+-- 010: subscription tier for Premium / Phase 2 gating
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS subscription_tier text DEFAULT 'standard';
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS premium_activated_at timestamptz;
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS subscription_source text DEFAULT 'default';
+
+-- 011: persist GPS accuracy on premises and patrol places
+ALTER TABLE public.premises ADD COLUMN IF NOT EXISTS accuracy_meters integer;
+ALTER TABLE public.premises ADD COLUMN IF NOT EXISTS gps_captured_at timestamptz;
+ALTER TABLE public.places ADD COLUMN IF NOT EXISTS accuracy_meters integer;
+ALTER TABLE public.places ADD COLUMN IF NOT EXISTS gps_captured_at timestamptz;

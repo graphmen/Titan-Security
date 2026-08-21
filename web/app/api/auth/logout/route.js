@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ADMIN_COOKIE, SUPERVISOR_COOKIE, getSessionFromRequest } from '../../../../lib/webAuth';
+import { clearEvalPremiumSession, getAdminSessionKey } from '../../../../lib/subscription';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,10 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
+  const session = await getSessionFromRequest(req);
+  const adminKey = getAdminSessionKey(session);
+  if (adminKey) clearEvalPremiumSession(adminKey);
+
   const res = NextResponse.json({ success: true });
   res.cookies.set(ADMIN_COOKIE, '', { httpOnly: true, path: '/', maxAge: 0 });
   res.cookies.set(SUPERVISOR_COOKIE, '', { httpOnly: true, path: '/', maxAge: 0 });

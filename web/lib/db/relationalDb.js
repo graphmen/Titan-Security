@@ -938,6 +938,13 @@ export async function purgeLegacyDemoRowsFromDb() {
   await db.from('titan_state').delete().neq('id', '');
 }
 
+/** Persist a single tenant row (subscription activation, etc.). */
+export async function persistTenantToDb(tenant) {
+  if (!tenant?.id) throw new Error('Tenant id required');
+  const { error } = await db.from('tenants').upsert(tenantToRow(tenant));
+  if (error) throw error;
+}
+
 /** Ensure the Titan tenant exists — never inject demo/sample records. */
 export async function ensureMinimalTenantInDb() {
   const { data: tenant } = await db.from('tenants').select('id').eq('id', TITAN_TENANT_ID).maybeSingle();
@@ -949,6 +956,8 @@ export async function ensureMinimalTenantInDb() {
       logo_text: 'TP',
       plan: 'Growth Trial',
       status: 'Active',
+      subscription_tier: 'standard',
+      subscription_source: 'default',
     });
     if (error) throw error;
   }

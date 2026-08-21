@@ -42,6 +42,7 @@ export const ADMIN_ONLY_ACTIONS = new Set([
   'SWITCH_TENANT',
   'RESEND_WHATSAPP',
   'DISMISS_ALERTS_BY_TYPE',
+  'ACTIVATE_PREMIUM_TOKEN',
 ]);
 
 export const GUARD_MOBILE_ACTIONS = new Set([
@@ -59,6 +60,8 @@ export const GUARD_MOBILE_ACTIONS = new Set([
   'ADD_GUARD_DOCUMENT',
   'ADD_GUARD_TRAINING',
   'UPDATE_GUARD_PHOTO',
+  'WELFARE_ACK',
+  'ACK_SHIFT_HANDOVER',
 ]);
 
 function getSecret() {

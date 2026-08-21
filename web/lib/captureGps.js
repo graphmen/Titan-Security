@@ -1,10 +1,10 @@
-import { PREMISE_MAX_ACCURACY_METERS, premiseAccuracyError } from './gpsAccuracy.js';
+import { PREMISE_MAX_ACCURACY_METERS, PREMISE_FALLBACK_ACCURACY_METERS, premiseAccuracyError } from './gpsAccuracy.js';
 
-const DEFAULT_TIMEOUT_MS = 60000;
-const WARMUP_MS = 10000;
-const STABILIZE_MS = 6000;
-const MIN_SAMPLES = 3;
-const EXCEPTIONAL_ACCURACY = 3;
+const DEFAULT_TIMEOUT_MS = 45000;
+const WARMUP_MS = 2000;
+const STABILIZE_MS = 2000;
+const MIN_SAMPLES = 1;
+const EXCEPTIONAL_ACCURACY = 5;
 
 function mapWebGeoError(err) {
   const code = err?.code;
@@ -15,7 +15,7 @@ function mapWebGeoError(err) {
 }
 
 /**
- * Watch GPS with warmup + stabilization until accuracy meets maxAccuracyMeters or timeout.
+ * Watch GPS with short warmup + stabilization until accuracy meets target or timeout.
  * Returns { lat, lng, accuracy }.
  */
 export function captureHighAccuracyPosition(maxAccuracyMeters = PREMISE_MAX_ACCURACY_METERS, timeoutMs = DEFAULT_TIMEOUT_MS) {
@@ -46,10 +46,8 @@ export function captureHighAccuracyPosition(maxAccuracyMeters = PREMISE_MAX_ACCU
         finish(() => resolve(bestQualified));
         return;
       }
-      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters) {
-        finish(() => reject(new Error(
-          `GPS still settling — got ±${Math.round(bestQualified.accuracy)}m but need ${MIN_SAMPLES} stable readings. Hold still in open sky 15–20s and retry.`
-        )));
+      if (best && best.accuracy <= PREMISE_FALLBACK_ACCURACY_METERS) {
+        finish(() => resolve(best));
         return;
       }
       if (best) {
@@ -87,7 +85,7 @@ export function captureHighAccuracyPosition(maxAccuracyMeters = PREMISE_MAX_ACCU
     );
 
     const timerId = setTimeout(() => {
-      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters && qualifiedCount >= MIN_SAMPLES) {
+      if (bestQualified && bestQualified.accuracy <= maxAccuracyMeters) {
         finish(() => resolve(bestQualified));
         return;
       }

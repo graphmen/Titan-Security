@@ -1,4 +1,6 @@
 import { normalizeGeofenceRadius, GEOFENCE_DEFAULT_METERS, isGeofenceExitAlertsEnabled, getShiftTimingSettings } from './systemSettings.js';
+import { getPremiseMonitoringRules } from './premiseRules.js';
+import { hasPremiumFeature } from './subscription.js';
 
 export function generateGuardId() {
   return `GRD-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
@@ -172,24 +174,35 @@ export function evaluateGuardMonitoring(state, tenantId, guardId, coords) {
 
   const premise = (state.premises?.[tenantId] || []).find((p) => p.id === record.premiseId);
   const guardName = getGuardName(state, tenantId, guardId);
-  const geofenceRadius = geofenceRadiusFromState(state);
-  const geofenceExitEnabled = isGeofenceExitAlertsEnabled(state);
+  const rules = getPremiseMonitoringRules(state, tenantId, record.premiseId);
+  const geofenceRadius = rules.geofenceRadiusMeters;
+  const geofenceExitEnabled =
+    isGeofenceExitAlertsEnabled(state) && hasPremiumFeature(state, tenantId, 'geofenceExit');
+  const exitGraceMs = rules.geofenceExitGraceMinutes * 60 * 1000;
+  const repeatMinutes = Number(state?.systemSettings?.geofenceAlertRepeatMinutes) || 30;
 
   if (!geofenceExitEnabled) {
     record.geofenceViolation = false;
+    record.geofenceExitSince = null;
   } else if (coords?.lat != null && coords?.lng != null && premise) {
-    if (!isWithinPremiseGeofence(coords, premise.coordinates, geofenceRadius)) {
-      pushGuardAlert(state, tenantId, {
-        type: 'geofence_exit',
-        severity: 'critical',
-        guardId,
-        guardName,
-        premiseId: record.premiseId,
-        message: `${guardName} left the premises boundary during an active shift.`,
-      });
-      record.geofenceViolation = true;
+    const inside = isWithinPremiseGeofence(coords, premise.coordinates, geofenceRadius);
+    if (!inside) {
+      if (!record.geofenceExitSince) record.geofenceExitSince = new Date().toISOString();
+      const outsideMs = Date.now() - new Date(record.geofenceExitSince).getTime();
+      if (outsideMs >= exitGraceMs) {
+        pushRecurringComplianceAlert(state, tenantId, {
+          type: 'geofence_exit',
+          severity: 'critical',
+          guardId,
+          guardName,
+          premiseId: record.premiseId,
+          message: `${guardName} left the premises boundary (${Math.round(outsideMs / 60000)} min outside geofence).`,
+        }, repeatMinutes);
+        record.geofenceViolation = true;
+      }
     } else {
       record.geofenceViolation = false;
+      record.geofenceExitSince = null;
       dismissGuardAlerts(state, tenantId, guardId, 'geofence_exit');
     }
   }

@@ -8,19 +8,19 @@ import {
   BookOpen, 
   Users, 
   AlertTriangle, 
-  Activity, 
-  Sliders, 
-  FileText, 
-  Plus, 
-  CheckCircle, 
-  XCircle, 
-  RefreshCw, 
-  CheckSquare, 
-  DollarSign, 
-  Download, 
-  Layers, 
-  UserPlus, 
-  Clock, 
+  Activity,
+  Sliders,
+  FileText,
+  Plus,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  CheckSquare,
+  DollarSign,
+  Download,
+  Layers,
+  UserPlus,
+  Clock,
   Settings,
   Trash2,
   Video,
@@ -36,6 +36,8 @@ import {
   Menu,
   X,
   LogOut,
+  Crown,
+  Lock,
 } from 'lucide-react';
 import PremisesRegistration from './components/PremisesRegistration';
 import GuardManagement from './components/GuardManagement';
@@ -48,6 +50,8 @@ import { tenantRows } from '../lib/safeData';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import MapErrorBoundary from './components/MapErrorBoundary';
+import GuardStatusBoard from './components/GuardStatusBoard';
+import SubscriptionPanel from './components/SubscriptionPanel';
 
 const PremisesMapPanel = dynamic(() => import('./components/PremisesMapPanel'), {
   ssr: false,
@@ -455,6 +459,8 @@ export default function DashboardPage() {
   const curTerritories = tenantRows(state.territories, tenantKey);
   const curSupervisors = tenantRows(state.supervisors, tenantKey);
   const systemSettings = mergeSystemSettings(state.systemSettings);
+  const subscription = state?.subscription;
+  const isPremium = subscription?.isPremium === true;
   const onDutyCount = curAttendance.filter((a) => a.status === 'On Duty' || a.status === 'Late').length;
   const activeAlertCount = curGuardAlerts.filter((a) => a.status === 'Active').length;
   const guardsOnDuty = curAttendance.filter((a) => a.status === 'On Duty' || a.status === 'Late');
@@ -545,10 +551,28 @@ export default function DashboardPage() {
               <Download size={18} /> Mobile App Downloads
             </Link>
           </li>
+          <li>
+            {isPremium ? (
+              <Link href="/client" className="sidebar-nav-item sidebar-nav-link">
+                <Users size={18} /> Client Portal
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="sidebar-nav-item"
+                style={{ opacity: 0.65, cursor: 'not-allowed' }}
+                title="Premium subscription required"
+                onClick={() => selectTab('master')}
+              >
+                <Lock size={18} /> Client Portal (Premium)
+              </button>
+            )}
+          </li>
         </ul>
 
         <SystemSettings
           systemSettings={systemSettings}
+          subscription={subscription}
           dataSource={state.dataSource}
           stats={{
             guards: curGuards.length,
@@ -607,8 +631,8 @@ export default function DashboardPage() {
           </div>
 
           <div className="page-header-actions">
-            <span className={`connection-badge ${state?.dataSource === 'supabase' ? 'live' : ''}`}>
-              <Radio size={12} style={{ animation: 'pulse 1.5s infinite' }} /> {state?.dataSource === 'supabase' ? 'Server Connected' : 'Demo Mode Active'}
+            <span className={`connection-badge ${state?.dataSource === 'supabase' ? 'live' : state?.dataSource === 'supabase-eval' ? 'live' : ''}`}>
+              <Radio size={12} style={{ animation: 'pulse 1.5s infinite' }} /> {state?.localEvalMode ? 'Local preview (read-only prod)' : state?.dataSource === 'supabase' ? 'Server Connected' : 'Demo Mode Active'}
             </span>
             <button type="button" className="btn-secondary" onClick={handleLogout} style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem' }}>
               <LogOut size={14} /> Sign Out
@@ -621,6 +645,16 @@ export default function DashboardPage() {
             `}</style>
           </div>
         </header>
+
+        {/* Local evaluation — read production, writes stay in memory only */}
+        {state?.localEvalMode && (
+          <div className="glass-panel" style={{ background: '#eff6ff', border: '1px solid #93c5fd', padding: '0.85rem 1.25rem', marginBottom: '1rem', borderRadius: '12px' }}>
+            <strong style={{ color: '#1e40af', fontSize: '0.9rem' }}>Local evaluation mode</strong>
+            <p style={{ fontSize: '0.8rem', color: '#1d4ed8', margin: '0.35rem 0 0' }}>
+              You are viewing live production data. Changes you make here are <strong>not saved</strong> to titanprotection.org — safe to test before deploy.
+            </p>
+          </div>
+        )}
 
         {/* SOS Panic Alert Banner (Employra Warning Style) */}
         {activeSos && (
@@ -760,6 +794,39 @@ export default function DashboardPage() {
                     <div key={a.id} style={{ fontSize: '0.75rem', color: '#7f1d1d', marginBottom: '0.25rem' }}>{a.message}</div>
                   ))}
                 </div>
+              </div>
+            )}
+            {guardsOnDuty.length > 0 && isPremium && (
+              <div className="col-12" style={{ marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h3 style={{ fontSize: '0.95rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Activity size={16} /> Live Guard Status Board
+                    <span className="badge badge-green" style={{ fontSize: '0.65rem' }}>Premium</span>
+                  </h3>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <a href={`/api/reports?type=summary&tenantId=${state.activeTenantId}`} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', textDecoration: 'none' }}>
+                      Export summary CSV
+                    </a>
+                    <a href={`/api/reports?type=incidents&tenantId=${state.activeTenantId}`} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', textDecoration: 'none' }}>
+                      Export incidents CSV
+                    </a>
+                  </div>
+                </div>
+                <GuardStatusBoard state={state} tenantId={state.activeTenantId} />
+              </div>
+            )}
+            {guardsOnDuty.length > 0 && !isPremium && (
+              <div className="col-12 glass-panel" style={{ marginBottom: '0.75rem', padding: '1rem 1.25rem', background: '#fffbeb', border: '1px solid #fde68a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, fontSize: '0.9rem', color: '#92400e' }}>
+                  <Crown size={16} /> Live Guard Status Board — Premium feature
+                </div>
+                <p style={{ fontSize: '0.8rem', color: '#78350f', margin: '0.35rem 0 0.65rem' }}>
+                  Phase 2 monitoring includes the live status board, CSV exports, welfare checks, and client portal.
+                  Activate Premium in Master Admin with your access token.
+                </p>
+                <button type="button" className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={() => selectTab('master')}>
+                  Go to Subscription settings
+                </button>
               </div>
             )}
             {guardsOnDuty.length > 0 && (
@@ -980,6 +1047,17 @@ export default function DashboardPage() {
           />
         ) : (
           <div className="dashboard-grid animate-fade-in">
+            <div className="col-12">
+              <SubscriptionPanel
+                subscription={subscription}
+                tenantId={state.activeTenantId}
+                localEvalMode={state.localEvalMode}
+                onRefresh={(nextState) => {
+                  if (nextState) setState(nextState);
+                  else fetchState();
+                }}
+              />
+            </div>
             {/* Server database sync */}
             <div className="col-12">
               <div className="glass-panel" style={{ padding: '1.25rem', border: state?.dataSource === 'supabase' ? '1px solid #95d5b2' : '1px solid #fcd34d', background: state?.dataSource === 'supabase' ? '#f0fdf4' : '#fffbeb' }}>

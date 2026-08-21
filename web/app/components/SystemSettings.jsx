@@ -14,6 +14,8 @@ import {
   Bell,
   Activity,
   Check,
+  Crown,
+  Lock,
 } from 'lucide-react';
 
 const PANELS = {
@@ -21,6 +23,8 @@ const PANELS = {
   alerts: { title: 'Alerts & Sirens', subtitle: 'Command Centre audio and panic notifications' },
   gps: { title: 'GPS & Geofencing', subtitle: 'Clock-in radius and site boundary rules' },
   patrol: { title: 'Patrol Monitoring', subtitle: 'Movement checks for guards on active shifts' },
+  welfare: { title: 'Welfare Checks', subtitle: 'Dead man\'s switch for lone guards' },
+  shifts: { title: 'Shift Timing', subtitle: 'Missed clock-in/out and patrol alert intervals' },
   compliance: { title: 'License Compliance', subtitle: 'PSIRA expiry warnings for supervisors' },
 };
 
@@ -83,6 +87,7 @@ function SelectSetting({ label, hint, value, options, onChange, disabled, suffix
 
 export default function SystemSettings({
   systemSettings = {},
+  subscription = null,
   dataSource,
   stats = {},
   onUpdateSettings,
@@ -93,6 +98,15 @@ export default function SystemSettings({
   const rootRef = useRef(null);
 
   const connected = dataSource === 'supabase';
+  const isPremium = subscription?.isPremium === true;
+
+  const PremiumNotice = () =>
+    !isPremium ? (
+      <div className="sys-settings-info-card" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#92400e' }}>
+        <Crown size={14} />
+        <span>Premium subscription required. Activate in Master Admin → Subscription.</span>
+      </div>
+    ) : null;
 
   const save = async (key, value) => {
     setSavingKey(key);
@@ -160,8 +174,84 @@ export default function SystemSettings({
             />
             <div className="sys-settings-info-card">
               <MapPin size={14} />
-              <span>Used for GPS clock-in verification. Boundary-exit alerts while on duty are currently disabled.</span>
+              <span>Used for GPS clock-in verification.</span>
             </div>
+            <div className="sys-settings-toggle-row">
+              <div>
+                <div className="sys-settings-field-label">Geofence exit alerts {!isPremium && <Lock size={12} style={{ display: 'inline', marginLeft: 4 }} />}</div>
+                <div className="sys-settings-field-hint">Alert when a guard leaves the site boundary while on duty.</div>
+              </div>
+              <Toggle
+                on={!!systemSettings.geofenceExitAlertsEnabled}
+                disabled={!isPremium || savingKey === 'geofenceExitAlertsEnabled'}
+                onChange={(v) => save('geofenceExitAlertsEnabled', v)}
+              />
+            </div>
+            <SelectSetting
+              label="Exit alert grace period"
+              hint="Minutes outside geofence before alert fires (reduces GPS jitter false alarms)."
+              value={systemSettings.geofenceExitGraceMinutes ?? 3}
+              options={[1, 2, 3, 5, 10]}
+              suffix=" min"
+              disabled={!isPremium || savingKey === 'geofenceExitGraceMinutes'}
+              onChange={(v) => save('geofenceExitGraceMinutes', v)}
+            />
+            <PremiumNotice />
+          </div>
+        );
+      case 'welfare':
+        return (
+          <div className="sys-settings-panel-body">
+            <PremiumNotice />
+            <div className="sys-settings-toggle-row">
+              <div>
+                <div className="sys-settings-field-label">Welfare checks (dead man&apos;s switch) {!isPremium && <Lock size={12} style={{ display: 'inline', marginLeft: 4 }} />}</div>
+                <div className="sys-settings-field-hint">Periodic &quot;Confirm OK&quot; prompts for on-duty guards.</div>
+              </div>
+              <Toggle
+                on={!!systemSettings.welfareChecksEnabled}
+                disabled={!isPremium || savingKey === 'welfareChecksEnabled'}
+                onChange={(v) => save('welfareChecksEnabled', v)}
+              />
+            </div>
+            <SelectSetting
+              label="Welfare check interval"
+              value={systemSettings.welfareCheckIntervalMinutes ?? 60}
+              options={[30, 45, 60, 90, 120]}
+              suffix=" min"
+              disabled={!isPremium || savingKey === 'welfareCheckIntervalMinutes'}
+              onChange={(v) => save('welfareCheckIntervalMinutes', v)}
+            />
+          </div>
+        );
+      case 'shifts':
+        return (
+          <div className="sys-settings-panel-body">
+            <SelectSetting
+              label="Missed clock-in grace"
+              value={systemSettings.missedClockInGraceMinutes ?? 30}
+              options={[15, 30, 45, 60]}
+              suffix=" min"
+              disabled={savingKey === 'missedClockInGraceMinutes'}
+              onChange={(v) => save('missedClockInGraceMinutes', v)}
+            />
+            <SelectSetting
+              label="Missed clock-out grace"
+              value={systemSettings.missedClockOutGraceMinutes ?? 30}
+              options={[15, 30, 45, 60]}
+              suffix=" min"
+              disabled={savingKey === 'missedClockOutGraceMinutes'}
+              onChange={(v) => save('missedClockOutGraceMinutes', v)}
+            />
+            <SelectSetting
+              label="Overdue patrol repeat"
+              value={systemSettings.overduePatrolRepeatMinutes ?? 30}
+              options={[15, 30, 45, 60]}
+              suffix=" min"
+              disabled={!isPremium || savingKey === 'overduePatrolRepeatMinutes'}
+              onChange={(v) => save('overduePatrolRepeatMinutes', v)}
+            />
+            {!isPremium && <PremiumNotice />}
           </div>
         );
       case 'patrol':
@@ -227,6 +317,18 @@ export default function SystemSettings({
                 label="Patrol Monitoring"
                 hint={`${systemSettings.noMovementAlertMinutes ?? 45} min threshold`}
                 onClick={() => setPanel('patrol')}
+              />
+              <MenuRow
+                icon={Activity}
+                label="Welfare Checks"
+                hint={isPremium ? (systemSettings.welfareChecksEnabled ? 'Enabled' : 'Disabled') : 'Premium'}
+                onClick={() => setPanel('welfare')}
+              />
+              <MenuRow
+                icon={Clock}
+                label="Shift Timing"
+                hint={`${systemSettings.missedClockInGraceMinutes ?? 30} min grace`}
+                onClick={() => setPanel('shifts')}
               />
               <MenuRow
                 icon={FileWarning}

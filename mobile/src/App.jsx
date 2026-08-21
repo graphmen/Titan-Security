@@ -41,7 +41,7 @@ import ChangePin from './components/ChangePin';
 import ProfilePhoto from './components/ProfilePhoto';
 import { useTheme } from './hooks/useTheme';
 import { getAuthSession, setAuthSession, clearAuthSession, guardInitials } from './utils/auth';
-import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION_CODE } from './config';
+import SiteGuide from './components/SiteGuide';
 import AppUpdatePanel from './components/AppUpdatePanel';
 import AppUpdateScreen from './components/AppUpdateScreen';
 import LocationPermissionPrompt from './components/LocationPermissionPrompt';
@@ -120,7 +120,8 @@ export default function App() {
     patrols: [],
     incidents: [],
     visitors: [],
-    checklists: []
+    checklists: [],
+    sos: [],
   });
 
   const [swapForm, setSwapForm] = useState({ shiftId: '', targetGuardId: '', reason: '' });
@@ -308,6 +309,7 @@ export default function App() {
 
   const handleClockOut = async () => {
     if (!guardId) return;
+    const handoverNotes = window.prompt('Shift handover notes for relief guard (optional):') ?? '';
     try {
       const { lat, lng, accuracy } = await getLocationForClockIn();
       await postStateAction(apiBase, {
@@ -317,6 +319,7 @@ export default function App() {
         lat,
         lng,
         accuracyMeters: accuracy,
+        handoverNotes,
       });
       showToast('Shift ended — clocked out at premises');
       movementAlertPlayed.current = false;
@@ -324,6 +327,17 @@ export default function App() {
       fetchState();
     } catch (e) {
       showToast(e.message || 'Clock-out failed — you must be at the premises geofence', 'error');
+    }
+  };
+
+  const handleWelfareAck = async () => {
+    if (!guardId) return;
+    try {
+      await postStateAction(apiBase, { action: 'WELFARE_ACK', guardId, tenantId });
+      showToast('Welfare check confirmed — OK');
+      fetchState();
+    } catch (e) {
+      showToast(e.message || 'Could not confirm welfare check', 'error');
     }
   };
 
@@ -442,6 +456,17 @@ export default function App() {
       }
       queue.checklists = remainingChecklists;
 
+      const remainingSos = [];
+      for (const item of queue.sos || []) {
+        try {
+          await postQueueItem({ action: 'TRIGGER_SOS', ...item });
+          syncCount++;
+        } catch {
+          remainingSos.push(item);
+        }
+      }
+      queue.sos = remainingSos;
+
       saveQueueToStorage(queue);
       if (syncCount > 0) {
         showToast(`Synchronized ${syncCount} cached operations`);
@@ -474,8 +499,19 @@ export default function App() {
           fetchState();
           showToast('SOS sent to Command Centre', 'error');
         } else {
-          setSosActive(false);
-          showToast('SOS requires internet — move to an area with signal', 'error');
+          const queue = { ...offlineQueue };
+          if (!queue.sos) queue.sos = [];
+          queue.sos.push({
+            guardId,
+            guardName,
+            tenantId,
+            lat,
+            lng,
+            alertMessage: `Emergency panic by ${guardName} (queued offline)`,
+            queuedAt: new Date().toISOString(),
+          });
+          saveQueueToStorage(queue);
+          showToast('SOS queued — will send when back online', 'error');
         }
       } catch (e) {
         setSosActive(false);
@@ -517,10 +553,21 @@ export default function App() {
           lat = loc.lat;
           lng = loc.lng;
         } catch (_) { /* optional GPS */ }
+        const cp = checkpoints.find((c) => c.id === checkpointId);
         const res = await fetch(apiUrl('/api/state'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'TAP_NFC', checkpointId, guardId, guardName, tenantId, premiseId, lat, lng })
+          body: JSON.stringify({
+            action: 'TAP_NFC',
+            checkpointId,
+            guardId,
+            guardName,
+            tenantId,
+            premiseId,
+            lat,
+            lng,
+            nfcTagId: cp?.code || null,
+          }),
         });
         if (res.ok) {
           playNfcSuccess();
@@ -904,6 +951,7 @@ export default function App() {
     (s) => s.guardId === guardId && s.status !== 'Completed' && s.status !== 'Cancelled'
   );
   const activePremise = premises.find((p) => p.id === premiseId);
+  const geofenceRadius = Number(state?.systemSettings?.geofenceRadiusMeters) || 6;
   const allCheckpoints = state?.checkpoints[tenantId] || [];
   const checkpoints = useMemo(() => {
     const linked = premiseId
@@ -922,7 +970,7 @@ export default function App() {
     }));
   }, [allCheckpoints, premiseId, state?.places, tenantId]);
   const templates = state?.checklistTemplates[tenantId] || [];
-  const offlineCount = offlineQueue.patrols.length + offlineQueue.incidents.length + offlineQueue.visitors.length + offlineQueue.checklists.length;
+  const offlineCount = offlineQueue.patrols.length + offlineQueue.incidents.length + offlineQueue.visitors.length + offlineQueue.checklists.length + (offlineQueue.sos?.length || 0);
 
   // Calculate checklist completion percentage
   const template = templates.find(t => t.id === activeChecklistId);
@@ -1200,6 +1248,14 @@ export default function App() {
       )}
 
       {/* 45-minute no-movement check */}
+      {isOnDuty && myAttendance?.welfarePending && (
+        <div className="mob-alert-banner mob-alert-welfare">
+          <strong>Welfare check — confirm you are OK</strong>
+          <button type="button" className="mob-btn mob-btn-primary mob-btn-sm" onClick={handleWelfareAck}>
+            Confirm OK
+          </button>
+        </div>
+      )}
       {isOnDuty && myAttendance?.needsMovementAck && (
         <div className="sos-overlay" style={{ background: 'rgba(180, 83, 9, 0.95)' }}>
           <AlertTriangle size={56} style={{ color: '#ffffff' }} />
@@ -1347,6 +1403,10 @@ export default function App() {
           </button>
         </div>
 
+        {activePremise?.coordinates && !isOnDuty && (
+          <SiteGuide target={activePremise} radiusMeters={geofenceRadius} compact />
+        )}
+
         {!state && isOnline && (
           <div className="mob-skeleton-wrap" style={{ marginBottom: '1rem' }}>
             <div className="mob-skeleton hero" />
@@ -1405,6 +1465,13 @@ export default function App() {
               {activePremise ? `${activePremise.name} — Patrol points` : 'Patrol points'}
             </h3>
 
+            {activePremise?.coordinates && (
+              <SiteGuide
+                target={activePremise}
+                radiusMeters={geofenceRadius}
+              />
+            )}
+
             {checkpoints.length === 0 ? (
               <div className="mob-empty">
                 <div className="mob-empty-icon">📍</div>
@@ -1432,6 +1499,14 @@ export default function App() {
                     </div>
                   </div>
                   
+                  {cp.coordinates?.lat != null && (
+                    <SiteGuide
+                      target={{ name: cp.name, lat: cp.coordinates.lat, lng: cp.coordinates.lng }}
+                      radiusMeters={geofenceRadius}
+                      compact
+                    />
+                  )}
+
                   <button 
                     onClick={() => handleNfcTap(cp.id, cp.name)}
                     disabled={!isOnDuty}
@@ -1824,18 +1899,22 @@ export default function App() {
                 <p style={{ fontSize: '0.82rem', color: 'var(--mob-text-muted)', margin: 0 }}>No premises assigned — ask your supervisor.</p>
               ) : (
                 guardProfile.assignedPremises.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`mob-list-item mob-site-pick ${premiseId === p.id ? 'active' : ''}`}
-                    onClick={() => selectPremise(p.id)}
-                  >
-                    <strong>{p.name}</strong>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--mob-text-muted)' }}>{[p.suburb, p.city].filter(Boolean).join(', ')}</div>
-                    {premiseId === p.id && (
-                      <span style={{ fontSize: '0.65rem', color: 'var(--mob-accent)', fontWeight: 700 }}>Active site</span>
+                  <div key={p.id} className="mob-site-pick-wrap">
+                    <button
+                      type="button"
+                      className={`mob-list-item mob-site-pick ${premiseId === p.id ? 'active' : ''}`}
+                      onClick={() => selectPremise(p.id)}
+                    >
+                      <strong>{p.name}</strong>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--mob-text-muted)' }}>{[p.suburb, p.city].filter(Boolean).join(', ')}</div>
+                      {premiseId === p.id && (
+                        <span style={{ fontSize: '0.65rem', color: 'var(--mob-accent)', fontWeight: 700 }}>Active site</span>
+                      )}
+                    </button>
+                    {p.coordinates?.lat != null && (
+                      <SiteGuide target={p} radiusMeters={geofenceRadius} compact />
                     )}
-                  </button>
+                  </div>
                 ))
               )}
             </div>

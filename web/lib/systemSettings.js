@@ -21,6 +21,17 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   missedClockOutGraceMinutes: 30,
   /** How often to re-alert for missed clock-in/out after dismiss or prior alert (supervisor/guard). */
   missedShiftAlertRepeatMinutes: 30,
+  /** Minutes outside geofence before exit alert fires (avoids GPS jitter). */
+  geofenceExitGraceMinutes: 3,
+  geofenceAlertRepeatMinutes: 30,
+  overduePatrolRepeatMinutes: 30,
+  /** Welfare / dead-man's switch */
+  welfareChecksEnabled: false,
+  welfareCheckIntervalMinutes: 60,
+  welfareResponseGraceMinutes: 5,
+  welfareAlertRepeatMinutes: 30,
+  /** Per-premise overrides: { [premiseId]: { geofenceRadiusMeters, welfareCheckEnabled, ... } } */
+  premiseMonitoringRules: {},
 };
 
 export function mergeSystemSettings(raw) {

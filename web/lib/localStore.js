@@ -33,6 +33,7 @@ import {
   evaluateShiftCompliance,
   refreshGuardScores,
   pushGuardAlert,
+  pushRecurringComplianceAlert,
   dismissGuardAlerts,
   ensureAlertStore,
 } from './guards';
@@ -58,6 +59,20 @@ import {
   TITAN_TENANT_ID,
 } from './systemSettings';
 import { isValidEmailAddress } from './email';
+import { runMonitoringEvaluators } from './monitoringEngine.js';
+import { appendAuditLog } from './auditLog.js';
+import { validateGuardLocation } from './gpsValidation.js';
+import {
+  validatePremiumActivationToken,
+  assertPremiumSettingsAllowed,
+  assertPremiumActionAllowed,
+  hashTokenForAudit,
+  hasPremiumFeature,
+} from './subscription.js';
+import { processIncidentOnCreate } from './incidentEscalation.js';
+import { acknowledgeWelfareCheck } from './welfareChecks.js';
+import { queuePushNotification } from './pushNotifications.js';
+import { setPremiseMonitoringRules } from './premiseRules.js';
 
 function getPremiseName(state, tenantId, premiseId) {
   const p = (state.premises[tenantId] || []).find((x) => x.id === premiseId);
@@ -145,6 +160,8 @@ export function createEmptyAppState() {
         logoText: 'TP',
         plan: 'Growth Trial',
         status: 'Active',
+        subscriptionTier: 'standard',
+        subscriptionSource: 'default',
       },
     },
     territories: { titan: [], alpha: [], omega: [] },
@@ -163,6 +180,8 @@ export function createEmptyAppState() {
     checklistSubmissions: [],
     visitors: [],
     activeSosAlerts: {},
+    auditLog: [],
+    shiftHandovers: { titan: [], alpha: [], omega: [] },
   };
 }
 
@@ -173,7 +192,7 @@ function ensureStateShape(state) {
   const tenantIds = Object.keys(state.tenants);
   const listKeys = [
     'territories', 'supervisors', 'premises', 'guards', 'shifts', 'attendance',
-    'checkpoints', 'guardAlerts', 'shiftSwapRequests', 'whatsappOutbox', 'checklistTemplates',
+    'checkpoints', 'guardAlerts', 'shiftSwapRequests', 'whatsappOutbox', 'checklistTemplates', 'shiftHandovers',
   ];
   for (const key of listKeys) {
     if (!state[key]) state[key] = {};
@@ -186,6 +205,8 @@ function ensureStateShape(state) {
   if (!state.checklistSubmissions) state.checklistSubmissions = [];
   if (!state.visitors) state.visitors = [];
   if (!state.activeSosAlerts) state.activeSosAlerts = {};
+  if (!Array.isArray(state.auditLog)) state.auditLog = [];
+  if (!state.shiftHandovers) state.shiftHandovers = {};
 }
 
 /** Demo seed removed — production uses empty state only. */
@@ -225,8 +246,7 @@ export function getLocalState() {
 export function getLocalStateWithMonitoring() {
   const state = getLocalState();
   const tenantId = state.activeTenantId;
-  evaluateLicenseExpiryAlerts(state, tenantId);
-  evaluateShiftCompliance(state, tenantId);
+  runMonitoringEvaluators(state, tenantId);
   return state;
 }
 
@@ -236,6 +256,11 @@ export function processLocalAction(payload) {
   const { action } = payload;
   const tenantId = payload.tenantId || TITAN_TENANT_ID;
 
+  const premiumActionCheck = assertPremiumActionAllowed(state, tenantId, action);
+  if (!premiumActionCheck.ok) {
+    return { error: premiumActionCheck.error, status: premiumActionCheck.status };
+  }
+
   const resolveGuard = (guardId, guardName) => {
     if (guardId) return { guardId, guardName: getGuardName(state, tenantId, guardId, guardName) };
     return { guardId: null, guardName: guardName || 'Unknown Guard' };
@@ -243,31 +268,38 @@ export function processLocalAction(payload) {
 
   switch (action) {
     case 'TAP_NFC': {
-      const { checkpointId, guardName: rawName, guardId, lat, lng } = payload;
+      const { checkpointId, guardName: rawName, guardId, lat, lng, nfcTagId } = payload;
       const { guardName } = resolveGuard(guardId, rawName);
       const checkpointList = state.checkpoints[tenantId] || [];
       const checkpoint = checkpointList.find((cp) => cp.id === checkpointId);
-      if (checkpoint) {
-        checkpoint.status = 'Scanned';
-        checkpoint.lastScanned = new Date().toISOString();
-        if (guardId) {
-          const coords = lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : checkpoint.coordinates;
-          recordGuardMovement(state, tenantId, guardId, coords);
-        }
-        state.occurrenceBook.unshift({
-          id: `ob-nfc-${Date.now()}`,
-          tenantId,
-          timestamp: new Date().toISOString(),
-          guardName,
-          type: 'Patrol Tap',
-          description: `Check-in at ${checkpoint.premiseName ? checkpoint.premiseName + ' — ' : ''}${checkpoint.name} (${checkpoint.code}). GPS verified.`,
-          status: 'Resolved',
-          attachments: { photo: null, voice: null },
-          premiseId: checkpoint.premiseId || null,
-          placeId: checkpoint.placeId || null,
-          guardId: guardId || null,
-        });
+      if (!checkpoint) return { error: 'Checkpoint not found', status: 404 };
+
+      if (nfcTagId && checkpoint.code && nfcTagId !== checkpoint.code) {
+        appendAuditLog(state, { tenantId, action: 'NFC_MISMATCH', guardId, checkpointId, nfcTagId, expected: checkpoint.code });
+        return { error: 'NFC tag does not match this checkpoint', status: 403 };
       }
+
+      checkpoint.status = 'Scanned';
+      checkpoint.lastScanned = new Date().toISOString();
+      if (guardId) {
+        const coords = lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : checkpoint.coordinates;
+        recordGuardMovement(state, tenantId, guardId, coords);
+      }
+      dismissGuardAlerts(state, tenantId, guardId, 'overdue_patrol');
+      const scanMethod = nfcTagId ? 'NFC tag' : 'Manual tap';
+      state.occurrenceBook.unshift({
+        id: `ob-nfc-${Date.now()}`,
+        tenantId,
+        timestamp: new Date().toISOString(),
+        guardName,
+        type: 'Patrol Tap',
+        description: `${scanMethod} at ${checkpoint.premiseName ? checkpoint.premiseName + ' — ' : ''}${checkpoint.name} (${checkpoint.code}). GPS verified.`,
+        status: 'Resolved',
+        attachments: { photo: null, voice: null },
+        premiseId: checkpoint.premiseId || null,
+        placeId: checkpoint.placeId || null,
+        guardId: guardId || null,
+      });
       break;
     }
     case 'LOG_INCIDENT': {
@@ -277,7 +309,7 @@ export function processLocalAction(payload) {
         if (duplicate) break;
       }
       const { guardName } = resolveGuard(guardId, rawName);
-      state.occurrenceBook.unshift({
+      const incident = {
         id: `ob-inc-${Date.now()}`,
         tenantId,
         timestamp: new Date().toISOString(),
@@ -288,7 +320,9 @@ export function processLocalAction(payload) {
         attachments: { photo, voice },
         guardId: guardId || null,
         clientRequestId: clientRequestId || null,
-      });
+      };
+      processIncidentOnCreate(state, tenantId, incident);
+      state.occurrenceBook.unshift(incident);
       break;
     }
     case 'UPDATE_INCIDENT_STATUS': {
@@ -356,6 +390,7 @@ export function processLocalAction(payload) {
         timestamp: new Date().toISOString(),
         message: `${alertMessage}${gpsNote}`,
       };
+      queuePushNotification({ type: 'sos', tenantId, title: 'SOS DISTRESS', body: `${guardName}: ${alertMessage}` });
       state.occurrenceBook.unshift({
         id: `ob-sos-${Date.now()}`,
         tenantId,
@@ -382,6 +417,8 @@ export function processLocalAction(payload) {
           logoText: name.substring(0, 2).toUpperCase(),
           plan: 'Growth Trial',
           status: 'Active',
+          subscriptionTier: 'standard',
+          subscriptionSource: 'default',
         };
         state.checkpoints[id] = [{
           id: `${id}-cp1`,
@@ -778,6 +815,16 @@ export function processLocalAction(payload) {
       if (!isValidGpsCoord(coords.lat, coords.lng)) {
         return { error: 'Could not verify your GPS location — enable location and try again', status: 403 };
       }
+      const gpsCheck = hasPremiumFeature(state, tenantId, 'gpsAntiSpoof')
+        ? validateGuardLocation(
+            { lat, lng, accuracyMeters, mock: payload.mock, isMock: payload.isMock },
+            null
+          )
+        : { ok: true };
+      if (!gpsCheck.ok) {
+        appendAuditLog(state, { tenantId, action: 'GPS_REJECTED_CLOCK_IN', guardId, reason: gpsCheck.error, flags: gpsCheck.flags });
+        return { error: gpsCheck.error, status: 403 };
+      }
       if (!isClockInAccuracyAcceptable(accuracyMeters, geofenceRadius)) {
         return { error: clockInAccuracyError(accuracyMeters, geofenceRadius), status: 403 };
       }
@@ -836,7 +883,7 @@ export function processLocalAction(payload) {
       break;
     }
     case 'GUARD_CLOCK_OUT': {
-      const { guardId, lat, lng, accuracyMeters } = payload;
+      const { guardId, lat, lng, accuracyMeters, handoverNotes = '' } = payload;
       if (!guardId) return { error: 'Guard required', status: 400 };
 
       const record = getActiveAttendanceForGuard(state, tenantId, guardId);
@@ -875,6 +922,19 @@ export function processLocalAction(payload) {
       if (shift) shift.status = 'Completed';
 
       const guard = (state.guards[tenantId] || []).find((g) => g.id === guardId);
+
+      if (!state.shiftHandovers[tenantId]) state.shiftHandovers[tenantId] = [];
+      state.shiftHandovers[tenantId].unshift({
+        id: `ho-${Date.now()}`,
+        tenantId,
+        premiseId: record.premiseId,
+        outgoingGuardId: guardId,
+        outgoingGuardName: guard?.fullName || 'Guard',
+        handoverNotes: String(handoverNotes || '').trim(),
+        clockOutAt: record.clockOut,
+        status: handoverNotes?.trim() ? 'Pending Acknowledgment' : 'Completed',
+        createdAt: new Date().toISOString(),
+      });
 
       state.occurrenceBook.unshift({
         id: `ob-att-out-${Date.now()}`,
@@ -1010,12 +1070,13 @@ export function processLocalAction(payload) {
       break;
     }
     case 'DISMISS_GUARD_ALERT': {
-      const { alertId } = payload;
+      const { alertId, actorName = 'Admin' } = payload;
       ensureAlertStore(state, tenantId);
       const alert = state.guardAlerts[tenantId].find((a) => a.id === alertId);
       if (alert) {
         alert.status = 'Dismissed';
         alert.resolvedAt = new Date().toISOString();
+        appendAuditLog(state, { tenantId, action: 'DISMISS_ALERT', alertId, alertType: alert.type, guardId: alert.guardId, actorName });
       }
       break;
     }
@@ -1034,6 +1095,30 @@ export function processLocalAction(payload) {
         count += 1;
       });
       return { success: true, dismissedCount: count, dismissedIds };
+    }
+    case 'WELFARE_ACK': {
+      const { guardId } = payload;
+      if (!guardId) return { error: 'Guard required', status: 400 };
+      if (!acknowledgeWelfareCheck(state, tenantId, guardId)) {
+        return { error: 'Not on duty', status: 404 };
+      }
+      dismissGuardAlerts(state, tenantId, guardId, 'welfare_check');
+      break;
+    }
+    case 'ACK_SHIFT_HANDOVER': {
+      const { handoverId, guardId } = payload;
+      const handover = (state.shiftHandovers[tenantId] || []).find((h) => h.id === handoverId);
+      if (!handover) return { error: 'Handover not found', status: 404 };
+      handover.status = 'Acknowledged';
+      handover.acknowledgedByGuardId = guardId;
+      handover.acknowledgedAt = new Date().toISOString();
+      break;
+    }
+    case 'UPDATE_PREMISE_MONITORING': {
+      const { premiseId, rules } = payload;
+      if (!premiseId || !rules) return { error: 'Premise and rules required', status: 400 };
+      setPremiseMonitoringRules(state, premiseId, rules);
+      break;
     }
     case 'CREATE_PREMISE': {
       const {
@@ -1354,18 +1439,51 @@ export function processLocalAction(payload) {
       Object.assign(state, empty);
       break;
     }
+    case 'ACTIVATE_PREMIUM_TOKEN': {
+      const validation = validatePremiumActivationToken(payload.token);
+      if (!validation.ok) return { error: validation.error, status: 403 };
+      const tenant = state.tenants[tenantId];
+      if (!tenant) return { error: 'Tenant not found', status: 404 };
+      tenant.subscriptionTier = 'premium';
+      tenant.plan = 'Premium';
+      tenant.premiumActivatedAt = new Date().toISOString();
+      tenant.subscriptionSource = 'token';
+      appendAuditLog(state, {
+        tenantId,
+        action: 'PREMIUM_ACTIVATED',
+        source: 'token',
+        tokenHint: hashTokenForAudit(payload.token),
+      });
+      break;
+    }
     case 'UPDATE_SYSTEM_SETTINGS': {
       const { updates } = payload;
       if (!updates || typeof updates !== 'object') {
         return { error: 'Settings updates required', status: 400 };
+      }
+      const settingsCheck = assertPremiumSettingsAllowed(state, tenantId, updates);
+      if (!settingsCheck.ok) {
+        return { error: settingsCheck.error, status: settingsCheck.status };
       }
       ensureSystemSettings(state);
       const allowed = [
         'sirenAlertsEnabled',
         'geofenceRadiusMeters',
         'geofenceExitAlertsEnabled',
+        'geofenceExitGraceMinutes',
+        'geofenceAlertRepeatMinutes',
         'noMovementAlertMinutes',
         'licenseExpiryWarningDays',
+        'shiftClockInReminderMinutes',
+        'missedClockInGraceMinutes',
+        'missedClockOutGraceMinutes',
+        'missedShiftAlertRepeatMinutes',
+        'overduePatrolRepeatMinutes',
+        'welfareChecksEnabled',
+        'welfareCheckIntervalMinutes',
+        'welfareResponseGraceMinutes',
+        'welfareAlertRepeatMinutes',
+        'premiseMonitoringRules',
       ];
       allowed.forEach((key) => {
         if (updates[key] !== undefined) {

@@ -15,6 +15,7 @@ import {
   countGuardsInDb,
   getRelationalSummary,
   persistSystemSettingsToDb,
+  persistTenantToDb,
 } from './db/relationalDb';
 import { normalizeGuardSupervisorAssignments } from './guardProfile.js';
 import { syncAllPlaceCheckpoints } from './premises.js';
@@ -23,6 +24,8 @@ import {
   persistOperationalActionToDb,
 } from './db/operationalWrites.js';
 import { evaluateLicenseExpiryAlerts, evaluateShiftCompliance } from './guards';
+import { runMonitoringEvaluators } from './monitoringEngine.js';
+import { enrichStateWithSubscription, applyEvalSubscriptionOverrides, registerEvalPremiumSession, isLocalEvalSubscriptionMode } from './subscription.js';
 import { getWhatsAppStatus } from './whatsapp';
 import { getEmailStatus } from './email';
 import { deliverPinNotifications } from './pinDeliveryServer';
@@ -62,15 +65,14 @@ export async function loadFreshStateFromDatabase() {
 
 function buildAppStateResponse(state) {
   const tenantId = state.activeTenantId || 'titan';
-  evaluateLicenseExpiryAlerts(state, tenantId);
-  evaluateShiftCompliance(state, tenantId);
-  return {
+  runMonitoringEvaluators(state, tenantId);
+  return enrichStateWithSubscription({
     ...state,
     dataSource: 'supabase',
     storage: 'relational',
     whatsappStatus: getWhatsAppStatus(),
     emailStatus: getEmailStatus(),
-  };
+  });
 }
 
 export function getStateSummary(state = getLocalState()) {
@@ -110,6 +112,11 @@ export async function hydrateStateFromSupabase() {
   return true;
 }
 
+/** When true: read live production data, but never write back to Supabase. */
+export function isLocalEvalMode() {
+  return process.env.LOCAL_EVAL_MODE === '1';
+}
+
 export async function isSupabaseReady() {
   if (process.env.FORCE_SUPABASE !== '1') return false;
 
@@ -138,12 +145,15 @@ export async function getDbGuardCount() {
 }
 
 /** Every read loads directly from Supabase — no stale server memory. */
-export async function getSupabaseAppState() {
+export async function getSupabaseAppState(adminSessionKey = null) {
   const state = await loadFreshStateFromDatabase();
+  applyEvalSubscriptionOverrides(state, adminSessionKey);
   const dbGuardCount = await getDbGuardCount();
   return {
     ...buildAppStateResponse(state),
     dbGuardCount,
+    localEvalMode: isLocalEvalMode(),
+    dataSource: isLocalEvalMode() ? 'supabase-eval' : 'supabase',
   };
 }
 
@@ -163,10 +173,10 @@ const RELATIONAL_WRITE_ACTIONS = new Set([
   'SEND_GUARD_WHATSAPP', 'RESEND_WHATSAPP', 'UPDATE_SYSTEM_SETTINGS',
   'TAP_NFC', 'LOG_INCIDENT', 'UPDATE_INCIDENT_STATUS', 'SUBMIT_CHECKLIST',
   'REGISTER_VISITOR', 'CHECKOUT_VISITOR', 'TRIGGER_SOS', 'CLEAR_SOS',
-  'CREATE_TENANT', 'CREATE_CHECKLIST_TEMPLATE', 'RESET_STATE',
+  'CREATE_TENANT', 'CREATE_CHECKLIST_TEMPLATE', 'RESET_STATE', 'ACTIVATE_PREMIUM_TOKEN',
 ]);
 
-export async function runSupabaseAction(payload) {
+export async function runSupabaseAction(payload, adminSessionKey = null) {
   invalidateSupabaseCache();
   await loadFreshStateFromDatabase();
 
@@ -176,6 +186,38 @@ export async function runSupabaseAction(payload) {
   const tenantId = payload.tenantId || getLocalState().activeTenantId || 'titan';
   const destructive = isDestructiveDbAction(payload.action);
   const action = payload.action;
+
+  if (action === 'ACTIVATE_PREMIUM_TOKEN' && isLocalEvalSubscriptionMode() && adminSessionKey) {
+    const tenant = getLocalState().tenants?.[tenantId];
+    registerEvalPremiumSession(adminSessionKey, tenantId, {
+      subscriptionTier: 'premium',
+      plan: 'Premium',
+      premiumActivatedAt: tenant?.premiumActivatedAt || new Date().toISOString(),
+      subscriptionSource: 'token',
+    });
+  }
+
+  if (isLocalEvalMode()) {
+    const blocked = new Set(['SYNC_LOCAL_TO_SUPABASE', 'CLEAR_TENANT_DEMO_DATA']);
+    if (blocked.has(action) || destructive) {
+      return {
+        error: 'Local evaluation mode — this action would change production and is blocked.',
+        status: 403,
+      };
+    }
+    const mem = getLocalState();
+    applyEvalSubscriptionOverrides(mem, adminSessionKey);
+    const state = {
+      ...buildAppStateResponse(mem),
+      localEvalMode: true,
+      dataSource: 'supabase-eval',
+    };
+    if (result?.guard) return { ...result, state, localEvalMode: true };
+    if (result?.supervisor && !result?.generatedPin) return { ...result, state, localEvalMode: true };
+    if (result?.generatedPin) return { ...result, state, localEvalMode: true };
+    if (result?.waLink) return { ...result, state, localEvalMode: true };
+    return { success: true, state, localEvalMode: true, evalNote: 'Preview only — not saved to production' };
+  }
 
   if (action === 'CLEAR_TENANT_DEMO_DATA') {
     const wipeResult = await wipeEntireOperationalDatabase();
@@ -196,6 +238,8 @@ export async function runSupabaseAction(payload) {
     await persistOperationalActionToDb(action, payload, tenantId, getLocalState(), result);
   } else if (action === 'UPDATE_SYSTEM_SETTINGS') {
     await persistSystemSettingsToDb(getLocalState().systemSettings);
+  } else if (action === 'ACTIVATE_PREMIUM_TOKEN') {
+    await persistTenantToDb(getLocalState().tenants[tenantId]);
   } else if (!READ_ONLY_ACTIONS.has(action) && RELATIONAL_WRITE_ACTIONS.has(action)) {
     if (usesDirectRowUpsert(action)) {
       await applyDirectRowUpsert(action, { ...payload, ...result }, tenantId, getLocalState());

@@ -8,6 +8,9 @@ export function tenantToRow(t) {
     logo_text: t.logoText || t.name?.substring(0, 2)?.toUpperCase(),
     plan: t.plan || 'Growth Trial',
     status: t.status || 'Active',
+    subscription_tier: t.subscriptionTier || 'standard',
+    premium_activated_at: t.premiumActivatedAt || null,
+    subscription_source: t.subscriptionSource || 'default',
   };
 }
 
@@ -19,6 +22,9 @@ export function rowToTenant(r) {
     logoText: r.logo_text,
     plan: r.plan,
     status: r.status,
+    subscriptionTier: r.subscription_tier || (r.plan === 'Premium' ? 'premium' : 'standard'),
+    premiumActivatedAt: r.premium_activated_at || null,
+    subscriptionSource: r.subscription_source || 'default',
   };
 }
 
@@ -100,6 +106,8 @@ export function premiseToRow(p, tenantId) {
     suburb: p.suburb || null,
     lat: p.coordinates?.lat ?? null,
     lng: p.coordinates?.lng ?? null,
+    accuracy_meters: p.coordinates?.accuracyMeters ?? null,
+    gps_captured_at: p.coordinates?.capturedAt ?? null,
     status: p.status || 'Active',
     created_at: p.createdAt || new Date().toISOString(),
   };
@@ -116,7 +124,12 @@ export function rowToPremise(r) {
     address: r.address,
     city: r.city,
     suburb: r.suburb,
-    coordinates: r.lat != null ? { lat: r.lat, lng: r.lng } : null,
+    coordinates: r.lat != null ? {
+      lat: r.lat,
+      lng: r.lng,
+      accuracyMeters: r.accuracy_meters ?? undefined,
+      capturedAt: r.gps_captured_at ?? undefined,
+    } : null,
     status: r.status,
     createdAt: r.created_at,
   };
@@ -132,6 +145,8 @@ export function placeToRow(p, tenantId) {
     description: p.description || null,
     lat: p.coordinates?.lat ?? null,
     lng: p.coordinates?.lng ?? null,
+    accuracy_meters: p.coordinates?.accuracyMeters ?? null,
+    gps_captured_at: p.coordinates?.capturedAt ?? null,
     has_nfc: Boolean(p.hasNfc),
     nfc_code: p.nfcCode || null,
     schedule: p.schedule || 'Every 2 hours',
@@ -147,7 +162,12 @@ export function rowToPlace(r) {
     name: r.name,
     type: r.type,
     description: r.description,
-    coordinates: r.lat != null ? { lat: r.lat, lng: r.lng } : null,
+    coordinates: r.lat != null ? {
+      lat: r.lat,
+      lng: r.lng,
+      accuracyMeters: r.accuracy_meters ?? undefined,
+      capturedAt: r.gps_captured_at ?? undefined,
+    } : null,
     hasNfc: r.has_nfc,
     nfcCode: r.nfc_code,
     schedule: r.schedule,

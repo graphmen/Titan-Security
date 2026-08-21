@@ -10,6 +10,7 @@ import { sanitizeStateForClient, shouldIncludePinsForRequest } from '../../../li
 import { filterStateForSupervisor, assertSupervisorMutationAllowed } from '../../../lib/supervisorScope';
 import { authorizeStateMutation, getSessionFromRequest } from '../../../lib/webAuth';
 import { normalizeClientState } from '../../../lib/normalizeClientState';
+import { enrichStateWithSubscription, applyEvalSubscriptionOverrides, getAdminSessionKey } from '../../../lib/subscription';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -228,11 +229,12 @@ export async function GET(req) {
   }
 
   const scopeSupervisor = client === 'supervisor' && supervisorId;
+  const adminSessionKey = getAdminSessionKey(session);
 
   try {
     if (process.env.FORCE_SUPABASE === '1') {
       if (await isSupabaseReady()) {
-        let state = await getSupabaseAppState();
+        let state = await getSupabaseAppState(adminSessionKey);
         if (scopeSupervisor) {
           const scoped = filterStateForSupervisor(state, tenantId, supervisorId);
           if (!scoped) {
@@ -264,12 +266,17 @@ export async function GET(req) {
     console.warn('Supabase unavailable, using local store:', err.message);
   }
 
-  const state = {
-    ...getLocalStateWithMonitoring(),
-    dataSource: 'local',
-    whatsappStatus: getWhatsAppStatus(),
-    emailStatus: getEmailStatus(),
-  };
+  const state = enrichStateWithSubscription(
+    applyEvalSubscriptionOverrides(
+      {
+        ...getLocalStateWithMonitoring(),
+        dataSource: 'local',
+        whatsappStatus: getWhatsAppStatus(),
+        emailStatus: getEmailStatus(),
+      },
+      adminSessionKey
+    )
+  );
   if (scopeSupervisor) {
     const scoped = filterStateForSupervisor(state, tenantId, supervisorId);
     if (!scoped) {
@@ -336,7 +343,8 @@ export async function POST(req) {
 
     if (await isSupabaseReady()) {
       try {
-        const result = await runSupabaseAction({ ...effectivePayload, tenantId });
+        const adminSessionKey = getAdminSessionKey(auth.session);
+        const result = await runSupabaseAction({ ...effectivePayload, tenantId }, adminSessionKey);
         if (result?.error) {
           return jsonResponse({ error: result.error }, result.status || 400, origin);
         }

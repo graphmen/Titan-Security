@@ -1,4 +1,5 @@
 /** Map app objects ↔ Supabase row shapes (snake_case). */
+import { normalizeLoginPin } from '../guardAuth.js';
 
 export function tenantToRow(t) {
   return {
@@ -84,7 +85,7 @@ export function rowToSupervisor(r, assignedTerritoryIds = []) {
     email: r.email,
     role: r.role,
     status: r.status,
-    loginPin: r.login_pin,
+    loginPin: normalizeLoginPin(r.login_pin),
     pinMustChange: r.pin_must_change,
     pinCreatedAt: r.pin_created_at,
     photoUrl: r.photo_url,
@@ -238,7 +239,7 @@ export function rowToGuard(r, assignedPremiseIds = []) {
     assignedPremiseIds,
     photoUrl: r.photo_url,
     uniformSize: r.uniform_size,
-    loginPin: r.login_pin,
+    loginPin: normalizeLoginPin(r.login_pin),
     pinMustChange: r.pin_must_change,
     pinCreatedAt: r.pin_created_at,
     nextOfKin: {

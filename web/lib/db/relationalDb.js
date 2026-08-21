@@ -46,6 +46,43 @@ function isMissingSupervisorIdColumn(error) {
   return msg.includes('supervisor_id') && (msg.includes('schema cache') || msg.includes('column'));
 }
 
+function isMissingGpsAccuracyColumn(error) {
+  const msg = String(error?.message || error || '').toLowerCase();
+  return (msg.includes('accuracy_meters') || msg.includes('gps_captured_at'))
+    && (msg.includes('schema cache') || msg.includes('column'));
+}
+
+function stripGpsAccuracyColumns(row) {
+  const { accuracy_meters: _a, gps_captured_at: _g, ...rest } = row;
+  return rest;
+}
+
+/** Upsert premise row; omits GPS accuracy columns if migration 011 is not applied yet. */
+export async function upsertPremiseRow(premise, tenantId, context = 'premises upsert') {
+  const row = premiseToRow(premise, tenantId);
+  let result = await db.from('premises').upsert(row);
+  if (result.error && isMissingGpsAccuracyColumn(result.error)) {
+    console.warn(
+      '[Titan] premises.accuracy_meters column missing — run web/supabase/RUN_PENDING_MIGRATIONS.sql (011) on Supabase'
+    );
+    result = await db.from('premises').upsert(stripGpsAccuracyColumns(row));
+  }
+  await requireDbOk(result, context);
+}
+
+/** Upsert place row; omits GPS accuracy columns if migration 011 is not applied yet. */
+export async function upsertPlaceRow(place, tenantId, context = 'places upsert') {
+  const row = placeToRow(place, tenantId);
+  let result = await db.from('places').upsert(row);
+  if (result.error && isMissingGpsAccuracyColumn(result.error)) {
+    console.warn(
+      '[Titan] places.accuracy_meters column missing — run web/supabase/RUN_PENDING_MIGRATIONS.sql (011) on Supabase'
+    );
+    result = await db.from('places').upsert(stripGpsAccuracyColumns(row));
+  }
+  await requireDbOk(result, context);
+}
+
 /** Upsert guard row; omits supervisor_id if DB migration 008 has not been applied yet. */
 export async function upsertGuardRow(guard, tenantId, context = 'guards upsert') {
   const row = guardToRow(guard, tenantId);
@@ -533,7 +570,9 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
     }
     case 'CREATE_SUPERVISOR':
     case 'UPDATE_SUPERVISOR':
-    case 'UPDATE_SUPERVISOR_PHOTO': {
+    case 'UPDATE_SUPERVISOR_PHOTO':
+    case 'RESET_SUPERVISOR_PIN':
+    case 'CHANGE_SUPERVISOR_PIN': {
       const supervisorId = payload.supervisorId
         || (state.supervisors?.[tenantId] || []).slice(-1)[0]?.id;
       const supervisor = (state.supervisors?.[tenantId] || []).find((s) => s.id === supervisorId);
@@ -552,6 +591,13 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
       }));
       if (stRows.length) {
         await requireDbOk(await db.from('supervisor_territories').upsert(stRows), 'supervisor_territories upsert');
+      }
+      const wa = state.whatsappOutbox?.[tenantId] || [];
+      if (wa.length) {
+        await requireDbOk(
+          await db.from('whatsapp_outbox').upsert(wa.map((w) => waToRow(w, tenantId))),
+          'whatsapp_outbox upsert'
+        );
       }
       break;
     }
@@ -608,7 +654,7 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
         || (state.premises?.[tenantId] || []).slice(-1)[0]?.id;
       const premise = (state.premises?.[tenantId] || []).find((p) => p.id === premiseId);
       if (!premise) throw new Error('Premise not found in memory after save');
-      await requireDbOk(await db.from('premises').upsert(premiseToRow(premise, tenantId)), 'premises upsert');
+      await upsertPremiseRow(premise, tenantId, 'premises upsert');
       break;
     }
     case 'CREATE_PLACE':
@@ -618,7 +664,7 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
         || (state.places?.[premiseId] || []).slice(-1)[0]?.id;
       const place = (state.places?.[premiseId] || []).find((p) => p.id === placeId);
       if (!place) throw new Error('Place not found in memory after save');
-      await requireDbOk(await db.from('places').upsert(placeToRow(place, tenantId)), 'places upsert');
+      await upsertPlaceRow(place, tenantId, 'places upsert');
       await upsertCheckpointForPlace(state, tenantId, premiseId, placeId);
       break;
     }
@@ -639,6 +685,7 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
 const DIRECT_UPSERT_ACTIONS = new Set([
   'CREATE_TERRITORY', 'UPDATE_TERRITORY',
   'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR', 'UPDATE_SUPERVISOR_PHOTO',
+  'RESET_SUPERVISOR_PIN', 'CHANGE_SUPERVISOR_PIN',
   'CREATE_GUARD', 'UPDATE_GUARD', 'UPDATE_GUARD_PHOTO', 'ADD_GUARD_DOCUMENT', 'ADD_GUARD_TRAINING',
   'BULK_ASSIGN_GUARD_SUPERVISOR', 'AUTO_ASSIGN_GUARD_SUPERVISORS_BY_TERRITORY',
   'RESET_GUARD_PIN', 'CHANGE_GUARD_PIN',
@@ -694,8 +741,9 @@ async function syncTenantEntities(state, tenantId, { allowDiffDeletes = false } 
   const premises = state.premises?.[tenantId] || [];
   const premiseIds = premises.map((p) => p.id);
   if (premises.length) {
-    const { error } = await db.from('premises').upsert(premises.map((p) => premiseToRow(p, tenantId)));
-    if (error) throw error;
+    for (const premise of premises) {
+      await upsertPremiseRow(premise, tenantId, 'premises sync');
+    }
   }
   if (allowDiffDeletes) {
     await deleteMissing('premises', 'tenant_id', tenantId, premiseIds);
@@ -703,12 +751,15 @@ async function syncTenantEntities(state, tenantId, { allowDiffDeletes = false } 
 
   const placeRows = [];
   premiseIds.forEach((pid) => {
-    (state.places?.[pid] || []).forEach((pl) => placeRows.push(placeToRow(pl, tenantId)));
+    (state.places?.[pid] || []).forEach((pl) => {
+      placeRows.push(pl);
+    });
   });
   const placeIds = placeRows.map((p) => p.id);
   if (placeRows.length) {
-    const { error } = await db.from('places').upsert(placeRows);
-    if (error) throw error;
+    for (const place of placeRows) {
+      await upsertPlaceRow(place, tenantId, 'places sync');
+    }
   }
   if (allowDiffDeletes && placeIds.length > 0) {
     const { data: existingPlaces, error: plSelErr } = await db

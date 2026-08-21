@@ -16,7 +16,7 @@ export async function fetchSupervisorState(apiBase, tenantId, supervisorId) {
   const url = `${apiBase.replace(/\/$/, '')}/api/state?client=supervisor&supervisorId=${encodeURIComponent(supervisorId)}&tenantId=${encodeURIComponent(tenantId)}`;
   const res = await fetch(url, {
     headers: { 'Cache-Control': 'no-cache' },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(45000),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));

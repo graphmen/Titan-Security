@@ -1,21 +1,21 @@
 {
-  "updatedAt": "2026-08-21T10:13:40.365Z",
-  "monitor": {
-    "appId": "monitor",
-    "name": "Titan Monitor",
-    "description": "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
-    "version": "1.0.24",
-    "versionCode": 24,
-    "apkFile": "titan-monitor-latest.apk",
-    "notes": "Site guide with compass bearing, distance to site, and Navigate to point for clock-in and patrol."
-  },
-  "supervisor": {
-    "appId": "supervisor",
-    "name": "Titan Supervisor",
-    "description": "Supervisor field app - teams, sites, and territory operations.",
-    "version": "1.2.3",
-    "versionCode": 23,
-    "apkFile": "titan-supervisor-latest.apk",
-    "notes": "Relaxed on-site GPS capture (±15m) for registering sites and patrol places. Faster fix in open sky."
-  }
+    "updatedAt":  "2026-08-21T11:11:06.738Z",
+    "monitor":  {
+                    "appId":  "monitor",
+                    "name":  "Titan Monitor",
+                    "description":  "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
+                    "version":  "1.0.25",
+                    "versionCode":  25,
+                    "apkFile":  "titan-monitor-latest.apk",
+                    "notes":  "Published 2026-08-21 13:11"
+                },
+    "supervisor":  {
+                       "appId":  "supervisor",
+                       "name":  "Titan Supervisor",
+                       "description":  "Supervisor field app - teams, sites, and territory operations.",
+                       "version":  "1.2.4",
+                       "versionCode":  24,
+                       "apkFile":  "titan-supervisor-latest.apk",
+                       "notes":  "Published 2026-08-21 13:11"
+                   }
 }

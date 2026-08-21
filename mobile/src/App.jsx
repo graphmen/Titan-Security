@@ -59,6 +59,7 @@ import {
   playShiftReminderBeep,
   playMissedClockOutBeep,
 } from './utils/sounds';
+import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION_CODE } from './config';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('patrol'); // patrol, incidents, checklists, access
@@ -187,7 +188,7 @@ export default function App() {
     try {
       const res = await fetch(apiUrl('/api/state'), {
         headers: { 'Cache-Control': 'no-cache' },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(45000),
       });
       if (res.ok) {
         const data = await res.json();

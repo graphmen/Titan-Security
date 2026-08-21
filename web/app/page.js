@@ -296,33 +296,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleClearDemoData = async () => {
-    if (!window.confirm(
-      'Remove ALL data from the live database?\n\nThis permanently deletes every guard, premise, territory, supervisor, shift, and demo record. Only the empty Titan tenant remains. You can then register your real operational data.'
-    )) return;
-    setSyncError(null);
-    setSyncMessage(null);
-    try {
-      const res = await apiFetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'CLEAR_TENANT_DEMO_DATA',
-          tenantId: state?.activeTenantId || 'titan',
-        }),
-        signal: AbortSignal.timeout(30000),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Could not clear data from the database.');
-      }
-      setSyncMessage('All records cleared from the database. You can register fresh guards, premises, and territories.');
-      await fetchState();
-    } catch (err) {
-      setSyncError(err.message || 'Could not clear data from the database.');
-    }
-  };
-
   const handleUpdateSystemSettings = async (updates) => {
     try {
       const res = await apiFetch('/api/state', {
@@ -1093,16 +1066,6 @@ export default function DashboardPage() {
                   >
                     {syncing ? <><RefreshCw size={14} className="spin" /> Reloading…</> : <><RefreshCw size={14} /> Reload from database</>}
                   </button>
-                  {(curGuards.length > 0 || curPremises.length > 0 || curTerritories.length > 0) && (
-                    <button
-                      type="button"
-                      className="btn-danger"
-                      onClick={handleClearDemoData}
-                      style={{ padding: '0.5rem 1rem', whiteSpace: 'nowrap', fontSize: '0.8rem' }}
-                    >
-                      <Trash2 size={14} /> Clear all data (remove demo records)
-                    </button>
-                  )}
                   </div>
                 </div>
                 {syncMessage && (

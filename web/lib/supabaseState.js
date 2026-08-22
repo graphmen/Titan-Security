@@ -34,7 +34,7 @@ const PROBE_TIMEOUT_MS = 8000;
 const CACHE_OK_MS = 30_000;
 const CACHE_FAIL_MS = 60_000;
 
-let readyCache = { ok: null, at: 0 };
+let readyCache = { ok: null, at: 0, error: null };
 
 function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
   return Promise.race([
@@ -46,7 +46,7 @@ function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
 }
 
 export function invalidateSupabaseCache() {
-  readyCache = { ok: null, at: 0 };
+  readyCache = { ok: null, at: 0, error: null };
 }
 
 /** Load live data from Supabase into memory for this request only. */
@@ -117,6 +117,10 @@ export function isLocalEvalMode() {
   return process.env.LOCAL_EVAL_MODE === '1';
 }
 
+export function getLastDbProbeError() {
+  return readyCache.error;
+}
+
 export async function isSupabaseReady() {
   if (process.env.FORCE_SUPABASE !== '1') return false;
 
@@ -128,10 +132,11 @@ export async function isSupabaseReady() {
 
   try {
     await withTimeout(probeRelationalDb());
-    readyCache = { ok: true, at: now };
+    readyCache = { ok: true, at: now, error: null };
     return true;
-  } catch {
-    readyCache = { ok: false, at: now };
+  } catch (err) {
+    const message = String(err?.message || err || 'Database unavailable');
+    readyCache = { ok: false, at: now, error: message };
     return false;
   }
 }

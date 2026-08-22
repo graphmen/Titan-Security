@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../supabase';
 import { getLocalState, getLocalStateWithMonitoring, processLocalAction } from '../../../lib/localStore';
-import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary, persistStateToSupabase, hydrateStateFromSupabase, loadFreshStateFromDatabase } from '../../../lib/supabaseState';
+import { getSupabaseAppState, runSupabaseAction, isSupabaseReady, syncLocalToSupabase, getStateSummary, persistStateToSupabase, hydrateStateFromSupabase, loadFreshStateFromDatabase, getLastDbProbeError } from '../../../lib/supabaseState';
 import { applyDirectRowDelete, wipeEntireOperationalDatabase, isDestructiveDbAction, ensureMinimalTenantInDb } from '../../../lib/db/relationalDb';
 import { getWhatsAppStatus } from '../../../lib/whatsapp';
 import { getEmailStatus } from '../../../lib/email';
@@ -245,7 +245,13 @@ export async function GET(req) {
         return jsonResponse(state, 200, origin, req, session);
       }
       return jsonResponse(
-        { error: 'Database unavailable. Cannot load live data.' },
+        {
+          error: 'Database unavailable. Cannot load live data.',
+          detail: getLastDbProbeError() || undefined,
+          hint: String(getLastDbProbeError() || '').includes('egress')
+            ? 'Supabase egress quota exceeded — upgrade the Supabase plan or remove spend caps at supabase.com/dashboard.'
+            : 'Check Supabase project status and Vercel environment variables (FORCE_SUPABASE, SUPABASE_SERVICE_ROLE_KEY).',
+        },
         503,
         origin,
         req,

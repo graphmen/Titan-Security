@@ -115,8 +115,10 @@ export default function DashboardPage() {
         router.push('/login');
         return;
       }
-      if (!res.ok) throw new Error('Failed to pull system data');
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || 'Failed to pull system data');
+      }
       setState(data);
       sirenEnabledRef.current = mergeSystemSettings(data.systemSettings).sirenAlertsEnabled;
       setLoading(false);
@@ -146,7 +148,8 @@ export default function DashboardPage() {
         setError('Connection lost — retrying…');
         pollDelayRef.current = Math.min(Math.round(pollDelayRef.current * 1.5), 60000);
       } else {
-        setError('Cannot reach Titan server. Check your connection and refresh.');
+        setError(err.message || 'Cannot reach Titan server. Check your connection and refresh.');
+        setLoading(false);
       }
     } finally {
       fetchInFlightRef.current = false;
@@ -407,9 +410,9 @@ export default function DashboardPage() {
 
   if (!state) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem', background: '#f8fafc' }}>
-        <p style={{ color: 'var(--color-danger)', fontWeight: 500 }}>{error || 'Cannot reach Titan server. Check your connection and refresh.'}</p>
-        <button type="button" className="btn-primary" onClick={() => { setLoading(true); fetchState(); }}>Try again</button>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem', background: '#f8fafc', padding: '1.5rem', textAlign: 'center' }}>
+        <p style={{ color: 'var(--color-danger)', fontWeight: 500, maxWidth: '520px' }}>{error || 'Cannot reach Titan server. Check your connection and refresh.'}</p>
+        <button type="button" className="btn-primary" onClick={() => { setLoading(true); setError(null); fetchState(); }}>Try again</button>
       </div>
     );
   }

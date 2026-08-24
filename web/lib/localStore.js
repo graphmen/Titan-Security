@@ -38,7 +38,6 @@ import {
   ensureAlertStore,
 } from './guards';
 import { syncGuardTerritoryFromPremises, validateGuardSupervisorAssignment, filterAssignedPremisesForSupervisor, getSupervisorsForTerritory, resolveGuardTerritoryId } from './guardProfile';
-import { runMonitoringEvaluators } from './monitoringEngine.js';
 import { generateGuardPin, findGuardByPin, validatePinFormat } from './guardAuth';
 import { generateSupervisorPin, findSupervisorByPin } from './supervisorAuth';
 import { sanitizeSupervisorPublic } from './supervisorScope';

@@ -114,6 +114,7 @@ export default function DashboardPage() {
       setLoading(false);
       setError(null);
       hasLoadedRef.current = true;
+      return;
     }
     fetchInFlightRef.current = true;
     try {

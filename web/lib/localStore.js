@@ -38,6 +38,7 @@ import {
   ensureAlertStore,
 } from './guards';
 import { syncGuardTerritoryFromPremises, validateGuardSupervisorAssignment, filterAssignedPremisesForSupervisor, getSupervisorsForTerritory, resolveGuardTerritoryId } from './guardProfile';
+import { runMonitoringEvaluators } from './monitoringEngine.js';
 import { generateGuardPin, findGuardByPin, validatePinFormat } from './guardAuth';
 import { generateSupervisorPin, findSupervisorByPin } from './supervisorAuth';
 import { sanitizeSupervisorPublic } from './supervisorScope';
@@ -1077,17 +1078,21 @@ export function processLocalAction(payload) {
     case 'DISMISS_GUARD_ALERT': {
       const { alertId, actorName = 'Admin' } = payload;
       ensureAlertStore(state, tenantId);
+      // Dashboard alerts are computed on GET — materialize them before dismiss.
+      runMonitoringEvaluators(state, tenantId);
       const alert = state.guardAlerts[tenantId].find((a) => a.id === alertId);
-      if (alert) {
-        alert.status = 'Dismissed';
-        alert.resolvedAt = new Date().toISOString();
-        appendAuditLog(state, { tenantId, action: 'DISMISS_ALERT', alertId, alertType: alert.type, guardId: alert.guardId, actorName });
+      if (!alert) {
+        return { error: 'Alert not found or already cleared', status: 404 };
       }
+      alert.status = 'Dismissed';
+      alert.resolvedAt = new Date().toISOString();
+      appendAuditLog(state, { tenantId, action: 'DISMISS_ALERT', alertId, alertType: alert.type, guardId: alert.guardId, actorName });
       break;
     }
     case 'DISMISS_ALERTS_BY_TYPE': {
       const { alertType } = payload;
       ensureAlertStore(state, tenantId);
+      runMonitoringEvaluators(state, tenantId);
       const now = new Date().toISOString();
       let count = 0;
       const dismissedIds = [];

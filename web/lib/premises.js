@@ -11,7 +11,10 @@ export function generatePlaceId() {
 export function geoToCanvas(premiseCoords, placeCoords, fallbackIndex = 0) {
   if (!premiseCoords?.lat || !placeCoords?.lat) {
     const angle = (fallbackIndex / 6) * 2 * Math.PI;
-    return { x: 280 + Math.cos(angle) * 90, y: 180 + Math.sin(angle) * 70 };
+    return {
+      x: Math.round(280 + Math.cos(angle) * 90),
+      y: Math.round(180 + Math.sin(angle) * 70),
+    };
   }
   const scale = 80000;
   return {

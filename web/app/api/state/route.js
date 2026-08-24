@@ -271,6 +271,21 @@ export async function GET(req) {
     }
   } catch (err) {
     console.warn('Supabase unavailable, using local store:', err.message);
+    if (isForceSupabaseEnabled()) {
+      return jsonResponse(
+        {
+          error: 'Database unavailable. Cannot load live data.',
+          detail: err.message,
+          hint: String(err.message || '').includes('egress')
+            ? 'Supabase egress quota exceeded — upgrade the Supabase plan or remove spend caps at supabase.com/dashboard.'
+            : 'Check Supabase project status and Vercel environment variables (FORCE_SUPABASE, SUPABASE_SERVICE_ROLE_KEY).',
+        },
+        503,
+        origin,
+        req,
+        session
+      );
+    }
   }
 
   const state = enrichStateWithSubscription(

@@ -11,6 +11,7 @@ import { filterStateForSupervisor, assertSupervisorMutationAllowed } from '../..
 import { authorizeStateMutation, getSessionFromRequest } from '../../../lib/webAuth';
 import { normalizeClientState } from '../../../lib/normalizeClientState';
 import { enrichStateWithSubscription, applyEvalSubscriptionOverrides, getAdminSessionKey } from '../../../lib/subscription';
+import { isForceSupabaseEnabled } from '../../../lib/env';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -64,7 +65,7 @@ function withProbeTimeout(promise) {
 async function checkSupabase() {
   if (supabaseChecked) return supabaseAvailable;
   supabaseChecked = true;
-  if (process.env.FORCE_SUPABASE !== '1') {
+  if (!isForceSupabaseEnabled()) {
     supabaseAvailable = false;
     return false;
   }
@@ -232,7 +233,7 @@ export async function GET(req) {
   const adminSessionKey = getAdminSessionKey(session);
 
   try {
-    if (process.env.FORCE_SUPABASE === '1') {
+    if (isForceSupabaseEnabled()) {
       if (await isSupabaseReady()) {
         let state = await getSupabaseAppState(adminSessionKey);
         if (scopeSupervisor) {
@@ -357,7 +358,7 @@ export async function POST(req) {
         return jsonResponse(result, 200, origin, req);
       } catch (err) {
         console.error('Supabase action failed:', err.message);
-        if (process.env.FORCE_SUPABASE === '1') {
+        if (isForceSupabaseEnabled()) {
           return jsonResponse(
             {
               error: `Could not save to database: ${err.message}. Nothing was deleted — please retry.`,

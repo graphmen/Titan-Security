@@ -31,6 +31,7 @@ import { enrichStateWithSubscription, applyEvalSubscriptionOverrides, registerEv
 import { getWhatsAppStatus } from './whatsapp';
 import { getEmailStatus } from './email';
 import { deliverPinNotifications } from './pinDeliveryServer';
+import { isForceSupabaseEnabled } from './env';
 
 const PROBE_TIMEOUT_MS = 8000;
 const CACHE_OK_MS = 30_000;
@@ -128,7 +129,7 @@ export function getLastDbProbeError() {
 }
 
 export async function isSupabaseReady() {
-  if (process.env.FORCE_SUPABASE !== '1') return false;
+  if (!isForceSupabaseEnabled()) return false;
 
   const now = Date.now();
   const ttl = readyCache.ok ? CACHE_OK_MS : CACHE_FAIL_MS;

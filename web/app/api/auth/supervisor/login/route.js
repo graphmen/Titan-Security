@@ -8,11 +8,12 @@ import {
   verifySupervisorPin,
 } from '../../../../../lib/webAuth';
 import { sanitizeSupervisorPublic } from '../../../../../lib/supervisorScope';
+import { isForceSupabaseEnabled } from '../../../../../lib/env';
 
 export const dynamic = 'force-dynamic';
 
 async function loadState() {
-  if (process.env.FORCE_SUPABASE === '1' && (await isSupabaseReady())) {
+  if (isForceSupabaseEnabled() && (await isSupabaseReady())) {
     return getSupabaseAppState();
   }
   return getLocalState();

@@ -150,7 +150,7 @@ export function placeToRow(p, tenantId) {
     gps_captured_at: p.coordinates?.capturedAt ?? null,
     has_nfc: Boolean(p.hasNfc),
     nfc_code: p.nfcCode || null,
-    schedule: p.schedule || 'Every 2 hours',
+    schedule: p.schedule || 'Every 30 mins',
     created_at: p.createdAt || new Date().toISOString(),
   };
 }

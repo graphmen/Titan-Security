@@ -1,3 +1,5 @@
+import { getDefaultPatrolSchedule } from './patrolSchedule.js';
+
 export function generatePremiseId() {
   return `PRM-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 }
@@ -36,7 +38,7 @@ export function syncCheckpointFromPlace(state, tenantId, premise, place) {
     lastScanned: existing?.lastScanned || null,
     coords,
     coordinates: place.coordinates,
-    schedule: place.schedule || 'Every 2 hours',
+    schedule: place.schedule || getDefaultPatrolSchedule(state),
     premiseId: premise.id,
     placeId: place.id,
     premiseName: premise.name,

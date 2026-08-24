@@ -24,6 +24,8 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   /** Minutes outside geofence before exit alert fires (avoids GPS jitter). */
   geofenceExitGraceMinutes: 3,
   geofenceAlertRepeatMinutes: 30,
+  /** Default patrol scan interval for new sites and patrol points. */
+  defaultPatrolIntervalMinutes: 30,
   overduePatrolRepeatMinutes: 30,
   /** Welfare / dead-man's switch */
   welfareChecksEnabled: false,

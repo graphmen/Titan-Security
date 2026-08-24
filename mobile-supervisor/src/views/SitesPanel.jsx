@@ -41,7 +41,7 @@ export default function SitesPanel({
 }) {
   const [premiseForm, setPremiseForm] = useState(emptyPremise());
   const [placeForm, setPlaceForm] = useState({
-    premiseId: '', name: '', type: 'Patrol Point', description: '', lat: '', lng: '', accuracyMeters: '', hasNfc: true, schedule: 'Every 2 hours',
+    premiseId: '', name: '', type: 'Patrol Point', description: '', lat: '', lng: '', accuracyMeters: '', hasNfc: true, schedule: 'Every 30 mins',
   });
   const [editingPremiseId, setEditingPremiseId] = useState(null);
   const [gpsCapturing, setGpsCapturing] = useState(null);

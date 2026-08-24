@@ -405,6 +405,16 @@ async function upsertCheckpointForPlace(state, tenantId, premiseId, placeId) {
   );
 }
 
+/** Persist patrol schedule changes for every place + checkpoint on a tenant. */
+export async function persistAllPatrolSchedules(state, tenantId) {
+  for (const premise of state.premises?.[tenantId] || []) {
+    for (const place of state.places?.[premise.id] || []) {
+      await upsertPlaceRow(place, tenantId, 'places patrol schedule');
+      await upsertCheckpointForPlace(state, tenantId, premise.id, place.id);
+    }
+  }
+}
+
 /** Wipe all operational data — direct SQL first (bypasses RLS), then Supabase API fallback. */
 export async function wipeEntireOperationalDatabase() {
   const usedDirectSql = await wipeOperationalTablesDirectSql();

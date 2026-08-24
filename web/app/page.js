@@ -307,25 +307,20 @@ export default function DashboardPage() {
   };
 
   const handleUpdateSystemSettings = async (updates) => {
-    try {
-      const res = await apiFetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'UPDATE_SYSTEM_SETTINGS', updates }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Could not save system settings.');
-      }
-      if (data.state) {
-        setState(data.state);
-        sirenEnabledRef.current = mergeSystemSettings(data.state.systemSettings).sirenAlertsEnabled;
-      } else {
-        await fetchState();
-      }
-    } catch (err) {
-      console.error('Failed updating system settings:', err);
-      setSyncError(err.message || 'Could not save system settings.');
+    const res = await apiFetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'UPDATE_SYSTEM_SETTINGS', updates }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Could not save system settings.');
+    }
+    if (data.state) {
+      setState(data.state);
+      sirenEnabledRef.current = mergeSystemSettings(data.state.systemSettings).sirenAlertsEnabled;
+    } else {
+      await fetchState({ force: true });
     }
   };
 
@@ -699,6 +694,7 @@ export default function DashboardPage() {
             shifts={curShifts}
             attendance={curAttendance}
             checkpoints={curCheckpoints}
+            defaultPatrolIntervalMinutes={systemSettings.defaultPatrolIntervalMinutes ?? 30}
             onRefresh={fetchState}
           />
         ) : activeTab === 'map' ? (

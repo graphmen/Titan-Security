@@ -95,6 +95,7 @@ export default function SystemSettings({
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState('menu');
   const [savingKey, setSavingKey] = useState(null);
+  const [saveError, setSaveError] = useState('');
   const rootRef = useRef(null);
 
   const connected = dataSource === 'supabase';
@@ -110,8 +111,12 @@ export default function SystemSettings({
 
   const save = async (key, value) => {
     setSavingKey(key);
+    setSaveError('');
     try {
       await onUpdateSettings({ [key]: value });
+    } catch (err) {
+      setSaveError(err?.message || 'Could not save setting');
+      throw err;
     } finally {
       setSavingKey(null);
     }
@@ -244,6 +249,14 @@ export default function SystemSettings({
               onChange={(v) => save('missedClockOutGraceMinutes', v)}
             />
             <SelectSetting
+              label="Missed shift alert repeat"
+              value={systemSettings.missedShiftAlertRepeatMinutes ?? 30}
+              options={[15, 30, 45, 60]}
+              suffix=" min"
+              disabled={savingKey === 'missedShiftAlertRepeatMinutes'}
+              onChange={(v) => save('missedShiftAlertRepeatMinutes', v)}
+            />
+            <SelectSetting
               label="Overdue patrol repeat"
               value={systemSettings.overduePatrolRepeatMinutes ?? 30}
               options={[15, 30, 45, 60]}
@@ -258,6 +271,15 @@ export default function SystemSettings({
         return (
           <div className="sys-settings-panel-body">
             <SelectSetting
+              label="Default patrol interval"
+              hint="How often guards must scan each patrol point. Saving updates all existing patrol points."
+              value={systemSettings.defaultPatrolIntervalMinutes ?? 30}
+              options={[15, 30, 45, 60, 90, 120]}
+              suffix=" min"
+              disabled={savingKey === 'defaultPatrolIntervalMinutes'}
+              onChange={(v) => save('defaultPatrolIntervalMinutes', v)}
+            />
+            <SelectSetting
               label="No-movement threshold"
               hint="Raise a patrol check alert if GPS shows no movement for this long."
               value={systemSettings.noMovementAlertMinutes ?? 45}
@@ -266,10 +288,20 @@ export default function SystemSettings({
               disabled={savingKey === 'noMovementAlertMinutes'}
               onChange={(v) => save('noMovementAlertMinutes', v)}
             />
+            <SelectSetting
+              label="Overdue patrol supervisor alert"
+              hint="How often to re-notify supervisors while a patrol scan remains overdue."
+              value={systemSettings.overduePatrolRepeatMinutes ?? 30}
+              options={[15, 30, 45, 60]}
+              suffix=" min"
+              disabled={!isPremium || savingKey === 'overduePatrolRepeatMinutes'}
+              onChange={(v) => save('overduePatrolRepeatMinutes', v)}
+            />
             <div className="sys-settings-info-card">
               <Activity size={14} />
-              <span>Supervisors see these alerts under Guard Management and Command Centre.</span>
+              <span>Guard app shows &quot;Every 30 mins&quot; (or your chosen interval) on each patrol point.</span>
             </div>
+            {!isPremium && <PremiumNotice />}
           </div>
         );
       case 'compliance':
@@ -315,7 +347,7 @@ export default function SystemSettings({
               <MenuRow
                 icon={Clock}
                 label="Patrol Monitoring"
-                hint={`${systemSettings.noMovementAlertMinutes ?? 45} min threshold`}
+                hint={`${systemSettings.defaultPatrolIntervalMinutes ?? 30} min patrol interval`}
                 onClick={() => setPanel('patrol')}
               />
               <MenuRow
@@ -370,7 +402,14 @@ export default function SystemSettings({
             </div>
           </div>
 
-          <div className="sys-settings-popover-body">{renderPanelBody()}</div>
+          <div className="sys-settings-popover-body">
+            {saveError && panel !== 'menu' && (
+              <div className="sys-settings-info-card" style={{ background: '#fee2e2', borderColor: '#fecaca', color: '#991b1b', marginBottom: '0.75rem' }}>
+                {saveError}
+              </div>
+            )}
+            {renderPanelBody()}
+          </div>
 
           {panel === 'menu' && savingKey && (
             <div className="sys-settings-saving">

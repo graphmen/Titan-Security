@@ -962,7 +962,7 @@ export default function App() {
     return (state?.places?.[premiseId] || []).map((place) => ({
       id: `${tenantId}-cp-${place.id.slice(-6)}`,
       name: place.name,
-      schedule: place.schedule || 'Every 2 hours',
+      schedule: place.schedule || 'Every 30 mins',
       status: 'Pending',
       lastScanned: null,
       premiseId,

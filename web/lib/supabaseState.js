@@ -16,9 +16,11 @@ import {
   getRelationalSummary,
   persistSystemSettingsToDb,
   persistTenantToDb,
+  persistAllPatrolSchedules,
 } from './db/relationalDb';
 import { normalizeGuardSupervisorAssignments } from './guardProfile.js';
 import { syncAllPlaceCheckpoints } from './premises.js';
+import { migrateLegacyPatrolSchedules } from './patrolSchedule.js';
 import {
   usesOperationalDbWrite,
   persistOperationalActionToDb,
@@ -55,7 +57,11 @@ export async function loadFreshStateFromDatabase() {
   const state = await loadAppStateFromRelationalDb();
   for (const tenantId of Object.keys(state.tenants || {})) {
     normalizeGuardSupervisorAssignments(state, tenantId);
+    const migrated = migrateLegacyPatrolSchedules(state, tenantId);
     syncAllPlaceCheckpoints(state, tenantId);
+    if (migrated > 0) {
+      await persistAllPatrolSchedules(state, tenantId);
+    }
   }
   await ensurePlaceCheckpointsSynced(state);
   globalThis.__titanState = state;
@@ -243,6 +249,9 @@ export async function runSupabaseAction(payload, adminSessionKey = null) {
     await persistOperationalActionToDb(action, payload, tenantId, getLocalState(), result);
   } else if (action === 'UPDATE_SYSTEM_SETTINGS') {
     await persistSystemSettingsToDb(getLocalState().systemSettings);
+    if (payload.updates?.defaultPatrolIntervalMinutes !== undefined) {
+      await persistAllPatrolSchedules(getLocalState(), tenantId);
+    }
   } else if (action === 'ACTIVATE_PREMIUM_TOKEN') {
     await persistTenantToDb(getLocalState().tenants[tenantId]);
   } else if (!READ_ONLY_ACTIONS.has(action) && RELATIONAL_WRITE_ACTIONS.has(action)) {

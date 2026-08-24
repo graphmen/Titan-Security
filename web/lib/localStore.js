@@ -58,6 +58,11 @@ import {
   normalizeGeofenceRadius,
   TITAN_TENANT_ID,
 } from './systemSettings';
+import {
+  applyPatrolScheduleToAllPlaces,
+  formatPatrolSchedule,
+  getDefaultPatrolSchedule,
+} from './patrolSchedule.js';
 import { isValidEmailAddress } from './email';
 import { runMonitoringEvaluators } from './monitoringEngine.js';
 import { appendAuditLog } from './auditLog.js';
@@ -1221,7 +1226,7 @@ export function processLocalAction(payload) {
         accuracyMeters,
         hasNfc = false,
         nfcCode = '',
-        schedule = 'Every 2 hours',
+        schedule = getDefaultPatrolSchedule(state),
       } = payload;
 
       if (!premiseId || !name) return { error: 'Premise and place name are required', status: 400 };
@@ -1478,6 +1483,7 @@ export function processLocalAction(payload) {
         'missedClockInGraceMinutes',
         'missedClockOutGraceMinutes',
         'missedShiftAlertRepeatMinutes',
+        'defaultPatrolIntervalMinutes',
         'overduePatrolRepeatMinutes',
         'welfareChecksEnabled',
         'welfareCheckIntervalMinutes',
@@ -1490,6 +1496,13 @@ export function processLocalAction(payload) {
           state.systemSettings[key] = updates[key];
         }
       });
+      if (updates.defaultPatrolIntervalMinutes !== undefined) {
+        applyPatrolScheduleToAllPlaces(
+          state,
+          tenantId,
+          formatPatrolSchedule(updates.defaultPatrolIntervalMinutes)
+        );
+      }
       if (updates.geofenceRadiusMeters !== undefined) {
         state.systemSettings.geofenceRadiusMeters = normalizeGeofenceRadius(
           state.systemSettings.geofenceRadiusMeters

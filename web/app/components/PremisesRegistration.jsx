@@ -26,6 +26,7 @@ import ConfirmDeleteModal from './ConfirmDeleteModal';
 import ListSearchBar, { TerritoryFilterSelect } from './ListSearchBar';
 import { matchesSearch } from '../../lib/listFilters';
 import { getSupervisorsForTerritory } from '../../lib/guardProfile';
+import { formatPatrolSchedule, patrolScheduleOptions } from '../../lib/patrolSchedule.js';
 
 const PLACE_TYPES = [
   { value: 'gate', label: 'Gate / Entrance' },
@@ -47,8 +48,11 @@ export default function PremisesRegistration({
   shifts = [],
   attendance = [],
   checkpoints = [],
+  defaultPatrolIntervalMinutes = 30,
   onRefresh,
 }) {
+  const defaultPatrolSchedule = formatPatrolSchedule(defaultPatrolIntervalMinutes);
+  const patrolSchedules = patrolScheduleOptions();
   const [selectedPremiseId, setSelectedPremiseId] = useState(premises[0]?.id || null);
   const [showPremiseForm, setShowPremiseForm] = useState(false);
   const [showPlaceForm, setShowPlaceForm] = useState(false);
@@ -82,7 +86,7 @@ export default function PremisesRegistration({
     accuracyMeters: '',
     hasNfc: true,
     nfcCode: '',
-    schedule: 'Every 2 hours',
+    schedule: defaultPatrolSchedule,
   });
   const [gpsCapturing, setGpsCapturing] = useState(null);
 
@@ -144,7 +148,7 @@ export default function PremisesRegistration({
       accuracyMeters: selectedPremise?.coordinates?.accuracyMeters?.toString() || '',
       hasNfc: true,
       nfcCode: '',
-      schedule: 'Every 2 hours',
+      schedule: defaultPatrolSchedule,
     });
     setEditingPlaceId(null);
     setShowPlaceForm(false);
@@ -190,7 +194,7 @@ export default function PremisesRegistration({
       accuracyMeters: place.coordinates?.accuracyMeters?.toString() || '',
       hasNfc: !!place.hasNfc,
       nfcCode: place.nfcCode || '',
-      schedule: place.schedule || 'Every 2 hours',
+      schedule: place.schedule || defaultPatrolSchedule,
     });
     setShowPlaceForm(true);
   };
@@ -662,9 +666,9 @@ export default function PremisesRegistration({
                     <div className="input-group" style={{ marginBottom: 0 }}>
                       <label>Patrol Schedule</label>
                       <select className="form-select" value={placeForm.schedule} onChange={(e) => setPlaceForm({ ...placeForm, schedule: e.target.value })}>
-                        <option>Every 1 hour</option>
-                        <option>Every 2 hours</option>
-                        <option>Every 4 hours</option>
+                        {patrolSchedules.map((label) => (
+                          <option key={label}>{label}</option>
+                        ))}
                         <option>Every shift</option>
                       </select>
                     </div>

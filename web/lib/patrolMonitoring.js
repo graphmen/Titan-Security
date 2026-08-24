@@ -1,17 +1,16 @@
 import { pushRecurringComplianceAlert } from './guards.js';
+import { getDefaultPatrolSchedule, parseScheduleIntervalMs } from './patrolSchedule.js';
 
-/** Parse "Every 2 hours" → hours number. */
+/** @deprecated use parseScheduleIntervalMs */
 export function parseScheduleHours(schedule = '') {
-  const match = String(schedule).match(/(\d+)\s*hour/i);
-  return match ? Math.max(1, parseInt(match[1], 10)) : 2;
+  return parseScheduleIntervalMs(schedule) / (60 * 60 * 1000);
 }
 
 export function isCheckpointOverdue(cp, now = Date.now()) {
   if (!cp) return false;
   const schedule = cp.schedule || '';
-  if (!/hour/i.test(schedule)) return cp.status !== 'Scanned';
-  const hours = parseScheduleHours(schedule);
-  const intervalMs = hours * 60 * 60 * 1000;
+  if (/shift/i.test(schedule)) return cp.status !== 'Scanned';
+  const intervalMs = parseScheduleIntervalMs(schedule);
   if (!cp.lastScanned) return true;
   return now - new Date(cp.lastScanned).getTime() > intervalMs;
 }
@@ -24,6 +23,7 @@ export function evaluateOverduePatrolAlerts(state, tenantId) {
   );
   const checkpoints = state.checkpoints?.[tenantId] || [];
   const premises = state.premises?.[tenantId] || [];
+  const fallbackSchedule = getDefaultPatrolSchedule(state);
 
   attendance.forEach((att) => {
     const guardName = (state.guards?.[tenantId] || []).find((g) => g.id === att.guardId)?.fullName || 'Guard';
@@ -38,7 +38,7 @@ export function evaluateOverduePatrolAlerts(state, tenantId) {
         guardId: att.guardId,
         guardName,
         premiseId: att.premiseId,
-        message: `${guardName} — checkpoint "${cp.name}" overdue at ${premise?.name || 'site'} (schedule: ${cp.schedule || 'Every 2 hours'}).`,
+        message: `${guardName} — checkpoint "${cp.name}" overdue at ${premise?.name || 'site'} (schedule: ${cp.schedule || fallbackSchedule}).`,
       }, repeatMinutes);
     });
   });

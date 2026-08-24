@@ -105,9 +105,16 @@ export default function DashboardPage() {
     }, pollDelayRef.current);
   };
 
-  // Load state function
-  const fetchState = async () => {
-    if (fetchInFlightRef.current) return;
+  // Load state function — pass { force: true } after mutations to bypass the in-flight guard.
+  const fetchState = async (options = {}) => {
+    const force = options === true || options?.force;
+    if (fetchInFlightRef.current && !force) return;
+    if (options?.state && typeof options.state === 'object') {
+      setState(options.state);
+      setLoading(false);
+      setError(null);
+      hasLoadedRef.current = true;
+    }
     fetchInFlightRef.current = true;
     try {
       const res = await apiFetch('/api/state?client=web', { signal: AbortSignal.timeout(30000) });

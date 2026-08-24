@@ -124,7 +124,11 @@ export default function GuardManagement({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'Save failed');
-      onRefresh?.();
+      if (json.state) {
+        onRefresh?.({ state: json.state });
+      } else {
+        onRefresh?.({ force: true });
+      }
       return json;
     } catch (e) {
       setSaveError(e.message || 'Could not save');
@@ -967,6 +971,11 @@ export default function GuardManagement({
 
       {tab === 'alerts' && (
         <div className="glass-panel" style={{ padding: '1.25rem' }}>
+          {saveError && (
+            <div style={{ background: '#fee2e2', color: '#991b1b', padding: '0.65rem 1rem', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+              {saveError}
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
             <div>
               <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>Supervisor Alerts</h3>

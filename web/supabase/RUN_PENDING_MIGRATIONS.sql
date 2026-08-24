@@ -24,3 +24,6 @@ ALTER TABLE public.premises ADD COLUMN IF NOT EXISTS accuracy_meters integer;
 ALTER TABLE public.premises ADD COLUMN IF NOT EXISTS gps_captured_at timestamptz;
 ALTER TABLE public.places ADD COLUMN IF NOT EXISTS accuracy_meters integer;
 ALTER TABLE public.places ADD COLUMN IF NOT EXISTS gps_captured_at timestamptz;
+
+-- 012: when supervisor dismisses an alert, persist resolved_at
+ALTER TABLE public.guard_alerts ADD COLUMN IF NOT EXISTS resolved_at timestamptz;

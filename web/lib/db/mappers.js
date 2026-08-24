@@ -352,7 +352,7 @@ export function rowToCheckpoint(r) {
 }
 
 export function alertToRow(a, tenantId) {
-  return {
+  const row = {
     id: a.id,
     tenant_id: tenantId,
     guard_id: a.guardId || null,
@@ -365,6 +365,8 @@ export function alertToRow(a, tenantId) {
     status: a.status || 'Active',
     created_at: a.createdAt || new Date().toISOString(),
   };
+  if (a.resolvedAt) row.resolved_at = a.resolvedAt;
+  return row;
 }
 
 export function rowToAlert(r) {
@@ -379,6 +381,7 @@ export function rowToAlert(r) {
     message: r.message,
     status: r.status,
     createdAt: r.created_at,
+    resolvedAt: r.resolved_at || undefined,
   };
 }
 

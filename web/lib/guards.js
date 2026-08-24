@@ -118,6 +118,8 @@ export function pushRecurringComplianceAlert(state, tenantId, alert, repeatMinut
   const key = alertDedupeKey(alert);
   const matching = state.guardAlerts[tenantId].filter((a) => alertDedupeKey(a) === key);
   if (matching.some((a) => a.status === 'Active')) return null;
+  // Supervisor dismissed — do not recreate on the next dashboard poll.
+  if (matching.some((a) => a.status === 'Dismissed')) return null;
 
   const repeatMs = Math.max(1, repeatMinutes) * 60 * 1000;
   const latest = matching.reduce((best, a) => {

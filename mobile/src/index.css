@@ -575,6 +575,11 @@ body {
   background: linear-gradient(90deg, rgba(34, 197, 94, 0.06) 0%, #ffffff 30%);
 }
 
+.mob-checkpoint.waiting {
+  border-left-color: #d97706;
+  background: linear-gradient(90deg, rgba(217, 119, 6, 0.06) 0%, #ffffff 30%);
+}
+
 .mob-checkpoint.overdue {
   border-left-color: var(--mob-danger);
   background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, #ffffff 30%);
@@ -614,6 +619,11 @@ body {
   color: #15803d;
 }
 
+.mob-tag.waiting {
+  background: rgba(217, 119, 6, 0.15);
+  color: #b45309;
+}
+
 .mob-tag.danger {
   background: rgba(239, 68, 68, 0.12);
   color: #b91c1c;
@@ -623,6 +633,13 @@ body {
   background: rgba(34, 197, 94, 0.12);
   border: 1.5px solid var(--mob-success);
   color: #15803d;
+  box-shadow: none;
+}
+
+.mob-nfc-btn.waiting {
+  background: rgba(217, 119, 6, 0.1);
+  border: 1.5px solid #d97706;
+  color: #b45309;
   box-shadow: none;
 }
 

@@ -24,6 +24,7 @@ import {
   Compass,
   ArrowLeftRight,
   Calendar,
+  Clock,
   Phone,
   Mail,
   Sun,
@@ -46,6 +47,11 @@ import AppUpdatePanel from './components/AppUpdatePanel';
 import AppUpdateScreen from './components/AppUpdateScreen';
 import LocationPermissionPrompt from './components/LocationPermissionPrompt';
 import { postStateAction } from './utils/api';
+import {
+  computePatrolShiftProgress,
+  formatCountdown,
+  getCheckpointPatrolUi,
+} from './utils/patrolProgress';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
 import { getLocation, getLocationForClockIn, initLocationPermissionFlow } from './utils/location';
 import { startVoiceMemo } from './utils/voice';
@@ -124,6 +130,9 @@ export default function App() {
     checklists: [],
     sos: [],
   });
+  /** Optimistic last-scan times (incl. offline taps) for interval UI. */
+  const [localScanTimes, setLocalScanTimes] = useState({});
+  const [patrolTick, setPatrolTick] = useState(0);
 
   const [swapForm, setSwapForm] = useState({ shiftId: '', targetGuardId: '', reason: '' });
   const movementAlertPlayed = useRef(false);
@@ -193,6 +202,17 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setState(data);
+        setLocalScanTimes((prev) => {
+          const next = { ...prev };
+          for (const cp of data.checkpoints?.[tenantId] || []) {
+            if (!cp.lastScanned) continue;
+            const serverTs = new Date(cp.lastScanned).getTime();
+            if (!next[cp.id] || serverTs >= new Date(next[cp.id]).getTime()) {
+              delete next[cp.id];
+            }
+          }
+          return next;
+        });
         setIsOnline(true);
         const activeSos = data.activeSosAlerts?.[tenantId];
         const myName = loggedInGuard?.fullName || allGuardsFromState(data)?.find((g) => g.id === guardId)?.fullName;
@@ -564,6 +584,17 @@ export default function App() {
       showToast('Clock in first to log patrol points', 'error');
       return;
     }
+    const cp = checkpoints.find((c) => c.id === checkpointId);
+    const patrolUi = getCheckpointPatrolUi(cp);
+    if (!patrolUi.canScan) {
+      showToast(
+        patrolUi.phase === 'waiting' && patrolUi.msUntilDue
+          ? `Next patrol in ${formatCountdown(patrolUi.msUntilDue)}`
+          : 'Point logged — wait for the next interval',
+        'info'
+      );
+      return;
+    }
     playNfcScan();
     scanRadius.current = 2;
     
@@ -575,7 +606,6 @@ export default function App() {
           lat = loc.lat;
           lng = loc.lng;
         } catch (_) { /* optional GPS */ }
-        const cp = checkpoints.find((c) => c.id === checkpointId);
         const res = await fetch(apiUrl('/api/state'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -593,6 +623,8 @@ export default function App() {
         });
         if (res.ok) {
           playNfcSuccess();
+          const now = new Date().toISOString();
+          setLocalScanTimes((prev) => ({ ...prev, [checkpointId]: now }));
           showToast(`Patrol point logged: ${cpName}`);
           fetchState();
         }
@@ -609,6 +641,7 @@ export default function App() {
     const queue = { ...offlineQueue };
     queue.patrols.push({ checkpointId, guardId, guardName, tenantId, premiseId, timestamp: new Date().toISOString() });
     saveQueueToStorage(queue);
+    setLocalScanTimes((prev) => ({ ...prev, [checkpointId]: new Date().toISOString() }));
     playNfcSuccess();
     showToast(`Scanned offline: ${cpName}`, 'info');
   };
@@ -979,20 +1012,36 @@ export default function App() {
     const linked = premiseId
       ? allCheckpoints.filter((cp) => cp.premiseId === premiseId)
       : allCheckpoints;
-    if (linked.length > 0 || !premiseId) return linked;
-    return (state?.places?.[premiseId] || []).map((place) => ({
-      id: `${tenantId}-cp-${place.id.slice(-6)}`,
-      name: place.name,
-      schedule: place.schedule || 'Every 30 mins',
-      status: 'Pending',
-      lastScanned: null,
-      premiseId,
-      placeId: place.id,
-      coordinates: place.coordinates,
-    }));
-  }, [allCheckpoints, premiseId, state?.places, tenantId]);
+    const base = linked.length > 0 || !premiseId
+      ? linked
+      : (state?.places?.[premiseId] || []).map((place) => ({
+          id: `${tenantId}-cp-${place.id.slice(-6)}`,
+          name: place.name,
+          schedule: place.schedule || 'Every 30 mins',
+          status: 'Pending',
+          lastScanned: null,
+          premiseId,
+          placeId: place.id,
+          coordinates: place.coordinates,
+        }));
+    return base.map((cp) => {
+      const lastScanned = localScanTimes[cp.id] || cp.lastScanned || null;
+      return {
+        ...cp,
+        lastScanned,
+        status: lastScanned ? 'Scanned' : cp.status,
+      };
+    });
+  }, [allCheckpoints, premiseId, state?.places, tenantId, localScanTimes]);
   const templates = state?.checklistTemplates[tenantId] || [];
   const offlineCount = offlineQueue.patrols.length + offlineQueue.incidents.length + offlineQueue.visitors.length + offlineQueue.checklists.length + (offlineQueue.sos?.length || 0);
+
+  // Re-render patrol countdown labels while on duty
+  useEffect(() => {
+    if (!isOnDuty || activeTab !== 'patrol') return undefined;
+    const timer = setInterval(() => setPatrolTick((n) => n + 1), 30000);
+    return () => clearInterval(timer);
+  }, [isOnDuty, activeTab]);
 
   // Calculate checklist completion percentage
   const template = templates.find(t => t.id === activeChecklistId);
@@ -1174,10 +1223,41 @@ export default function App() {
     showToast('Signed out securely', 'info');
   };
 
-  const scannedCount = checkpoints.filter((cp) => cp.status === 'Scanned').length;
-  const patrolPercent = checkpoints.length > 0 ? Math.round((scannedCount / checkpoints.length) * 100) : 0;
-  const overdueCount = checkpoints.filter((cp) => cp.status !== 'Scanned').length;
-  const patrolComplete = checkpoints.length > 0 && patrolPercent === 100;
+  const defaultPatrolIntervalMinutes = Number(state?.systemSettings?.defaultPatrolIntervalMinutes) || 30;
+  const patrolShiftProgress = useMemo(
+    () =>
+      computePatrolShiftProgress({
+        checkpoints,
+        occurrenceBook: state?.occurrenceBook || [],
+        guardId,
+        guardName,
+        premiseId,
+        myAttendance,
+        todayShifts,
+        defaultIntervalMinutes: defaultPatrolIntervalMinutes,
+        now: Date.now(),
+      }),
+    [
+      checkpoints,
+      state?.occurrenceBook,
+      guardId,
+      guardName,
+      premiseId,
+      myAttendance,
+      todayShifts,
+      defaultPatrolIntervalMinutes,
+      patrolTick,
+      localScanTimes,
+    ]
+  );
+  const patrolPercent = patrolShiftProgress.percent;
+  const patrolLogLabel = patrolShiftProgress.expected
+    ? `${patrolShiftProgress.completed}/${patrolShiftProgress.expected}`
+    : `0/${checkpoints.length}`;
+  const dueNowCount = checkpoints.filter((cp) => getCheckpointPatrolUi(cp).canScan).length;
+  const overdueCount = dueNowCount;
+  const patrolComplete =
+    patrolShiftProgress.expected > 0 && patrolShiftProgress.completed >= patrolShiftProgress.expected;
 
   const handleProfilePhoto = async () => {
     if (!guardId || photoBusy) return;
@@ -1445,8 +1525,8 @@ export default function App() {
               <div className="mob-victory-banner">
                 <Sparkles size={22} />
                 <div>
-                  <strong>Patrol complete!</strong>
-                  <span>All {checkpoints.length} patrol points logged.</span>
+                  <strong>Shift patrol target reached!</strong>
+                  <span>{patrolShiftProgress.completed} of {patrolShiftProgress.expected} logs for this shift.</span>
                 </div>
               </div>
             )}
@@ -1455,8 +1535,8 @@ export default function App() {
               <div className={`mob-duty-step ${isOnDuty ? 'done' : 'active'}`}>
                 <strong>1.</strong> Clock in
               </div>
-              <div className={`mob-duty-step ${isOnDuty ? (patrolComplete ? 'done' : 'active') : ''}`}>
-                <strong>2.</strong> Scan points ({scannedCount}/{checkpoints.length})
+              <div className={`mob-duty-step ${isOnDuty ? (dueNowCount > 0 ? 'active' : patrolShiftProgress.completed > 0 ? 'done' : '') : ''}`}>
+                <strong>2.</strong> Scan points ({patrolLogLabel})
               </div>
               <div className={`mob-duty-step ${patrolComplete ? 'done' : ''}`}>
                 <strong>3.</strong> Complete
@@ -1466,15 +1546,18 @@ export default function App() {
             {!isOnDuty && checkpoints.length > 0 && (
               <p className="mob-duty-hint">Clock in above, then log each patrol point when you reach it.</p>
             )}
+            {isOnDuty && dueNowCount > 0 && (
+              <p className="mob-duty-hint">{dueNowCount} point{dueNowCount !== 1 ? 's' : ''} ready to log now.</p>
+            )}
 
             <div className="mob-stat-row">
               <div className="mob-stat-chip">
-                <div className="value">{scannedCount}/{checkpoints.length}</div>
-                <div className="label">Points logged</div>
+                <div className="value">{patrolLogLabel}</div>
+                <div className="label">Shift logs</div>
               </div>
               <div className="mob-stat-chip">
                 <div className="value">{patrolPercent}%</div>
-                <div className="label">Progress</div>
+                <div className="label">Shift progress</div>
               </div>
               <div className={`mob-stat-chip ${isOnDuty ? 'highlight' : ''}`}>
                 <div className="value">{isOnDuty ? 'ON' : 'OFF'}</div>
@@ -1504,20 +1587,20 @@ export default function App() {
                     : 'No patrol points for this site. Ask your supervisor to add patrol points on the dashboard.'}
               </div>
             ) : (
-              checkpoints.map(cp => (
+              checkpoints.map(cp => {
+                const patrolUi = getCheckpointPatrolUi(cp);
+                return (
                 <div
                   key={cp.id}
-                  className={`mob-card mob-checkpoint ${cp.status === 'Scanned' ? 'done' : ''} ${!isOnDuty ? 'mob-checkpoint-locked' : ''}`}
+                  className={`mob-card mob-checkpoint ${patrolUi.isDoneVisual ? 'done' : ''} ${patrolUi.phase === 'waiting' ? 'waiting' : ''} ${!isOnDuty ? 'mob-checkpoint-locked' : ''}`}
                 >
                   <div className="mob-checkpoint-body">
                     <h4>{cp.name}</h4>
                     <div className="mob-checkpoint-tags">
                       <span className="mob-tag">{cp.schedule}</span>
-                      {cp.lastScanned ? (
-                        <span className="mob-tag success">✓ {new Date(cp.lastScanned).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      ) : (
-                        <span className="mob-tag">{isOnDuty ? 'Not scanned' : 'Clock in first'}</span>
-                      )}
+                      <span className={`mob-tag ${patrolUi.phase === 'done' ? 'success' : patrolUi.phase === 'waiting' ? 'waiting' : ''}`}>
+                        {patrolUi.tag}
+                      </span>
                     </div>
                   </div>
                   
@@ -1531,17 +1614,19 @@ export default function App() {
 
                   <button 
                     onClick={() => handleNfcTap(cp.id, cp.name)}
-                    disabled={!isOnDuty}
-                    className={`mob-btn mob-nfc-btn ${cp.status === 'Scanned' ? 'done' : ''}`}
+                    disabled={!isOnDuty || !patrolUi.canScan}
+                    className={`mob-btn mob-nfc-btn ${patrolUi.isDoneVisual ? 'done' : ''} ${patrolUi.phase === 'waiting' ? 'waiting' : ''}`}
                   >
-                    {cp.status === 'Scanned' ? (
+                    {patrolUi.phase === 'done' ? (
                       <><Check size={12} /> Done</>
+                    ) : patrolUi.phase === 'waiting' ? (
+                      <><Clock size={12} /> Waiting</>
                     ) : (
                       <><Zap size={12} /> Log scan</>
                     )}
                   </button>
                 </div>
-              ))
+              );})
             )}
           </div>
         )}

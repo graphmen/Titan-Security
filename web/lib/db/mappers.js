@@ -303,6 +303,7 @@ export function attendanceToRow(a, tenantId) {
 }
 
 export function rowToAttendance(r) {
+  const coords = r.lat != null ? { lat: r.lat, lng: r.lng } : null;
   return {
     id: r.id,
     guardId: r.guard_id,
@@ -311,8 +312,11 @@ export function rowToAttendance(r) {
     clockIn: r.clock_in,
     clockOut: r.clock_out,
     status: r.status,
-    coordinates: r.lat != null ? { lat: r.lat, lng: r.lng } : null,
+    coordinates: coords,
+    lastCoords: coords,
     lastHeartbeat: r.last_heartbeat,
+    // Persisted via last_heartbeat on movement ack / heartbeat — must round-trip for no-movement checks.
+    lastMovementAt: r.last_heartbeat || undefined,
     createdAt: r.created_at,
   };
 }

@@ -211,7 +211,7 @@ export function evaluateGuardMonitoring(state, tenantId, guardId, coords) {
 
   const noMovementMs = noMovementMsFromState(state);
   const noMovementMins = Math.round(noMovementMs / 60000);
-  const lastMove = new Date(record.lastMovementAt || record.clockIn).getTime();
+  const lastMove = new Date(record.lastMovementAt || record.lastHeartbeat || record.clockIn).getTime();
   if (Date.now() - lastMove >= noMovementMs) {
     record.needsMovementAck = true;
     pushGuardAlert(state, tenantId, {
@@ -222,6 +222,8 @@ export function evaluateGuardMonitoring(state, tenantId, guardId, coords) {
       premiseId: record.premiseId,
       message: `${guardName} has had no movement for ${noMovementMins}+ minutes — confirm patrol status.`,
     });
+  } else {
+    record.needsMovementAck = false;
   }
 
   if (coords?.lat) {

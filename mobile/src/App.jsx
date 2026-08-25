@@ -345,7 +345,13 @@ export default function App() {
   const handleMovementAck = async () => {
     if (!guardId) return;
     try {
-      const { lat, lng } = await getLocation();
+      let lat;
+      let lng;
+      try {
+        ({ lat, lng } = await getLocation());
+      } catch {
+        /* Confirm OK even when GPS is unavailable indoors */
+      }
       await postStateAction(apiBase, {
         action: 'GUARD_MOVEMENT_ACK',
         guardId,
@@ -354,6 +360,21 @@ export default function App() {
         lng,
       });
       movementAlertPlayed.current = false;
+      setState((prev) => {
+        if (!prev?.attendance?.[tenantId]) return prev;
+        const now = new Date().toISOString();
+        return {
+          ...prev,
+          attendance: {
+            ...prev.attendance,
+            [tenantId]: prev.attendance[tenantId].map((a) =>
+              a.guardId === guardId && (a.status === 'On Duty' || a.status === 'Late')
+                ? { ...a, needsMovementAck: false, lastMovementAt: now, lastHeartbeat: now }
+                : a
+            ),
+          },
+        };
+      });
       showToast('Patrol status confirmed — supervisor notified');
       fetchState();
     } catch (e) {

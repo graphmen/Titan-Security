@@ -361,8 +361,8 @@ export function processLocalAction(payload) {
       break;
     }
     case 'REGISTER_VISITOR': {
-      const { name, idNumber, company, vehiclePlate } = payload;
-      state.visitors.unshift({
+      const { name, idNumber, company, vehiclePlate, guardId, guardName } = payload;
+      const visitor = {
         id: `v-${Date.now()}`,
         tenantId,
         name,
@@ -372,8 +372,11 @@ export function processLocalAction(payload) {
         checkInTime: new Date().toISOString(),
         checkOutTime: null,
         status: 'Active',
-      });
-      break;
+        registeredByGuardId: guardId || null,
+        registeredByGuardName: guardName || null,
+      };
+      state.visitors.unshift(visitor);
+      return { success: true, visitorId: visitor.id, visitor };
     }
     case 'CHECKOUT_VISITOR': {
       const { visitorId } = payload;

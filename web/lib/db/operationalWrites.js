@@ -225,7 +225,10 @@ export async function persistOperationalActionToDb(action, payload, tenantId, st
       break;
     }
     case 'REGISTER_VISITOR': {
-      const visitor = (state.visitors || [])[0];
+      const visitorId = actionResult.visitorId;
+      const visitor =
+        (visitorId && (state.visitors || []).find((v) => v.id === visitorId))
+        || (state.visitors || [])[0];
       if (visitor) {
         await requireDbOk(
           await db.from('visitors').upsert({

@@ -774,6 +774,8 @@ export default function App() {
 
     const payload = {
       tenantId,
+      guardId,
+      guardName,
       name: vName,
       idNumber: vIdNumber,
       company: vCompany,
@@ -808,7 +810,7 @@ export default function App() {
 
   const queueVisitor = (payload) => {
     const queue = { ...offlineQueue };
-    queue.visitors.push(payload);
+    queue.visitors.push({ ...payload, guardId, guardName });
     saveQueueToStorage(queue);
     showToast(`Visitor queued offline: ${vName}`, 'info');
     setVName('');
@@ -816,6 +818,25 @@ export default function App() {
     setVCompany('');
     setVPlate('');
   };
+
+  const handleCheckoutVisitor = async (visitorId) => {
+    try {
+      await postStateAction(apiBase, {
+        action: 'CHECKOUT_VISITOR',
+        tenantId,
+        visitorId,
+        guardId,
+      });
+      showToast('Visitor checked out');
+      fetchState();
+    } catch (e) {
+      showToast(e.message || 'Could not check out visitor', 'error');
+    }
+  };
+
+  const activeVisitors = (state?.visitors || []).filter(
+    (v) => v.tenantId === tenantId && v.status === 'Active'
+  );
 
   // Complete Checklist
   const handleSubmitChecklist = async (e) => {
@@ -2153,6 +2174,23 @@ export default function App() {
                 <UserCheck size={16} /> Register Access Entry
               </button>
             </form>
+
+            {activeVisitors.length > 0 && (
+              <div className="mob-card" style={{ marginTop: '0.75rem' }}>
+                <div className="mob-card-label">Active on site ({activeVisitors.length})</div>
+                {activeVisitors.map((v) => (
+                  <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0', borderBottom: '1px solid var(--mob-border)' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{v.name}</div>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--mob-text-muted)' }}>{v.company || '—'} · {v.idNumber}</div>
+                    </div>
+                    <button type="button" className="mob-btn mob-btn-secondary mob-btn-sm" onClick={() => handleCheckoutVisitor(v.id)}>
+                      Check out
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

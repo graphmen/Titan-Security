@@ -19,6 +19,8 @@ export const PUBLIC_ACTIONS = new Set([
   'LOG_INCIDENT',
   'SUBMIT_CHECKLIST',
   'REQUEST_SHIFT_SWAP',
+  'REGISTER_VISITOR',
+  'CHECKOUT_VISITOR',
 ]);
 
 export const ADMIN_ONLY_ACTIONS = new Set([
@@ -62,6 +64,8 @@ export const GUARD_MOBILE_ACTIONS = new Set([
   'UPDATE_GUARD_PHOTO',
   'WELFARE_ACK',
   'ACK_SHIFT_HANDOVER',
+  'REGISTER_VISITOR',
+  'CHECKOUT_VISITOR',
 ]);
 
 function getSecret() {

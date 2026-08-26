@@ -23,6 +23,7 @@ import {
   generateSwapId,
   todayDateStr,
   isWithinPremiseGeofence,
+  haversineMeters,
   isValidGpsCoord,
   getGuardName,
   getActiveAttendanceForGuard,
@@ -273,7 +274,7 @@ export function processLocalAction(payload) {
 
   switch (action) {
     case 'TAP_NFC': {
-      const { checkpointId, guardName: rawName, guardId, lat, lng, nfcTagId } = payload;
+      const { checkpointId, guardName: rawName, guardId, lat, lng, accuracyMeters, nfcTagId } = payload;
       const { guardName } = resolveGuard(guardId, rawName);
       const checkpointList = state.checkpoints[tenantId] || [];
       const checkpoint = checkpointList.find((cp) => cp.id === checkpointId);
@@ -284,10 +285,56 @@ export function processLocalAction(payload) {
         return { error: 'NFC tag does not match this checkpoint', status: 403 };
       }
 
+      const geofenceRadius = getGeofenceRadius(state);
+      const premiseList = state.premises[tenantId] || [];
+      const premise = premiseList.find((p) => p.id === checkpoint.premiseId);
+      const targetCoords = isValidGpsCoord(checkpoint.coordinates?.lat, checkpoint.coordinates?.lng)
+        ? checkpoint.coordinates
+        : premise?.coordinates;
+
+      if (!isValidGpsCoord(targetCoords?.lat, targetCoords?.lng)) {
+        return {
+          error: 'This patrol point has no GPS coordinates — ask a supervisor to set the location on the dashboard',
+          status: 403,
+        };
+      }
+
+      const coords = { lat: parseFloat(lat), lng: parseFloat(lng) };
+      if (!isValidGpsCoord(coords.lat, coords.lng)) {
+        return { error: 'GPS required — enable location and move to the patrol point', status: 403 };
+      }
+
+      const gpsCheck = hasPremiumFeature(state, tenantId, 'gpsAntiSpoof')
+        ? validateGuardLocation(
+            { lat, lng, accuracyMeters, mock: payload.mock, isMock: payload.isMock },
+            null
+          )
+        : { ok: true };
+      if (!gpsCheck.ok) {
+        appendAuditLog(state, {
+          tenantId,
+          action: 'GPS_REJECTED_PATROL_TAP',
+          guardId,
+          checkpointId,
+          reason: gpsCheck.error,
+          flags: gpsCheck.flags,
+        });
+        return { error: gpsCheck.error, status: 403 };
+      }
+      if (!isClockInAccuracyAcceptable(accuracyMeters, geofenceRadius)) {
+        return { error: clockInAccuracyError(accuracyMeters, geofenceRadius), status: 403 };
+      }
+      if (!isWithinPremiseGeofence(coords, targetCoords, geofenceRadius)) {
+        const dist = haversineMeters(coords.lat, coords.lng, targetCoords.lat, targetCoords.lng);
+        return {
+          error: `You must be within ${geofenceRadius}m of ${checkpoint.name} (currently ~${Math.round(dist)}m away)`,
+          status: 403,
+        };
+      }
+
       checkpoint.status = 'Scanned';
       checkpoint.lastScanned = new Date().toISOString();
       if (guardId) {
-        const coords = lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : checkpoint.coordinates;
         recordGuardMovement(state, tenantId, guardId, coords);
       }
       dismissGuardAlerts(state, tenantId, guardId, 'overdue_patrol');
@@ -298,7 +345,7 @@ export function processLocalAction(payload) {
         timestamp: new Date().toISOString(),
         guardName,
         type: 'Patrol Tap',
-        description: `${scanMethod} at ${checkpoint.premiseName ? checkpoint.premiseName + ' — ' : ''}${checkpoint.name} (${checkpoint.code}). GPS verified.`,
+        description: `${scanMethod} at ${checkpoint.premiseName ? checkpoint.premiseName + ' — ' : ''}${checkpoint.name} (${checkpoint.code}). Within ${geofenceRadius}m geofence.`,
         status: 'Resolved',
         attachments: { photo: null, voice: null },
         premiseId: checkpoint.premiseId || null,

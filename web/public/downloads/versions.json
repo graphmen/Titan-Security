@@ -4,10 +4,10 @@
                     "appId":  "monitor",
                     "name":  "Titan Monitor",
                     "description":  "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
-                    "version":  "1.0.29",
-                    "versionCode":  29,
+                    "version":  "1.0.30",
+                    "versionCode":  30,
                     "apkFile":  "titan-monitor-latest.apk",
-                    "notes":  "Fix: visitor registrations from Access tab now sync to Command Centre; active visitors list with checkout on mobile."
+                    "notes":  "Fix: patrol log scan requires GPS within clock-in zone (geofence enforced on app and server)."
                 },
     "supervisor":  {
                        "appId":  "supervisor",

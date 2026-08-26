@@ -54,6 +54,7 @@ import {
 } from './utils/patrolProgress';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
 import { getLocation, getLocationForClockIn, initLocationPermissionFlow } from './utils/location';
+import { haversineMeters, isWithinRadiusMeters } from './utils/navigation';
 import { startVoiceMemo } from './utils/voice';
 import { scanQrFromCamera, stopQrScanner } from './utils/qrScan';
 import { parseVisitorQr } from './utils/visitorQr';
@@ -133,6 +134,7 @@ export default function App() {
   /** Optimistic last-scan times (incl. offline taps) for interval UI. */
   const [localScanTimes, setLocalScanTimes] = useState({});
   const [patrolTick, setPatrolTick] = useState(0);
+  const [guardPos, setGuardPos] = useState(null);
 
   const [swapForm, setSwapForm] = useState({ shiftId: '', targetGuardId: '', reason: '' });
   const movementAlertPlayed = useRef(false);
@@ -457,6 +459,11 @@ export default function App() {
             guardId: item.guardId,
             guardName: item.guardName,
             tenantId: item.tenantId,
+            premiseId: item.premiseId,
+            lat: item.lat,
+            lng: item.lng,
+            accuracyMeters: item.accuracyMeters,
+            nfcTagId: item.nfcTagId ?? null,
           });
           syncCount++;
         } catch {
@@ -578,6 +585,26 @@ export default function App() {
 
   const playMovementAlertBeepLocal = playMovementAlertBeep;
 
+  const resolvePatrolTargetCoords = (cp, premise) => {
+    if (cp?.coordinates?.lat != null && cp?.coordinates?.lng != null) return cp.coordinates;
+    return premise?.coordinates || null;
+  };
+
+  const validatePatrolTapZone = (cp, premise, lat, lng, radiusMeters) => {
+    const target = resolvePatrolTargetCoords(cp, premise);
+    if (!target?.lat) {
+      return { ok: false, error: 'Patrol point has no GPS — contact your supervisor' };
+    }
+    if (!isWithinRadiusMeters(lat, lng, target.lat, target.lng, radiusMeters)) {
+      const dist = haversineMeters(lat, lng, target.lat, target.lng);
+      return {
+        ok: false,
+        error: `Too far from ${cp?.name || 'patrol point'} — ${Math.round(dist)}m away (need within ${radiusMeters}m)`,
+      };
+    }
+    return { ok: true };
+  };
+
   // NFC Tap
   const handleNfcTap = async (checkpointId, cpName) => {
     if (!isOnDuty) {
@@ -597,49 +624,70 @@ export default function App() {
     }
     playNfcScan();
     scanRadius.current = 2;
-    
+
+    let lat;
+    let lng;
+    let accuracy;
+    try {
+      const loc = await getLocationForClockIn(geofenceRadius);
+      lat = loc.lat;
+      lng = loc.lng;
+      accuracy = loc.accuracy;
+    } catch (e) {
+      showToast(e.message || 'GPS required — enable location and move to the patrol point', 'error');
+      return;
+    }
+
+    const zoneCheck = validatePatrolTapZone(cp, activePremise, lat, lng, geofenceRadius);
+    if (!zoneCheck.ok) {
+      showToast(zoneCheck.error, 'error');
+      return;
+    }
+
+    const tapPayload = {
+      action: 'TAP_NFC',
+      checkpointId,
+      guardId,
+      guardName,
+      tenantId,
+      premiseId,
+      lat,
+      lng,
+      accuracyMeters: accuracy,
+      nfcTagId: cp?.code || null,
+    };
+
     if (isOnline) {
       try {
-        let lat, lng;
-        try {
-          const loc = await getLocation();
-          lat = loc.lat;
-          lng = loc.lng;
-        } catch (_) { /* optional GPS */ }
         const res = await fetch(apiUrl('/api/state'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'TAP_NFC',
-            checkpointId,
-            guardId,
-            guardName,
-            tenantId,
-            premiseId,
-            lat,
-            lng,
-            nfcTagId: cp?.code || null,
-          }),
+          body: JSON.stringify(tapPayload),
         });
+        const json = await res.json().catch(() => ({}));
         if (res.ok) {
           playNfcSuccess();
           const now = new Date().toISOString();
           setLocalScanTimes((prev) => ({ ...prev, [checkpointId]: now }));
           showToast(`Patrol point logged: ${cpName}`);
           fetchState();
+        } else {
+          showToast(json.error || 'Could not log patrol point', 'error');
         }
       } catch (e) {
-        showToast('Connection lost — saved offline', 'error');
-        queuePatrolTap(checkpointId, cpName);
+        showToast(e.message || 'Connection lost — patrol not saved', 'error');
       }
     } else {
-      queuePatrolTap(checkpointId, cpName);
+      queuePatrolTap(checkpointId, cpName, tapPayload);
     }
   };
 
-  const queuePatrolTap = (checkpointId, cpName) => {
+  const queuePatrolTap = (checkpointId, cpName, tapPayload) => {
     const queue = { ...offlineQueue };
-    queue.patrols.push({ checkpointId, guardId, guardName, tenantId, premiseId, timestamp: new Date().toISOString() });
+    queue.patrols.push({
+      ...tapPayload,
+      timestamp: new Date().toISOString(),
+    });
     saveQueueToStorage(queue);
     setLocalScanTimes((prev) => ({ ...prev, [checkpointId]: new Date().toISOString() }));
     playNfcSuccess();
@@ -1062,6 +1110,29 @@ export default function App() {
     if (!isOnDuty || activeTab !== 'patrol') return undefined;
     const timer = setInterval(() => setPatrolTick((n) => n + 1), 30000);
     return () => clearInterval(timer);
+  }, [isOnDuty, activeTab]);
+
+  // Live GPS for patrol geofence UI
+  useEffect(() => {
+    if (!isOnDuty || activeTab !== 'patrol') {
+      setGuardPos(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const loc = await getLocation();
+        if (!cancelled) setGuardPos(loc);
+      } catch {
+        if (!cancelled) setGuardPos(null);
+      }
+    };
+    refresh();
+    const timer = setInterval(refresh, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [isOnDuty, activeTab]);
 
   // Calculate checklist completion percentage
@@ -1610,6 +1681,18 @@ export default function App() {
             ) : (
               checkpoints.map(cp => {
                 const patrolUi = getCheckpointPatrolUi(cp);
+                const targetCoords = resolvePatrolTargetCoords(cp, activePremise);
+                const outsideZone =
+                  patrolUi.canScan &&
+                  targetCoords?.lat != null &&
+                  guardPos &&
+                  !isWithinRadiusMeters(
+                    guardPos.lat,
+                    guardPos.lng,
+                    targetCoords.lat,
+                    targetCoords.lng,
+                    geofenceRadius
+                  );
                 return (
                 <div
                   key={cp.id}
@@ -1635,13 +1718,15 @@ export default function App() {
 
                   <button 
                     onClick={() => handleNfcTap(cp.id, cp.name)}
-                    disabled={!isOnDuty || !patrolUi.canScan}
-                    className={`mob-btn mob-nfc-btn ${patrolUi.isDoneVisual ? 'done' : ''} ${patrolUi.phase === 'waiting' ? 'waiting' : ''}`}
+                    disabled={!isOnDuty || !patrolUi.canScan || outsideZone}
+                    className={`mob-btn mob-nfc-btn ${patrolUi.isDoneVisual ? 'done' : ''} ${patrolUi.phase === 'waiting' ? 'waiting' : ''} ${outsideZone ? 'outside-zone' : ''}`}
                   >
                     {patrolUi.phase === 'done' ? (
                       <><Check size={12} /> Done</>
                     ) : patrolUi.phase === 'waiting' ? (
                       <><Clock size={12} /> Waiting</>
+                    ) : outsideZone ? (
+                      <><MapPin size={12} /> Move closer</>
                     ) : (
                       <><Zap size={12} /> Log scan</>
                     )}

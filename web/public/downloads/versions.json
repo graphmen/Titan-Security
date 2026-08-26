@@ -1,13 +1,13 @@
 {
-    "updatedAt":  "2026-08-26T03:28:28.851Z",
+    "updatedAt":  "2026-08-26T03:42:29.085Z",
     "monitor":  {
                     "appId":  "monitor",
                     "name":  "Titan Monitor",
                     "description":  "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
                     "version":  "1.0.30",
-                    "versionCode":  30,
+                    "versionCode":  26,
                     "apkFile":  "titan-monitor-latest.apk",
-                    "notes":  "Fix: patrol log scan requires GPS within clock-in zone (geofence enforced on app and server)."
+                    "notes":  "Published 2026-08-26 05:42"
                 },
     "supervisor":  {
                        "appId":  "supervisor",
@@ -16,6 +16,6 @@
                        "version":  "1.2.5",
                        "versionCode":  25,
                        "apkFile":  "titan-supervisor-latest.apk",
-                       "notes":  "Published 2026-08-26 05:28"
+                       "notes":  "Published 2026-08-26 05:42"
                    }
 }

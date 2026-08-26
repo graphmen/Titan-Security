@@ -1,13 +1,13 @@
 {
-    "updatedAt":  "2026-08-25T20:26:48.125Z",
+    "updatedAt":  "2026-08-26T03:28:28.851Z",
     "monitor":  {
                     "appId":  "monitor",
                     "name":  "Titan Monitor",
                     "description":  "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
-                    "version":  "1.0.28",
-                    "versionCode":  28,
+                    "version":  "1.0.29",
+                    "versionCode":  29,
                     "apkFile":  "titan-monitor-latest.apk",
-                    "notes":  "Recurring patrol intervals: points reset after 5 min wait for next scan; shift progress based on shift length and interval."
+                    "notes":  "Fix: visitor registrations from Access tab now sync to Command Centre; active visitors list with checkout on mobile."
                 },
     "supervisor":  {
                        "appId":  "supervisor",
@@ -16,6 +16,6 @@
                        "version":  "1.2.5",
                        "versionCode":  25,
                        "apkFile":  "titan-supervisor-latest.apk",
-                       "notes":  "Published 2026-08-25 22:26"
+                       "notes":  "Published 2026-08-26 05:28"
                    }
 }

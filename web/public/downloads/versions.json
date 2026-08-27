@@ -1,13 +1,13 @@
 {
-    "updatedAt":  "2026-08-26T03:42:29.085Z",
+    "updatedAt":  "2026-08-27T01:46:43.663Z",
     "monitor":  {
                     "appId":  "monitor",
                     "name":  "Titan Monitor",
                     "description":  "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
                     "version":  "1.0.31",
-                    "versionCode":  31,
+                    "versionCode":  26,
                     "apkFile":  "titan-monitor-latest.apk",
-                    "notes":  "Fix: relaxed GPS for clock-out at premises (±15m) so guards can end shift on site."
+                    "notes":  "Published 2026-08-27 03:46"
                 },
     "supervisor":  {
                        "appId":  "supervisor",
@@ -16,6 +16,6 @@
                        "version":  "1.2.5",
                        "versionCode":  25,
                        "apkFile":  "titan-supervisor-latest.apk",
-                       "notes":  "Published 2026-08-26 05:42"
+                       "notes":  "Published 2026-08-27 03:46"
                    }
 }

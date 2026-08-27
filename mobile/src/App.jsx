@@ -53,7 +53,7 @@ import {
   getCheckpointPatrolUi,
 } from './utils/patrolProgress';
 import { captureIncidentPhoto, pickProfilePhoto } from './utils/camera';
-import { getLocation, getLocationForClockIn, initLocationPermissionFlow } from './utils/location';
+import { getLocation, getLocationForClockIn, getLocationForClockOut, initLocationPermissionFlow } from './utils/location';
 import { haversineMeters, isWithinRadiusMeters } from './utils/navigation';
 import { startVoiceMemo } from './utils/voice';
 import { scanQrFromCamera, stopQrScanner } from './utils/qrScan';
@@ -334,7 +334,7 @@ export default function App() {
     if (!guardId) return;
     const handoverNotes = window.prompt('Shift handover notes for relief guard (optional):') ?? '';
     try {
-      const { lat, lng, accuracy } = await getLocationForClockIn();
+      const { lat, lng, accuracy } = await getLocationForClockOut();
       await postStateAction(apiBase, {
         action: 'GUARD_CLOCK_OUT',
         guardId,
@@ -349,7 +349,13 @@ export default function App() {
       missedClockOutPlayed.current = null;
       fetchState();
     } catch (e) {
-      showToast(e.message || 'Clock-out failed — you must be at the premises geofence', 'error');
+      const premiseCoords = activePremise?.coordinates;
+      const msg = String(e.message || '');
+      if (premiseCoords?.lat != null && msg.includes('Could not')) {
+        showToast('Getting GPS for clock-out — move to open sky, hold still, then try again', 'error');
+        return;
+      }
+      showToast(msg || 'Clock-out failed — return to premises and try again', 'error');
     }
   };
 

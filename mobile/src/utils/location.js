@@ -405,6 +405,8 @@ export async function getLocation() {
 
 export const PREMISE_MAX_ACCURACY_METERS = 5;
 export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 5;
+export const GUARD_CLOCKOUT_MAX_ACCURACY_METERS = 15;
+export const GUARD_CLOCKOUT_FALLBACK_ACCURACY_METERS = 25;
 export const PREMISE_CAPTURE_TIMEOUT_MS = 45000;
 export const PREMISE_GPS_WARMUP_MS = 6000;
 export const PREMISE_GPS_STABILIZE_MS = 5000;
@@ -416,6 +418,13 @@ const premiseCaptureOptions = {
   stabilizeMs: PREMISE_GPS_STABILIZE_MS,
   minSamples: PREMISE_GPS_MIN_SAMPLES,
   maxSpreadMeters: PREMISE_GPS_MAX_SPREAD_METERS,
+};
+
+const clockOutCaptureOptions = {
+  warmupMs: 3000,
+  stabilizeMs: 2500,
+  minSamples: 2,
+  maxSpreadMeters: 10,
 };
 
 /** High-accuracy GPS for registering premises or patrol places on site. */
@@ -473,4 +482,56 @@ export async function getLocationForClockIn(maxAccuracyMeters = GUARD_CLOCKIN_MA
     }
   }
   return webWatchBestPosition(target, PREMISE_CAPTURE_TIMEOUT_MS, premiseCaptureOptions);
+}
+
+async function watchBestPositionForClockOut() {
+  const target = GUARD_CLOCKOUT_MAX_ACCURACY_METERS;
+  const timeoutMs = 35000;
+
+  if (Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('TitanLocation')) {
+    try {
+      return await titanWatchBestPosition(target, timeoutMs, clockOutCaptureOptions);
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) throw err;
+    }
+  }
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      if (canUseCapacitorGeolocation()) {
+        await ensureNativePermissions();
+        return webWatchBestPosition(target, timeoutMs, clockOutCaptureOptions);
+      }
+    } catch (err) {
+      if (!isPluginNotImplemented(err)) throw err;
+    }
+  }
+
+  return webWatchBestPosition(target, timeoutMs, clockOutCaptureOptions);
+}
+
+/** Relaxed GPS for clock-out — accepts ±15m, falls back to best fix up to ±25m. */
+export async function getLocationForClockOut() {
+  const perm = await requestLocationPermission();
+  if (!perm.granted) {
+    throw new Error('Precise location permission required — enable GPS in your phone Settings');
+  }
+
+  try {
+    return await watchBestPositionForClockOut();
+  } catch (primaryErr) {
+    try {
+      const loc = await getLocation();
+      if (
+        loc.accuracy != null &&
+        loc.accuracy > 0 &&
+        loc.accuracy <= GUARD_CLOCKOUT_FALLBACK_ACCURACY_METERS
+      ) {
+        return loc;
+      }
+    } catch {
+      /* use primary error below */
+    }
+    throw primaryErr;
+  }
 }

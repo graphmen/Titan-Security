@@ -52,6 +52,31 @@ export function isWithinPremiseGeofence(guardCoords, premiseCoords, radiusMeters
   return haversineMeters(guardCoords.lat, guardCoords.lng, premiseCoords.lat, premiseCoords.lng) <= radius;
 }
 
+/** Clock-out geofence — adds GPS uncertainty buffer so guards at site can end shift. */
+export function isWithinPremiseGeofenceForClockOut(
+  guardCoords,
+  premiseCoords,
+  radiusMeters = GEOFENCE_DEFAULT_METERS,
+  accuracyMeters = null,
+  maxAccuracyBuffer = 15
+) {
+  if (!isValidGpsCoord(premiseCoords?.lat, premiseCoords?.lng)) return false;
+  if (!isValidGpsCoord(guardCoords?.lat, guardCoords?.lng)) return false;
+  const radius = normalizeGeofenceRadius(radiusMeters);
+  const dist = haversineMeters(
+    guardCoords.lat,
+    guardCoords.lng,
+    premiseCoords.lat,
+    premiseCoords.lng
+  );
+  const accuracy = Number(accuracyMeters);
+  const buffer =
+    Number.isFinite(accuracy) && accuracy > 0
+      ? Math.min(accuracy, maxAccuracyBuffer)
+      : 0;
+  return dist <= radius + buffer;
+}
+
 export function parseShiftMinutes(timeStr) {
   const [h, m] = (timeStr || '00:00').split(':').map(Number);
   return h * 60 + m;

@@ -1,8 +1,12 @@
 import {
   isPremiseAccuracyAcceptable,
   isClockInAccuracyAcceptable,
+  isClockOutAccuracyAcceptable,
   premiseAccuracyError,
   clockInAccuracyError,
+  clockOutAccuracyError,
+  GUARD_CLOCKOUT_MAX_ACCURACY_METERS,
+  formatAccuracyMeters,
 } from './gpsAccuracy.js';
 import {
   generatePremiseId,
@@ -23,6 +27,7 @@ import {
   generateSwapId,
   todayDateStr,
   isWithinPremiseGeofence,
+  isWithinPremiseGeofenceForClockOut,
   haversineMeters,
   isValidGpsCoord,
   getGuardName,
@@ -959,12 +964,21 @@ export function processLocalAction(payload) {
       if (!isValidGpsCoord(coords.lat, coords.lng)) {
         return { error: 'Could not verify your GPS location — enable location and try again', status: 403 };
       }
-      if (!isClockInAccuracyAcceptable(accuracyMeters, geofenceRadius)) {
-        return { error: clockInAccuracyError(accuracyMeters, geofenceRadius), status: 403 };
+      if (!isClockOutAccuracyAcceptable(accuracyMeters)) {
+        return { error: clockOutAccuracyError(accuracyMeters), status: 403 };
       }
-      if (!isWithinPremiseGeofence(coords, premiseCoords, geofenceRadius)) {
+      if (
+        !isWithinPremiseGeofenceForClockOut(
+          coords,
+          premiseCoords,
+          geofenceRadius,
+          accuracyMeters,
+          GUARD_CLOCKOUT_MAX_ACCURACY_METERS
+        )
+      ) {
+        const dist = haversineMeters(coords.lat, coords.lng, premiseCoords.lat, premiseCoords.lng);
         return {
-          error: `You must be at the premises to clock out (within ${geofenceRadius}m GPS geofence)`,
+          error: `You must be at the premises to clock out (within ${geofenceRadius}m — currently ~${Math.round(dist)}m away, GPS ${formatAccuracyMeters(accuracyMeters)})`,
           status: 403,
         };
       }

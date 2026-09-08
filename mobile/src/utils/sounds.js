@@ -92,6 +92,15 @@ export function playShiftReminderBeep() {
   } catch (_) { /* ignore */ }
 }
 
+/** Patrol point due — short repeating chime */
+export function playPatrolDueBeep() {
+  try {
+    tone({ freq: 740, vol: 0.17, dur: 0.14 });
+    tone({ freq: 988, start: 0.16, vol: 0.19, dur: 0.16 });
+    if (navigator.vibrate) navigator.vibrate([25, 35, 25]);
+  } catch (_) { /* ignore */ }
+}
+
 /** Missed clock-out reminder — urgent double tone */
 export function playMissedClockOutBeep() {
   try {

@@ -38,13 +38,19 @@ import {
   LogOut,
   Crown,
   Lock,
+  History,
+  Package,
 } from 'lucide-react';
 import PremisesRegistration from './components/PremisesRegistration';
 import GuardManagement from './components/GuardManagement';
 import SupervisorManagement from './components/SupervisorManagement';
 import SystemSettings from './components/SystemSettings';
 import DatabaseExplorer from './components/DatabaseExplorer';
+import HistoryPanel from './components/HistoryPanel';
+import ReportExportPanel from './components/ReportExportPanel';
+import EquipmentRegister from './components/EquipmentRegister';
 import { mergeSystemSettings } from '../lib/systemSettings';
+import { getLiveOccurrenceBook, getOccurrenceHistory, getLiveVisitors, formatObDateTime } from '../lib/historyArchive';
 import { apiFetch } from '../lib/apiClient';
 import { tenantRows } from '../lib/safeData';
 import { useRouter } from 'next/navigation';
@@ -265,6 +271,21 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDismissAllAlerts = async () => {
+    try {
+      await apiFetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'DISMISS_ALERTS_BY_TYPE', tenantId: state?.activeTenantId || 'titan' }),
+      });
+      fetchState({ force: true });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const formatObTimestamp = formatObDateTime;
+
   // Reset patrols
   const handleResetPatrols = async () => {
     try {
@@ -422,8 +443,9 @@ export default function DashboardPage() {
 
   const tenantKey = state.activeTenantId || 'titan';
   const curCheckpoints = tenantRows(state.checkpoints, tenantKey);
-  const curOB = (state.occurrenceBook || []).filter((item) => item.tenantId === tenantKey);
-  const curVisitors = (state.visitors || []).filter((item) => item.tenantId === tenantKey);
+  const curOB = getLiveOccurrenceBook(state, tenantKey);
+  const obHistory = getOccurrenceHistory(state, tenantKey);
+  const curVisitors = getLiveVisitors(state, tenantKey);
   const curTemplates = tenantRows(state.checklistTemplates, tenantKey);
   const curSubmissions = (state.checklistSubmissions || []).filter((item) => item.tenantId === tenantKey);
   const activeSos = state.activeSosAlerts?.[tenantKey];
@@ -510,6 +532,22 @@ export default function DashboardPage() {
             </button>
           </li>
           <li>
+            <button
+              className={`sidebar-nav-item ${activeTab === 'history' ? 'active' : ''}`}
+              onClick={() => selectTab('history')}
+            >
+              <History size={18} /> Operations History
+            </button>
+          </li>
+          <li>
+            <button
+              className={`sidebar-nav-item ${activeTab === 'equipment' ? 'active' : ''}`}
+              onClick={() => selectTab('equipment')}
+            >
+              <Package size={18} /> Equipment Register
+            </button>
+          </li>
+          <li>
             <button 
               className={`sidebar-nav-item ${activeTab === 'data' ? 'active' : ''}`}
               onClick={() => selectTab('data')}
@@ -586,7 +624,7 @@ export default function DashboardPage() {
           <div className="page-header-main">
             <h1 className="page-title">
               {activeTab === 'supervisors' ? 'Supervisor & Territory Management'
-                : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'map' ? 'GIS Operations Map' : activeTab === 'command' ? 'Command Centre Operations' : activeTab === 'data' ? 'Database Explorer' : 'Master Administration'}
+                : activeTab === 'guards' ? 'Guard Management' : activeTab === 'premises' ? 'Register Protected Premises' : activeTab === 'map' ? 'GIS Operations Map' : activeTab === 'command' ? 'Command Centre Operations' : activeTab === 'history' ? 'Operations History' : activeTab === 'equipment' ? 'Equipment Register' : activeTab === 'data' ? 'Database Explorer' : 'Master Administration'}
             </h1>
             <p className="page-subtitle">
               {activeTab === 'supervisors'
@@ -598,7 +636,11 @@ export default function DashboardPage() {
                 : activeTab === 'map'
                 ? 'GIS operations map — premises, patrol routes, live guards, NFC scans, alerts, and activity in one view.'
                 : activeTab === 'command' 
-                ? 'Real-time patrol monitoring, incident updates, and visitor tracking logs.' 
+                ? 'Real-time patrol monitoring, incident updates, and visitor tracking logs.'
+                : activeTab === 'history'
+                ? 'Browse archived occurrence book entries and visitor register logs older than 24 hours.'
+                : activeTab === 'equipment'
+                ? 'Track radios, uniforms, keys, and assets issued to guards per site.'
                 : activeTab === 'data'
                 ? 'Browse every collection in the live database — search, inspect JSON, and export records.'
                 : 'Configure onboarding templates, review custom checklists, and manage server data.'}
@@ -767,8 +809,13 @@ export default function DashboardPage() {
             {criticalGuardAlerts.length > 0 && (
               <div className="col-12" style={{ marginBottom: '0.5rem' }}>
                 <div className="glass-panel" style={{ padding: '0.75rem 1rem', background: '#fef2f2', border: '1px solid #fecaca' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <AlertTriangle size={14} /> Guard Alerts ({criticalGuardAlerts.length})
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <AlertTriangle size={14} /> Guard Alerts ({criticalGuardAlerts.length})
+                    </span>
+                    <button type="button" className="btn-secondary" style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }} onClick={handleDismissAllAlerts}>
+                      Clear all
+                    </button>
                   </div>
                   {criticalGuardAlerts.slice(0, 5).map((a) => (
                     <div key={a.id} style={{ fontSize: '0.75rem', color: '#7f1d1d', marginBottom: '0.25rem' }}>{a.message}</div>
@@ -785,12 +832,17 @@ export default function DashboardPage() {
                   </h3>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <a href={`/api/reports?type=summary&tenantId=${state.activeTenantId}`} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', textDecoration: 'none' }}>
-                      Export summary CSV
-                    </a>
-                    <a href={`/api/reports?type=incidents&tenantId=${state.activeTenantId}`} className="btn-secondary" style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', textDecoration: 'none' }}>
-                      Export incidents CSV
+                      Quick summary CSV
                     </a>
                   </div>
+                </div>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <ReportExportPanel
+                    tenantId={state.activeTenantId}
+                    guards={curGuards}
+                    premises={curPremises}
+                    isPremium={isPremium}
+                  />
                 </div>
                 <GuardStatusBoard state={state} tenantId={state.activeTenantId} />
               </div>
@@ -864,6 +916,7 @@ export default function DashboardPage() {
                 <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
                   <BookOpen size={18} style={{ color: 'var(--color-primary)' }} /> 
                   Occurrence Book (OB)
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-dimmed)', fontWeight: 500 }}>Last 24h · {obHistory.length} in history</span>
                 </h3>
                 
                 <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.25rem' }}>
@@ -884,7 +937,7 @@ export default function DashboardPage() {
                             {item.type}
                           </span>
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-dimmed)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Clock size={10} /> {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            <Clock size={10} /> {formatObTimestamp(item.timestamp)}
                           </span>
                         </div>
                         
@@ -1017,6 +1070,21 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+        ) : activeTab === 'history' ? (
+          <HistoryPanel
+            state={state}
+            tenantId={state.activeTenantId}
+            guards={curGuards}
+            premises={curPremises}
+          />
+        ) : activeTab === 'equipment' ? (
+          <EquipmentRegister
+            tenantId={state.activeTenantId}
+            state={state}
+            premises={curPremises}
+            guards={curGuards}
+            onRefresh={fetchState}
+          />
         ) : activeTab === 'data' ? (
           <DatabaseExplorer
             state={state}

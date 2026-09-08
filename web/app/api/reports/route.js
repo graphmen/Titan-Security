@@ -51,6 +51,49 @@ export async function GET(req) {
   const alerts = (state.guardAlerts?.[tenantId] || []).filter((a) => a.status === 'Active');
   const ob = (state.occurrenceBook || []).filter((e) => !e.tenantId || e.tenantId === tenantId);
 
+  if (type === 'guard-shifts') {
+    const period = searchParams.get('period') || 'week';
+    const now = Date.now();
+    const windowMs =
+      period === 'month' ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+    const cutoff = now - windowMs;
+    const guardId = searchParams.get('guardId');
+    const premiseId = searchParams.get('premiseId');
+
+    const rows = [
+      ['Guard', 'Site', 'Clock In', 'Clock Out', 'Status', 'Late Min', 'Shift Date'].join(','),
+    ];
+    (state.attendance?.[tenantId] || [])
+      .filter((a) => {
+        const ts = new Date(a.clockIn).getTime();
+        if (!Number.isFinite(ts) || ts < cutoff) return false;
+        if (guardId && a.guardId !== guardId) return false;
+        if (premiseId && a.premiseId !== premiseId) return false;
+        return true;
+      })
+      .forEach((a) => {
+        const g = guards.find((x) => x.id === a.guardId);
+        const p = premises.find((x) => x.id === a.premiseId);
+        rows.push(
+          [
+            g?.fullName,
+            p?.name,
+            a.clockIn,
+            a.clockOut || '',
+            a.status,
+            a.lateMinutes || 0,
+            a.clockIn?.slice(0, 10),
+          ].map(csvEscape).join(',')
+        );
+      });
+    return new NextResponse(rows.join('\n'), {
+      headers: {
+        'Content-Type': 'text/csv',
+        'Content-Disposition': `attachment; filename="titan-guard-shifts-${period}-${tenantId}.csv"`,
+      },
+    });
+  }
+
   if (type === 'attendance') {
     const rows = [
       ['Guard', 'Site', 'Clock In', 'Status', 'Late Minutes'].join(','),

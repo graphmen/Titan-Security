@@ -24,6 +24,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ApkInstallerPlugin.class);
         registerPlugin(TitanLocationPlugin.class);
         registerPlugin(TitanPermissionsPlugin.class);
+        registerPlugin(TitanNfcPlugin.class);
         super.onCreate(savedInstanceState);
     }
 

@@ -64,8 +64,10 @@ import {
   playSuccessBeep,
   playMovementAlertBeep,
   playShiftReminderBeep,
+  playPatrolDueBeep,
   playMissedClockOutBeep,
 } from './utils/sounds';
+import { getNfcAvailability, startNfcScan, matchCheckpointByNfcTag } from './utils/nfc';
 import { DEFAULT_API_URL, DEFAULT_TENANT_ID, STATE_POLL_MS, APP_VERSION_CODE } from './config';
 
 export default function App() {
@@ -139,6 +141,11 @@ export default function App() {
   const [swapForm, setSwapForm] = useState({ shiftId: '', targetGuardId: '', reason: '' });
   const movementAlertPlayed = useRef(false);
   const missedClockOutPlayed = useRef(null);
+  const patrolDuePlayed = useRef(new Set());
+  const [nfcScanActive, setNfcScanActive] = useState(false);
+  const [nfcAvailable, setNfcAvailable] = useState({ supported: false, enabled: false });
+  const nfcStopRef = useRef(null);
+  const autoClockOutSent = useRef(false);
   const shiftReminderPlayed = useRef(new Set());
   const hasLoadedStateRef = useRef(false);
   const voiceRecorderRef = useRef(null);
@@ -313,7 +320,9 @@ export default function App() {
       localStorage.setItem('titan_premise_id', targetPremise);
     }
     try {
-      const { lat, lng, accuracy } = await getLocationForClockIn();
+      const premisesClockInRadius = Number(state?.systemSettings?.premisesClockInRadiusMeters) || 50;
+      const { lat, lng, accuracy } = await getLocationForClockIn(premisesClockInRadius);
+      const clientRequestId = crypto.randomUUID();
       await postStateAction(apiBase, {
         action: 'GUARD_CLOCK_IN',
         guardId,
@@ -322,6 +331,7 @@ export default function App() {
         lat,
         lng,
         accuracyMeters: accuracy,
+        clientRequestId,
       });
       showToast('On duty — now scan each patrol point below');
       fetchState();
@@ -612,7 +622,7 @@ export default function App() {
   };
 
   // NFC Tap
-  const handleNfcTap = async (checkpointId, cpName) => {
+  const handleNfcTap = async (checkpointId, cpName, scannedTagId = null) => {
     if (!isOnDuty) {
       showToast('Clock in first to log patrol points', 'error');
       return;
@@ -660,7 +670,7 @@ export default function App() {
       lat,
       lng,
       accuracyMeters: accuracy,
-      nfcTagId: cp?.code || null,
+      nfcTagId: scannedTagId || cp?.code || null,
     };
 
     if (isOnline) {
@@ -669,6 +679,7 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tapPayload),
+          signal: AbortSignal.timeout(12000),
         });
         const json = await res.json().catch(() => ({}));
         if (res.ok) {
@@ -681,7 +692,8 @@ export default function App() {
           showToast(json.error || 'Could not log patrol point', 'error');
         }
       } catch (e) {
-        showToast(e.message || 'Connection lost — patrol not saved', 'error');
+        showToast('Weak signal — patrol saved to queue', 'info');
+        queuePatrolTap(checkpointId, cpName, tapPayload);
       }
     } else {
       queuePatrolTap(checkpointId, cpName, tapPayload);
@@ -1082,6 +1094,7 @@ export default function App() {
   );
   const activePremise = premises.find((p) => p.id === premiseId);
   const geofenceRadius = Number(state?.systemSettings?.geofenceRadiusMeters) || 6;
+  const premisesClockInRadius = Number(state?.systemSettings?.premisesClockInRadiusMeters) || 50;
   const allCheckpoints = state?.checkpoints[tenantId] || [];
   const checkpoints = useMemo(() => {
     const linked = premiseId
@@ -1141,6 +1154,54 @@ export default function App() {
     };
   }, [isOnDuty, activeTab]);
 
+  useEffect(() => {
+    getNfcAvailability().then(setNfcAvailable).catch(() => setNfcAvailable({ supported: false, enabled: false }));
+  }, []);
+
+  useEffect(() => {
+    if (!nfcScanActive || activeTab !== 'patrol' || !isOnDuty) {
+      if (nfcStopRef.current) {
+        nfcStopRef.current();
+        nfcStopRef.current = null;
+      }
+      return undefined;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const stop = await startNfcScan(({ tagId, ndefText }) => {
+          if (cancelled) return;
+          playNfcScan();
+          const match = matchCheckpointByNfcTag(checkpoints, { tagId, ndefText });
+          if (!match) {
+            showToast(`Unknown tag — ${tagId || ndefText}`, 'error');
+            return;
+          }
+          handleNfcTap(match.id, match.name, tagId || ndefText || null);
+        });
+        if (cancelled) {
+          await stop();
+        } else {
+          nfcStopRef.current = stop;
+        }
+      } catch (e) {
+        if (!cancelled) {
+          showToast(e.message || 'NFC scan unavailable', 'error');
+          setNfcScanActive(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (nfcStopRef.current) {
+        nfcStopRef.current();
+        nfcStopRef.current = null;
+      }
+    };
+  }, [nfcScanActive, activeTab, isOnDuty, checkpoints]);
+
   // Calculate checklist completion percentage
   const template = templates.find(t => t.id === activeChecklistId);
   const checklistFieldsCount = template?.fields.length || 0;
@@ -1197,6 +1258,51 @@ export default function App() {
       missedClockOutPlayed.current = null;
     }
   }, [state, guardId, tenantId]);
+
+  // Ring when a patrol point becomes due (once per point per interval)
+  useEffect(() => {
+    if (!isOnDuty || activeTab !== 'patrol') return;
+    checkpoints.forEach((cp) => {
+      const ui = getCheckpointPatrolUi(cp);
+      if (!ui.canScan) return;
+      const key = `${cp.id}_${ui.tag}`;
+      if (!patrolDuePlayed.current.has(key)) {
+        playPatrolDueBeep();
+        patrolDuePlayed.current.add(key);
+      }
+    });
+  }, [isOnDuty, activeTab, checkpoints, patrolTick, localScanTimes]);
+
+  // Auto clock-out when shift ends (server persists via AUTO_CLOCK_OUT)
+  useEffect(() => {
+    if (!isOnDuty || !guardId || !state) return undefined;
+    const shift = todayShifts.find((s) => s.status === 'Active') || todayShifts[0];
+    if (!shift?.endTime) return undefined;
+
+    const tick = () => {
+      const start = new Date(`${shift.date}T${shift.startTime}:00`);
+      let end = new Date(`${shift.date}T${shift.endTime}:00`);
+      if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end <= start) {
+        end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+      }
+      const graceMin = Number(state.systemSettings?.autoClockOutGraceMinutes) || 15;
+      const autoAt = end.getTime() + graceMin * 60 * 1000;
+      if (Date.now() >= autoAt && !autoClockOutSent.current) {
+        autoClockOutSent.current = true;
+        postStateAction(apiBase, { action: 'AUTO_CLOCK_OUT', guardId, tenantId })
+          .then(() => {
+            showToast('Shift ended — auto clocked out', 'info');
+            fetchState();
+          })
+          .catch(() => {
+            autoClockOutSent.current = false;
+          });
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 60000);
+    return () => clearInterval(timer);
+  }, [isOnDuty, guardId, state, tenantId, todayShifts]);
 
   // 30-minute pre-shift clock-in reminder (local scheduler)
   useEffect(() => {
@@ -1668,6 +1774,30 @@ export default function App() {
               {activePremise ? `${activePremise.name} — Patrol points` : 'Patrol points'}
             </h3>
 
+            {nfcAvailable.supported && (
+              <div className="mob-card" style={{ marginBottom: '0.75rem', padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                <div>
+                  <strong style={{ fontSize: '0.85rem' }}>NFC reader</strong>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.15rem 0 0' }}>
+                    {nfcScanActive
+                      ? 'Hold phone near patrol tag…'
+                      : nfcAvailable.enabled
+                        ? 'Tap to scan physical NFC tags'
+                        : 'Enable NFC in phone Settings'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className={`mob-btn ${nfcScanActive ? 'mob-nfc-btn waiting' : ''}`}
+                  disabled={!isOnDuty || !nfcAvailable.enabled}
+                  onClick={() => setNfcScanActive((v) => !v)}
+                  style={{ flexShrink: 0, padding: '0.45rem 0.75rem', fontSize: '0.75rem' }}
+                >
+                  <Zap size={12} /> {nfcScanActive ? 'Stop' : 'Scan NFC'}
+                </button>
+              </div>
+            )}
+
             {activePremise?.coordinates && (
               <SiteGuide
                 target={activePremise}
@@ -1734,7 +1864,7 @@ export default function App() {
                     ) : outsideZone ? (
                       <><MapPin size={12} /> Move closer</>
                     ) : (
-                      <><Zap size={12} /> Log scan</>
+                      <><Zap size={12} /> {nfcAvailable.supported ? 'Tap / Log' : 'Log scan'}</>
                     )}
                   </button>
                 </div>

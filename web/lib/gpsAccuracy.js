@@ -23,12 +23,18 @@ export function isPremiseAccuracyAcceptable(accuracy) {
   return Number.isFinite(a) && a > 0 && a <= PREMISE_MAX_ACCURACY_METERS;
 }
 
+export function maxClockInAccuracyForRadius(geofenceRadiusMeters) {
+  const radius = Number(geofenceRadiusMeters);
+  if (!Number.isFinite(radius) || radius <= 0) return PREMISE_MAX_ACCURACY_METERS;
+  return Math.min(
+    PREMISE_MAX_ACCURACY_METERS,
+    Math.max(GUARD_CLOCKIN_MAX_ACCURACY_METERS, Math.round(radius * 0.3))
+  );
+}
+
 export function isClockInAccuracyAcceptable(accuracy, geofenceRadiusMeters) {
   const a = Number(accuracy);
-  const radius = Number(geofenceRadiusMeters);
-  const maxAllowed = Number.isFinite(radius)
-    ? Math.min(GUARD_CLOCKIN_MAX_ACCURACY_METERS, radius)
-    : GUARD_CLOCKIN_MAX_ACCURACY_METERS;
+  const maxAllowed = maxClockInAccuracyForRadius(geofenceRadiusMeters);
   return Number.isFinite(a) && a > 0 && a <= maxAllowed;
 }
 
@@ -37,10 +43,7 @@ export function premiseAccuracyError(accuracy) {
 }
 
 export function clockInAccuracyError(accuracy, geofenceRadiusMeters) {
-  const radius = Number(geofenceRadiusMeters);
-  const maxAllowed = Number.isFinite(radius)
-    ? Math.min(GUARD_CLOCKIN_MAX_ACCURACY_METERS, radius)
-    : GUARD_CLOCKIN_MAX_ACCURACY_METERS;
+  const maxAllowed = maxClockInAccuracyForRadius(geofenceRadiusMeters);
   return `GPS accuracy ${formatAccuracyMeters(accuracy)} is too low — need ±${maxAllowed}m or better to clock in`;
 }
 

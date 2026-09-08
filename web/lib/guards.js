@@ -1,4 +1,4 @@
-import { normalizeGeofenceRadius, GEOFENCE_DEFAULT_METERS, isGeofenceExitAlertsEnabled, getShiftTimingSettings } from './systemSettings.js';
+import { normalizeGeofenceRadius, GEOFENCE_DEFAULT_METERS, isGeofenceExitAlertsEnabled, getShiftTimingSettings, getAutoClockOutGraceMinutes } from './systemSettings.js';
 import { getPremiseMonitoringRules } from './premiseRules.js';
 import { hasPremiumFeature } from './subscription.js';
 
@@ -124,8 +124,13 @@ export function pushGuardAlert(state, tenantId, alert) {
     (a) => alertDedupeKey(a) === key
   );
   if (existing) {
-    // Active: already showing. Dismissed: supervisor acknowledged — do not recreate on poll.
-    if (existing.status === 'Active' || existing.status === 'Dismissed') return null;
+    if (existing.status === 'Active') {
+      existing.message = alert.message ?? existing.message;
+      existing.updatedAt = new Date().toISOString();
+      return null;
+    }
+    // One write-up per condition — dismissed/resolved alerts are not recreated on poll.
+    if (existing.status === 'Dismissed' || existing.status === 'Resolved') return null;
   }
   const entry = {
     id: generateAlertId(),
@@ -137,27 +142,18 @@ export function pushGuardAlert(state, tenantId, alert) {
   return entry;
 }
 
-/** Missed clock-in/out alerts repeat every N minutes until the guard clocks in or out. */
+/** Missed clock-in/out alerts — one Active row; mobile can beep until cleared. */
 export function pushRecurringComplianceAlert(state, tenantId, alert, repeatMinutes = 30) {
   ensureAlertStore(state, tenantId);
   const key = alertDedupeKey(alert);
   const matching = state.guardAlerts[tenantId].filter((a) => alertDedupeKey(a) === key);
-  if (matching.some((a) => a.status === 'Active')) return null;
-  // Supervisor dismissed — do not recreate on the next dashboard poll.
-  if (matching.some((a) => a.status === 'Dismissed')) return null;
-
-  const repeatMs = Math.max(1, repeatMinutes) * 60 * 1000;
-  const latest = matching.reduce((best, a) => {
-    if (!best) return a;
-    const aAt = new Date(a.resolvedAt || a.createdAt).getTime();
-    const bAt = new Date(best.resolvedAt || best.createdAt).getTime();
-    return aAt > bAt ? a : best;
-  }, null);
-
-  if (latest) {
-    const lastAt = new Date(latest.resolvedAt || latest.createdAt).getTime();
-    if (Date.now() - lastAt < repeatMs) return null;
+  const active = matching.find((a) => a.status === 'Active');
+  if (active) {
+    active.message = alert.message ?? active.message;
+    active.updatedAt = new Date().toISOString();
+    return null;
   }
+  if (matching.some((a) => a.status === 'Dismissed' || a.status === 'Resolved')) return null;
 
   const entry = {
     id: generateAlertId(),
@@ -274,6 +270,33 @@ export function getShiftEndDate(shift) {
   return end;
 }
 
+/** End shift automatically when guard has not clocked out after grace period. */
+export function performAutoClockOut(state, tenantId, att, shift, premise) {
+  if (!att || att.status === 'Clocked Out' || att.autoClockOut) return false;
+  const guard = (state.guards?.[tenantId] || []).find((g) => g.id === att.guardId);
+  const now = new Date().toISOString();
+  att.clockOut = now;
+  att.clockOutCoords = att.lastCoords || att.clockInCoords || null;
+  att.status = 'Clocked Out';
+  att.autoClockOut = true;
+  if (shift) shift.status = 'Completed';
+  dismissGuardAlerts(state, tenantId, att.guardId, 'missed_clock_out');
+  if (!state.occurrenceBook) state.occurrenceBook = [];
+  state.occurrenceBook.unshift({
+    id: `ob-att-auto-${Date.now()}`,
+    tenantId,
+    timestamp: now,
+    guardName: guard?.fullName || 'Guard',
+    guardId: att.guardId,
+    type: 'Shift Clock-Out',
+    description: `Auto clock-out from ${premise?.name || 'premises'} — shift ended at ${shift?.endTime || 'scheduled time'}.`,
+    status: 'Resolved',
+    attachments: { photo: null, voice: null },
+    premiseId: att.premiseId,
+  });
+  return true;
+}
+
 /** Alert supervisors when guards miss clock-in; alert guards when they miss clock-out. */
 export function evaluateShiftCompliance(state, tenantId) {
   const {
@@ -334,6 +357,12 @@ export function evaluateShiftCompliance(state, tenantId) {
 
       const end = getShiftEndDate(shift);
       if (!end) return;
+
+      const autoOutAt = end.getTime() + getAutoClockOutGraceMinutes(state) * 60 * 1000;
+      if (now >= autoOutAt) {
+        const premise = premises.find((p) => p.id === att.premiseId);
+        if (performAutoClockOut(state, tenantId, att, shift, premise)) return;
+      }
 
       const missedOutAt = end.getTime() + missedClockOutGraceMinutes * 60 * 1000;
       if (now < missedOutAt) return;

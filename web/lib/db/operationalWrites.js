@@ -11,6 +11,7 @@ export const OPERATIONAL_WRITE_ACTIONS = new Set([
   'CLEAR_SOS',
   'GUARD_CLOCK_IN',
   'GUARD_CLOCK_OUT',
+  'AUTO_CLOCK_OUT',
   'GUARD_HEARTBEAT',
   'GUARD_MOVEMENT_ACK',
   'TAP_NFC',
@@ -112,12 +113,13 @@ export async function persistOperationalActionToDb(action, payload, tenantId, st
       );
       break;
     case 'GUARD_CLOCK_IN':
-    case 'GUARD_CLOCK_OUT': {
+    case 'GUARD_CLOCK_OUT':
+    case 'AUTO_CLOCK_OUT': {
       const { guardId } = payload;
       const record =
-        action === 'GUARD_CLOCK_OUT'
-          ? (state.attendance?.[tenantId] || []).find((a) => a.guardId === guardId)
-          : getActiveAttendanceForGuard(state, tenantId, guardId);
+        action === 'GUARD_CLOCK_IN'
+          ? getActiveAttendanceForGuard(state, tenantId, guardId)
+          : (state.attendance?.[tenantId] || []).find((a) => a.guardId === guardId);
       if (record) {
         await requireDbOk(
           await db.from('guard_attendance').upsert(attendanceToRow(record, tenantId)),
@@ -133,7 +135,8 @@ export async function persistOperationalActionToDb(action, payload, tenantId, st
           'shifts clock status'
         );
       }
-      const obPrefix = action === 'GUARD_CLOCK_IN' ? 'ob-att-in-' : 'ob-att-out-';
+      const obPrefix =
+        action === 'GUARD_CLOCK_IN' ? 'ob-att-in-' : action === 'AUTO_CLOCK_OUT' ? 'ob-att-auto-' : 'ob-att-out-';
       const item = findOccurrenceByPrefix(state, obPrefix);
       if (item) {
         await requireDbOk(

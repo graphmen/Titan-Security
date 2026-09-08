@@ -403,7 +403,7 @@ export async function getLocation() {
   return webGetPositionWithRetries();
 }
 
-export const PREMISE_MAX_ACCURACY_METERS = 5;
+export const PREMISE_MAX_ACCURACY_METERS = 15;
 export const GUARD_CLOCKIN_MAX_ACCURACY_METERS = 5;
 export const GUARD_CLOCKOUT_MAX_ACCURACY_METERS = 15;
 export const GUARD_CLOCKOUT_FALLBACK_ACCURACY_METERS = 25;
@@ -457,7 +457,10 @@ export async function getLocationForPremiseCapture() {
 
 /** High-accuracy GPS for guard clock-in geofencing (5m zone). */
 export async function getLocationForClockIn(maxAccuracyMeters = GUARD_CLOCKIN_MAX_ACCURACY_METERS) {
-  const target = Math.min(GUARD_CLOCKIN_MAX_ACCURACY_METERS, maxAccuracyMeters);
+  const target = Math.min(
+    PREMISE_MAX_ACCURACY_METERS,
+    Math.max(GUARD_CLOCKIN_MAX_ACCURACY_METERS, Number(maxAccuracyMeters) || GUARD_CLOCKIN_MAX_ACCURACY_METERS)
+  );
   const perm = await requestLocationPermission();
   if (!perm.granted) {
     throw new Error('Precise location permission required — enable GPS in your phone Settings');

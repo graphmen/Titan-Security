@@ -22,12 +22,17 @@ import {
   Users,
   UserPlus,
   X,
+  History,
+  Package,
 } from 'lucide-react';
 import GuardManagement from '../components/GuardManagement';
 import PremisesRegistration from '../components/PremisesRegistration';
 import DatabaseExplorer from '../components/DatabaseExplorer';
+import HistoryPanel from '../components/HistoryPanel';
+import EquipmentRegister from '../components/EquipmentRegister';
 import MapErrorBoundary from '../components/MapErrorBoundary';
 import { mergeSystemSettings } from '../../lib/systemSettings';
+import { getLiveOccurrenceBook, getOccurrenceHistory, getLiveVisitors, formatObDateTime } from '../../lib/historyArchive';
 import { apiFetch } from '../../lib/apiClient';
 import { tenantRows } from '../../lib/safeData';
 
@@ -134,6 +139,11 @@ export default function SupervisorDashboardPage() {
     fetchState();
   };
 
+  const handleDismissAllAlerts = async () => {
+    await postAction({ action: 'DISMISS_ALERTS_BY_TYPE', tenantId });
+    fetchState();
+  };
+
   const handleAddVisitor = async (e) => {
     e.preventDefault();
     if (!vName || !vIdNumber || !state) return;
@@ -176,8 +186,9 @@ export default function SupervisorDashboardPage() {
 
   const tenantId = state.activeTenantId || 'titan';
   const curCheckpoints = tenantRows(state.checkpoints, tenantId);
-  const curOB = (state.occurrenceBook || []).filter((item) => item.tenantId === tenantId);
-  const curVisitors = (state.visitors || []).filter((item) => item.tenantId === tenantId);
+  const curOB = getLiveOccurrenceBook(state, tenantId);
+  const obHistory = getOccurrenceHistory(state, tenantId);
+  const curVisitors = getLiveVisitors(state, tenantId);
   const curPremises = tenantRows(state.premises, tenantId);
   const curPlaces = state.places || {};
   const curGuards = tenantRows(state.guards, tenantId);
@@ -210,6 +221,10 @@ export default function SupervisorDashboardPage() {
       ? 'Register Premises'
       : activeTab === 'map'
       ? 'GIS Operations Map'
+      : activeTab === 'history'
+      ? 'Operations History'
+      : activeTab === 'equipment'
+      ? 'Equipment Register'
       : 'Data Explorer';
 
   const pageSubtitle =
@@ -221,6 +236,10 @@ export default function SupervisorDashboardPage() {
       ? 'Register and maintain premises in your assigned territories.'
       : activeTab === 'map'
       ? 'Live map of premises, patrol points, geofences, and on-duty guard GPS in your territories.'
+      : activeTab === 'history'
+      ? 'Archived occurrence book and visitor register for your territories.'
+      : activeTab === 'equipment'
+      ? 'Track equipment issued to guards at your sites.'
       : 'Browse and export records for guards, premises, shifts, and operations in your scope.';
 
   return (
@@ -253,6 +272,16 @@ export default function SupervisorDashboardPage() {
           <li>
             <button className={`sidebar-nav-item ${activeTab === 'command' ? 'active' : ''}`} onClick={() => selectTab('command')}>
               <Activity size={18} /> Command Centre
+            </button>
+          </li>
+          <li>
+            <button className={`sidebar-nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => selectTab('history')}>
+              <History size={18} /> Operations History
+            </button>
+          </li>
+          <li>
+            <button className={`sidebar-nav-item ${activeTab === 'equipment' ? 'active' : ''}`} onClick={() => selectTab('equipment')}>
+              <Package size={18} /> Equipment Register
             </button>
           </li>
           <li>
@@ -373,6 +402,21 @@ export default function SupervisorDashboardPage() {
             refreshing={loading}
             editableTableIds={SUPERVISOR_EDITABLE_TABLES}
           />
+        ) : activeTab === 'history' ? (
+          <HistoryPanel
+            state={state}
+            tenantId={tenantId}
+            guards={curGuards}
+            premises={curPremises}
+          />
+        ) : activeTab === 'equipment' ? (
+          <EquipmentRegister
+            tenantId={tenantId}
+            state={state}
+            premises={curPremises}
+            guards={curGuards}
+            onRefresh={fetchState}
+          />
         ) : (
           <div className="dashboard-grid">
             <div className="col-12 stat-cards-row">
@@ -417,8 +461,13 @@ export default function SupervisorDashboardPage() {
             {criticalGuardAlerts.length > 0 && (
               <div className="col-12" style={{ marginBottom: '0.5rem' }}>
                 <div className="glass-panel" style={{ padding: '0.75rem 1rem', background: '#fef2f2', border: '1px solid #fecaca' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <AlertTriangle size={14} /> Guard Alerts ({criticalGuardAlerts.length})
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991b1b', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <AlertTriangle size={14} /> Guard Alerts ({criticalGuardAlerts.length})
+                    </span>
+                    <button type="button" className="btn-secondary" style={{ fontSize: '0.7rem', padding: '0.25rem 0.55rem' }} onClick={handleDismissAllAlerts}>
+                      Clear all
+                    </button>
                   </div>
                   {criticalGuardAlerts.slice(0, 5).map((a) => (
                     <div key={a.id} style={{ fontSize: '0.75rem', color: '#7f1d1d', marginBottom: '0.25rem' }}>{a.message}</div>
@@ -494,7 +543,7 @@ export default function SupervisorDashboardPage() {
                             {item.type}
                           </span>
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-dimmed)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Clock size={10} /> {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            <Clock size={10} /> {formatObDateTime(item.timestamp)}
                           </span>
                         </div>
                         <p style={{ fontSize: '0.825rem', color: 'var(--text-main)', margin: '0.35rem 0', fontWeight: 500 }}>{item.description}</p>

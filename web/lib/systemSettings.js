@@ -4,11 +4,23 @@ export const GEOFENCE_MIN_METERS = 5;
 export const GEOFENCE_MAX_METERS = 8;
 export const GEOFENCE_DEFAULT_METERS = 6;
 
+/** Clock-in / clock-out at premises (wider than patrol point radius). */
+export const PREMISES_CLOCKIN_MIN_METERS = 10;
+export const PREMISES_CLOCKIN_MAX_METERS = 50;
+export const PREMISES_CLOCKIN_DEFAULT_METERS = 50;
+
 export const DEFAULT_SYSTEM_SETTINGS = {
   companyName: 'Titan Protection Security',
   companyShortName: 'Titan',
   sirenAlertsEnabled: true,
+  /** Patrol point / checkpoint geofence (meters). */
   geofenceRadiusMeters: GEOFENCE_DEFAULT_METERS,
+  /** Guard clock-in/out at premises (meters). */
+  premisesClockInRadiusMeters: PREMISES_CLOCKIN_DEFAULT_METERS,
+  /** Auto clock-out this many minutes after scheduled shift end. */
+  autoClockOutGraceMinutes: 15,
+  /** Move OB & visitor register to history after this many hours. */
+  obArchiveAfterHours: 24,
   /** Parked — re-enable when boundary-exit alerting is ready for production. */
   geofenceExitAlertsEnabled: false,
   noMovementAlertMinutes: 45,
@@ -40,7 +52,17 @@ export function mergeSystemSettings(raw) {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_SYSTEM_SETTINGS };
   const merged = { ...DEFAULT_SYSTEM_SETTINGS, ...raw };
   merged.geofenceRadiusMeters = normalizeGeofenceRadius(merged.geofenceRadiusMeters);
+  merged.premisesClockInRadiusMeters = normalizePremisesClockInRadius(merged.premisesClockInRadiusMeters);
   return merged;
+}
+
+export function normalizePremisesClockInRadius(raw) {
+  const n = Number(raw);
+  const base = Number.isFinite(n) && n > 0 ? n : PREMISES_CLOCKIN_DEFAULT_METERS;
+  return Math.min(
+    PREMISES_CLOCKIN_MAX_METERS,
+    Math.max(PREMISES_CLOCKIN_MIN_METERS, Math.round(base))
+  );
 }
 
 export function normalizeGeofenceRadius(raw) {
@@ -58,6 +80,15 @@ export function ensureSystemSettings(state) {
 
 export function getGeofenceRadius(state) {
   return mergeSystemSettings(state?.systemSettings).geofenceRadiusMeters;
+}
+
+export function getPremisesClockInRadius(state) {
+  return mergeSystemSettings(state?.systemSettings).premisesClockInRadiusMeters;
+}
+
+export function getAutoClockOutGraceMinutes(state) {
+  const n = Number(mergeSystemSettings(state?.systemSettings).autoClockOutGraceMinutes);
+  return Number.isFinite(n) && n >= 0 ? n : 15;
 }
 
 export function getNoMovementMs(state) {

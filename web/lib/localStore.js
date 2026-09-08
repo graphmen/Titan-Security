@@ -42,6 +42,8 @@ import {
   pushRecurringComplianceAlert,
   dismissGuardAlerts,
   ensureAlertStore,
+  performAutoClockOut,
+  getShiftEndDate,
 } from './guards';
 import { syncGuardTerritoryFromPremises, validateGuardSupervisorAssignment, filterAssignedPremisesForSupervisor, getSupervisorsForTerritory, resolveGuardTerritoryId } from './guardProfile';
 import { generateGuardPin, findGuardByPin, validatePinFormat } from './guardAuth';
@@ -61,9 +63,16 @@ import {
   DEFAULT_SYSTEM_SETTINGS,
   ensureSystemSettings,
   getGeofenceRadius,
+  getPremisesClockInRadius,
+  getAutoClockOutGraceMinutes,
   normalizeGeofenceRadius,
   TITAN_TENANT_ID,
 } from './systemSettings';
+import {
+  validateShiftAssignment,
+  buildShiftsFromAssignment,
+  applyPermanentPremiseAssignment,
+} from './shiftValidation.js';
 import {
   applyPatrolScheduleToAllPlaces,
   formatPatrolSchedule,
@@ -190,6 +199,7 @@ export function createEmptyAppState() {
     checklistTemplates: { titan: [], alpha: [], omega: [] },
     checklistSubmissions: [],
     visitors: [],
+    equipment: [],
     activeSosAlerts: {},
     auditLog: [],
     shiftHandovers: { titan: [], alpha: [], omega: [] },
@@ -215,6 +225,7 @@ function ensureStateShape(state) {
   if (!state.occurrenceBook) state.occurrenceBook = [];
   if (!state.checklistSubmissions) state.checklistSubmissions = [];
   if (!state.visitors) state.visitors = [];
+  if (!state.equipment) state.equipment = [];
   if (!state.activeSosAlerts) state.activeSosAlerts = {};
   if (!Array.isArray(state.auditLog)) state.auditLog = [];
   if (!state.shiftHandovers) state.shiftHandovers = {};
@@ -437,6 +448,73 @@ export function processLocalAction(payload) {
         visitor.status = 'Checked Out';
         visitor.checkOutTime = new Date().toISOString();
       }
+      break;
+    }
+    case 'CREATE_EQUIPMENT': {
+      const { type, assetTag, serialNumber, description, premiseId, condition, status, notes } = payload;
+      if (!assetTag?.trim()) return { error: 'Asset tag is required', status: 400 };
+      const item = {
+        id: `eq-${Date.now()}`,
+        tenantId,
+        type: type || 'Other',
+        assetTag: assetTag.trim(),
+        serialNumber: serialNumber?.trim() || '',
+        description: description?.trim() || '',
+        premiseId: premiseId || null,
+        condition: condition || 'Good',
+        status: status || 'Available',
+        notes: notes?.trim() || '',
+        assignedGuardId: null,
+        assignedGuardName: null,
+        issuedAt: null,
+        returnedAt: null,
+        createdAt: new Date().toISOString(),
+      };
+      state.equipment.unshift(item);
+      return { success: true, equipmentId: item.id, equipment: item };
+    }
+    case 'UPDATE_EQUIPMENT': {
+      const { equipmentId } = payload;
+      const item = state.equipment.find((e) => e.id === equipmentId && (!e.tenantId || e.tenantId === tenantId));
+      if (!item) return { error: 'Equipment not found', status: 404 };
+      if (payload.type != null) item.type = payload.type;
+      if (payload.assetTag != null) item.assetTag = String(payload.assetTag).trim();
+      if (payload.serialNumber != null) item.serialNumber = String(payload.serialNumber).trim();
+      if (payload.description != null) item.description = String(payload.description).trim();
+      if (payload.premiseId !== undefined) item.premiseId = payload.premiseId || null;
+      if (payload.condition != null) item.condition = payload.condition;
+      if (payload.status != null) item.status = payload.status;
+      if (payload.notes != null) item.notes = String(payload.notes).trim();
+      item.updatedAt = new Date().toISOString();
+      break;
+    }
+    case 'ISSUE_EQUIPMENT': {
+      const { equipmentId, guardId, guardName } = payload;
+      const item = state.equipment.find((e) => e.id === equipmentId && (!e.tenantId || e.tenantId === tenantId));
+      if (!item) return { error: 'Equipment not found', status: 404 };
+      if (item.status === 'Issued') return { error: 'Already issued — return it first', status: 409 };
+      item.status = 'Issued';
+      item.assignedGuardId = guardId || null;
+      item.assignedGuardName = guardName || getGuardName(state, tenantId, guardId, guardName);
+      item.issuedAt = new Date().toISOString();
+      item.returnedAt = null;
+      break;
+    }
+    case 'RETURN_EQUIPMENT': {
+      const { equipmentId } = payload;
+      const item = state.equipment.find((e) => e.id === equipmentId && (!e.tenantId || e.tenantId === tenantId));
+      if (!item) return { error: 'Equipment not found', status: 404 };
+      item.status = 'Available';
+      item.assignedGuardId = null;
+      item.assignedGuardName = null;
+      item.returnedAt = new Date().toISOString();
+      break;
+    }
+    case 'DELETE_EQUIPMENT': {
+      const { equipmentId } = payload;
+      const idx = state.equipment.findIndex((e) => e.id === equipmentId && (!e.tenantId || e.tenantId === tenantId));
+      if (idx === -1) return { error: 'Equipment not found', status: 404 };
+      state.equipment.splice(idx, 1);
       break;
     }
     case 'TRIGGER_SOS': {
@@ -814,6 +892,9 @@ export function processLocalAction(payload) {
       const { shiftId, updates = {} } = payload;
       const shift = (state.shifts[tenantId] || []).find((s) => s.id === shiftId);
       if (!shift) return { error: 'Shift not found', status: 404 };
+      const merged = { ...shift, ...updates };
+      const conflict = validateShiftAssignment(state.shifts[tenantId] || [], merged, shiftId);
+      if (!conflict.ok) return { error: conflict.error, status: 409 };
       Object.assign(shift, updates, { updatedAt: new Date().toISOString() });
       notifyShiftWhatsApp(state, tenantId, shift);
       break;
@@ -827,30 +908,61 @@ export function processLocalAction(payload) {
       break;
     }
     case 'CREATE_SHIFT': {
-      const { guardId, premiseId, date, startTime, endTime, shiftType = 'Day' } = payload;
-      if (!guardId || !premiseId || !date || !startTime || !endTime) {
-        return { error: 'Guard, premises, date and times are required', status: 400 };
-      }
-      if (!state.shifts[tenantId]) state.shifts[tenantId] = [];
-      const newShift = {
-        id: generateShiftId(),
-        tenantId,
+      const {
         guardId,
         premiseId,
         date,
         startTime,
         endTime,
+        shiftType = 'Day',
+        durationType = 'day',
+      } = payload;
+      if (!guardId || !premiseId || !startTime || !endTime) {
+        return { error: 'Guard, premises, and times are required', status: 400 };
+      }
+      if (durationType !== 'permanent' && !date) {
+        return { error: 'Start date is required for roster shifts', status: 400 };
+      }
+      if (!state.shifts[tenantId]) state.shifts[tenantId] = [];
+
+      if (durationType === 'permanent') {
+        const guardIdx = (state.guards[tenantId] || []).findIndex((g) => g.id === guardId);
+        if (guardIdx < 0) return { error: 'Guard not found', status: 404 };
+        state.guards[tenantId][guardIdx] = applyPermanentPremiseAssignment(
+          state.guards[tenantId][guardIdx],
+          premiseId
+        );
+        break;
+      }
+
+      const { shifts: newShifts } = buildShiftsFromAssignment({
+        tenantId,
+        guardId,
+        premiseId,
+        startDate: date,
+        startTime,
+        endTime,
         shiftType,
-        status: 'Scheduled',
-        createdAt: new Date().toISOString(),
-      };
-      state.shifts[tenantId].push(newShift);
-      notifyShiftWhatsApp(state, tenantId, newShift);
+        durationType,
+        generateShiftId,
+      });
+
+      for (const candidate of newShifts) {
+        const conflict = validateShiftAssignment(state.shifts[tenantId], candidate);
+        if (!conflict.ok) return { error: conflict.error, status: 409 };
+        state.shifts[tenantId].push(candidate);
+        notifyShiftWhatsApp(state, tenantId, candidate);
+      }
       break;
     }
     case 'GUARD_CLOCK_IN': {
-      const { guardId, premiseId, lat, lng, accuracyMeters } = payload;
+      const { guardId, premiseId, lat, lng, accuracyMeters, clientRequestId } = payload;
       if (!guardId || !premiseId) return { error: 'Guard and premises required', status: 400 };
+
+      if (clientRequestId) {
+        const dup = (state.attendance[tenantId] || []).find((a) => a.clientRequestId === clientRequestId);
+        if (dup) return { success: true, duplicate: true };
+      }
 
       const guards = state.guards[tenantId] || [];
       const guard = guards.find((g) => g.id === guardId);
@@ -863,8 +975,13 @@ export function processLocalAction(payload) {
       const premise = premiseList.find((p) => p.id === premiseId);
       if (!premise) return { error: 'Premise not found', status: 404 };
 
+      const assigned = guard.assignedPremiseIds || [];
+      if (assigned.length && !assigned.includes(premiseId)) {
+        return { error: 'This site is not assigned to you', status: 403 };
+      }
+
       const coords = { lat: parseFloat(lat), lng: parseFloat(lng) };
-      const geofenceRadius = getGeofenceRadius(state);
+      const clockInRadius = getPremisesClockInRadius(state);
       const premiseCoords = premise.coordinates;
       if (!isValidGpsCoord(premiseCoords?.lat, premiseCoords?.lng)) {
         return {
@@ -885,11 +1002,23 @@ export function processLocalAction(payload) {
         appendAuditLog(state, { tenantId, action: 'GPS_REJECTED_CLOCK_IN', guardId, reason: gpsCheck.error, flags: gpsCheck.flags });
         return { error: gpsCheck.error, status: 403 };
       }
-      if (!isClockInAccuracyAcceptable(accuracyMeters, geofenceRadius)) {
-        return { error: clockInAccuracyError(accuracyMeters, geofenceRadius), status: 403 };
+      if (!isClockInAccuracyAcceptable(accuracyMeters, clockInRadius)) {
+        return { error: clockInAccuracyError(accuracyMeters, clockInRadius), status: 403 };
       }
-      if (!isWithinPremiseGeofence(coords, premiseCoords, geofenceRadius)) {
-        return { error: `You must be at the premises to clock in (within ${geofenceRadius}m GPS geofence)`, status: 403 };
+      if (
+        !isWithinPremiseGeofenceForClockOut(
+          coords,
+          premiseCoords,
+          clockInRadius,
+          accuracyMeters,
+          GUARD_CLOCKOUT_MAX_ACCURACY_METERS
+        )
+      ) {
+        const dist = haversineMeters(coords.lat, coords.lng, premiseCoords.lat, premiseCoords.lng);
+        return {
+          error: `You must be at the premises to clock in (within ${clockInRadius}m — currently ~${Math.round(dist)}m away)`,
+          status: 403,
+        };
       }
 
       const today = todayDateStr();
@@ -913,6 +1042,7 @@ export function processLocalAction(payload) {
         guardId,
         premiseId,
         shiftId: shift?.id || null,
+        clientRequestId: clientRequestId || null,
         clockIn: new Date().toISOString(),
         clockInCoords: coords,
         clockOut: null,
@@ -948,10 +1078,11 @@ export function processLocalAction(payload) {
 
       const record = getActiveAttendanceForGuard(state, tenantId, guardId);
       if (!record) return { error: 'Not clocked in', status: 404 };
+      if (record.status === 'Clocked Out') return { error: 'Already clocked out', status: 409 };
 
       const premise = (state.premises[tenantId] || []).find((p) => p.id === record.premiseId);
       const coords = { lat: parseFloat(lat), lng: parseFloat(lng) };
-      const geofenceRadius = getGeofenceRadius(state);
+      const clockInRadius = getPremisesClockInRadius(state);
       const premiseCoords = premise?.coordinates;
 
       if (!premise) return { error: 'Premise not found', status: 404 };
@@ -971,14 +1102,14 @@ export function processLocalAction(payload) {
         !isWithinPremiseGeofenceForClockOut(
           coords,
           premiseCoords,
-          geofenceRadius,
+          clockInRadius,
           accuracyMeters,
           GUARD_CLOCKOUT_MAX_ACCURACY_METERS
         )
       ) {
         const dist = haversineMeters(coords.lat, coords.lng, premiseCoords.lat, premiseCoords.lng);
         return {
-          error: `You must be at the premises to clock out (within ${geofenceRadius}m — currently ~${Math.round(dist)}m away, GPS ${formatAccuracyMeters(accuracyMeters)})`,
+          error: `You must be at the premises to clock out (within ${clockInRadius}m — currently ~${Math.round(dist)}m away, GPS ${formatAccuracyMeters(accuracyMeters)})`,
           status: 403,
         };
       }
@@ -1018,6 +1149,33 @@ export function processLocalAction(payload) {
         premiseId: record.premiseId,
       });
       dismissGuardAlerts(state, tenantId, guardId, 'missed_clock_out');
+      break;
+    }
+    case 'AUTO_CLOCK_OUT': {
+      const { guardId } = payload;
+      if (!guardId) return { error: 'Guard required', status: 400 };
+      const record = getActiveAttendanceForGuard(state, tenantId, guardId);
+      if (!record) return { error: 'Not clocked in', status: 404 };
+      const shifts = state.shifts[tenantId] || [];
+      const shift =
+        (record.shiftId && shifts.find((s) => s.id === record.shiftId)) ||
+        shifts.find(
+          (s) =>
+            s.guardId === guardId &&
+            s.premiseId === record.premiseId &&
+            s.status === 'Active'
+        );
+      const end = shift ? getShiftEndDate(shift) : null;
+      if (end) {
+        const autoAt = end.getTime() + getAutoClockOutGraceMinutes(state) * 60 * 1000;
+        if (Date.now() < autoAt) {
+          return { error: 'Shift has not ended yet', status: 403 };
+        }
+      }
+      const premise = (state.premises[tenantId] || []).find((p) => p.id === record.premiseId);
+      if (!performAutoClockOut(state, tenantId, record, shift, premise)) {
+        return { error: 'Already clocked out', status: 409 };
+      }
       break;
     }
     case 'GUARD_HEARTBEAT': {

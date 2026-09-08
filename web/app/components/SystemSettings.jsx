@@ -169,17 +169,26 @@ export default function SystemSettings({
         return (
           <div className="sys-settings-panel-body">
             <SelectSetting
-              label="Geofence radius"
-              hint="Guards must be within this distance to clock in at a premises."
+              label="Patrol point geofence"
+              hint="Guards must be within this distance to log a patrol scan at a checkpoint."
               value={systemSettings.geofenceRadiusMeters ?? 6}
               options={[5, 6, 7, 8]}
               suffix="m"
               disabled={savingKey === 'geofenceRadiusMeters'}
               onChange={(v) => save('geofenceRadiusMeters', v)}
             />
+            <SelectSetting
+              label="Premises clock-in radius"
+              hint="Guards can clock in/out within this distance of the site GPS pin."
+              value={systemSettings.premisesClockInRadiusMeters ?? 50}
+              options={[10, 20, 30, 40, 50]}
+              suffix="m"
+              disabled={savingKey === 'premisesClockInRadiusMeters'}
+              onChange={(v) => save('premisesClockInRadiusMeters', v)}
+            />
             <div className="sys-settings-info-card">
               <MapPin size={14} />
-              <span>Used for GPS clock-in verification.</span>
+              <span>Patrol scans use the tight geofence; clock-in/out uses the wider premises radius.</span>
             </div>
             <div className="sys-settings-toggle-row">
               <div>

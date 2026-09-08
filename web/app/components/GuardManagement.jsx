@@ -93,7 +93,7 @@ export default function GuardManagement({
 
   const [shiftForm, setShiftForm] = useState({
     guardId: '', premiseId: '', date: new Date().toISOString().slice(0, 10),
-    startTime: '06:00', endTime: '18:00', shiftType: 'Day',
+    startTime: '06:00', endTime: '18:00', shiftType: 'Day', durationType: 'day',
   });
 
   const [docForm, setDocForm] = useState({ type: 'id_copy', label: '', fileName: '' });
@@ -892,6 +892,7 @@ export default function GuardManagement({
               <div className="input-group" style={{ marginBottom: 0 }}><label>Start</label><input className="form-input" type="time" value={shiftForm.startTime} onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })} required /></div>
               <div className="input-group" style={{ marginBottom: 0 }}><label>End</label><input className="form-input" type="time" value={shiftForm.endTime} onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })} required /></div>
               <div className="input-group" style={{ marginBottom: 0 }}><label>Shift Type</label><select className="form-select" value={shiftForm.shiftType} onChange={(e) => setShiftForm({ ...shiftForm, shiftType: e.target.value })}><option>Day</option><option>Night</option><option>Custom</option></select></div>
+              <div className="input-group" style={{ marginBottom: 0 }}><label>Assignment</label><select className="form-select" value={shiftForm.durationType} onChange={(e) => setShiftForm({ ...shiftForm, durationType: e.target.value })}><option value="day">One day</option><option value="week">One week</option><option value="two_weeks">Two weeks</option><option value="permanent">Permanent on premises</option></select></div>
               <div style={{ gridColumn: 'span 3', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                 <button type="button" className="btn-secondary" onClick={resetShiftForm}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : editingShiftId ? 'Update Shift' : 'Save Shift'}</button>

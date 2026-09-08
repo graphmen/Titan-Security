@@ -680,11 +680,31 @@ export async function applyDirectRowUpsert(action, payload, tenantId, state) {
     }
     case 'CREATE_SHIFT':
     case 'UPDATE_SHIFT': {
-      const shiftId = payload.shiftId
-        || (state.shifts?.[tenantId] || []).slice(-1)[0]?.id;
-      const shift = (state.shifts?.[tenantId] || []).find((s) => s.id === shiftId);
-      if (!shift) throw new Error('Shift not found in memory after save');
-      await requireDbOk(await db.from('shifts').upsert(shiftToRow(shift, tenantId)), 'shifts upsert');
+      const shiftIds = payload.createdShiftIds?.length
+        ? payload.createdShiftIds
+        : [payload.shiftId || (state.shifts?.[tenantId] || []).slice(-1)[0]?.id].filter(Boolean);
+      const shifts = shiftIds
+        .map((id) => (state.shifts?.[tenantId] || []).find((s) => s.id === id))
+        .filter(Boolean);
+      if (!shifts.length) throw new Error('Shift not found in memory after save');
+      await requireDbOk(
+        await db.from('shifts').upsert(shifts.map((s) => shiftToRow(s, tenantId))),
+        'shifts upsert'
+      );
+      break;
+    }
+    case 'DEDUPE_SHIFTS': {
+      const removedShiftIds = payload.removedShiftIds || [];
+      if (removedShiftIds.length) {
+        await requireDbOk(await db.from('shifts').delete().in('id', removedShiftIds), 'shifts dedupe delete');
+      }
+      const shifts = state.shifts?.[tenantId] || [];
+      if (shifts.length) {
+        await requireDbOk(
+          await db.from('shifts').upsert(shifts.map((s) => shiftToRow(s, tenantId))),
+          'shifts dedupe upsert'
+        );
+      }
       break;
     }
     default:
@@ -702,6 +722,7 @@ const DIRECT_UPSERT_ACTIONS = new Set([
   'CREATE_PREMISE', 'UPDATE_PREMISE',
   'CREATE_PLACE', 'UPDATE_PLACE',
   'CREATE_SHIFT', 'UPDATE_SHIFT',
+  'DEDUPE_SHIFTS',
 ]);
 
 export function usesDirectRowUpsert(action) {

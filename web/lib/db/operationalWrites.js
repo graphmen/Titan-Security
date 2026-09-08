@@ -44,7 +44,15 @@ async function requireDbOk(result, context) {
 
 async function upsertGuardAlerts(alerts, tenantId, context) {
   if (!alerts.length) return;
-  const rows = alerts.map((a) => alertToRow(a, tenantId));
+  const unique = [];
+  const seen = new Set();
+  for (const alert of alerts) {
+    if (!alert?.id || seen.has(alert.id)) continue;
+    seen.add(alert.id);
+    unique.push(alert);
+  }
+  if (!unique.length) return;
+  const rows = unique.map((a) => alertToRow(a, tenantId));
   let result = await db.from('guard_alerts').upsert(rows);
   if (result?.error && /premise_id|shift_id|resolved_at/i.test(result.error.message || '')) {
     const minimal = rows.map(({ premise_id, shift_id, resolved_at, ...rest }) => rest);

@@ -108,6 +108,36 @@ export function ensureAlertStore(state, tenantId) {
   if (!state.shiftSwapRequests[tenantId]) state.shiftSwapRequests[tenantId] = [];
 }
 
+/** Collapse duplicate alert rows (same type/guard/site/shift) — keeps newest Active. */
+export function consolidateGuardAlerts(state, tenantId) {
+  ensureAlertStore(state, tenantId);
+  const list = state.guardAlerts[tenantId];
+  const byKey = new Map();
+
+  for (const alert of list) {
+    const key = alertDedupeKey(alert);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, alert);
+      continue;
+    }
+    const prefer =
+      existing.status === 'Active' && alert.status !== 'Active'
+        ? existing
+        : alert.status === 'Active' && existing.status !== 'Active'
+          ? alert
+          : new Date(alert.updatedAt || alert.createdAt || 0) >
+              new Date(existing.updatedAt || existing.createdAt || 0)
+            ? alert
+            : existing;
+    byKey.set(key, prefer);
+  }
+
+  state.guardAlerts[tenantId] = [...byKey.values()].sort(
+    (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+  );
+}
+
 function alertDedupeKey(a) {
   return [
     a.type,
@@ -119,6 +149,7 @@ function alertDedupeKey(a) {
 
 export function pushGuardAlert(state, tenantId, alert) {
   ensureAlertStore(state, tenantId);
+  consolidateGuardAlerts(state, tenantId);
   const key = alertDedupeKey(alert);
   const existing = state.guardAlerts[tenantId].find(
     (a) => alertDedupeKey(a) === key
@@ -139,12 +170,14 @@ export function pushGuardAlert(state, tenantId, alert) {
     ...alert,
   };
   state.guardAlerts[tenantId].unshift(entry);
+  consolidateGuardAlerts(state, tenantId);
   return entry;
 }
 
 /** Missed clock-in/out alerts — one Active row; mobile can beep until cleared. */
 export function pushRecurringComplianceAlert(state, tenantId, alert, repeatMinutes = 30) {
   ensureAlertStore(state, tenantId);
+  consolidateGuardAlerts(state, tenantId);
   const key = alertDedupeKey(alert);
   const matching = state.guardAlerts[tenantId].filter((a) => alertDedupeKey(a) === key);
   const active = matching.find((a) => a.status === 'Active');
@@ -162,6 +195,7 @@ export function pushRecurringComplianceAlert(state, tenantId, alert, repeatMinut
     ...alert,
   };
   state.guardAlerts[tenantId].unshift(entry);
+  consolidateGuardAlerts(state, tenantId);
   return entry;
 }
 
@@ -235,14 +269,14 @@ export function evaluateGuardMonitoring(state, tenantId, guardId, coords) {
   const lastMove = new Date(record.lastMovementAt || record.lastHeartbeat || record.clockIn).getTime();
   if (Date.now() - lastMove >= noMovementMs) {
     record.needsMovementAck = true;
-    pushGuardAlert(state, tenantId, {
+    pushRecurringComplianceAlert(state, tenantId, {
       type: 'no_movement',
       severity: 'warning',
       guardId,
       guardName,
       premiseId: record.premiseId,
       message: `${guardName} has had no movement for ${noMovementMins}+ minutes — confirm patrol status.`,
-    });
+    }, repeatMinutes);
   } else {
     record.needsMovementAck = false;
   }

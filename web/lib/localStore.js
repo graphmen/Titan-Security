@@ -43,6 +43,7 @@ import {
   dismissGuardAlerts,
   ensureAlertStore,
   performAutoClockOut,
+  consolidateGuardAlerts,
   getShiftEndDate,
 } from './guards';
 import { syncGuardTerritoryFromPremises, validateGuardSupervisorAssignment, filterAssignedPremisesForSupervisor, getSupervisorsForTerritory, resolveGuardTerritoryId } from './guardProfile';
@@ -72,6 +73,8 @@ import {
   validateShiftAssignment,
   buildShiftsFromAssignment,
   applyPermanentPremiseAssignment,
+  dedupeShiftList,
+  advancePastShiftStatuses,
 } from './shiftValidation.js';
 import {
   applyPatrolScheduleToAllPlaces,
@@ -262,6 +265,11 @@ export function getLocalState() {
     });
   });
   ensureSystemSettings(state);
+  for (const tid of Object.keys(state.shifts || {})) {
+    if (Array.isArray(state.shifts[tid])) {
+      state.shifts[tid] = dedupeShiftList(state.shifts[tid]);
+    }
+  }
   return state;
 }
 
@@ -947,13 +955,30 @@ export function processLocalAction(payload) {
         generateShiftId,
       });
 
+      const createdShiftIds = [];
       for (const candidate of newShifts) {
         const conflict = validateShiftAssignment(state.shifts[tenantId], candidate);
         if (!conflict.ok) return { error: conflict.error, status: 409 };
         state.shifts[tenantId].push(candidate);
+        createdShiftIds.push(candidate.id);
         notifyShiftWhatsApp(state, tenantId, candidate);
       }
-      break;
+      return { success: true, createdShiftIds, createdCount: createdShiftIds.length };
+    }
+    case 'DEDUPE_SHIFTS': {
+      if (!state.shifts[tenantId]) state.shifts[tenantId] = [];
+      const before = state.shifts[tenantId];
+      const beforeIds = new Set(before.map((s) => s.id));
+      state.shifts[tenantId] = dedupeShiftList(before);
+      advancePastShiftStatuses(state, tenantId);
+      const keptIds = new Set(state.shifts[tenantId].map((s) => s.id));
+      const removedShiftIds = [...beforeIds].filter((id) => !keptIds.has(id));
+      return {
+        success: true,
+        removedCount: removedShiftIds.length,
+        removedShiftIds,
+        remainingCount: state.shifts[tenantId].length,
+      };
     }
     case 'GUARD_CLOCK_IN': {
       const { guardId, premiseId, lat, lng, accuracyMeters, clientRequestId } = payload;
@@ -1313,7 +1338,9 @@ export function processLocalAction(payload) {
     case 'DISMISS_ALERTS_BY_TYPE': {
       const { alertType } = payload;
       ensureAlertStore(state, tenantId);
+      consolidateGuardAlerts(state, tenantId);
       runMonitoringEvaluators(state, tenantId);
+      consolidateGuardAlerts(state, tenantId);
       const now = new Date().toISOString();
       let count = 0;
       const dismissedIds = [];
@@ -1325,7 +1352,7 @@ export function processLocalAction(payload) {
         dismissedIds.push(a.id);
         count += 1;
       });
-      return { success: true, dismissedCount: count, dismissedIds };
+      return { success: true, dismissedCount: count, dismissedIds: [...new Set(dismissedIds)] };
     }
     case 'WELFARE_ACK': {
       const { guardId } = payload;

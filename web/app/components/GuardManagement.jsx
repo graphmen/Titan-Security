@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { apiFetch } from '../../lib/apiClient';
 import {
   UserPlus,
@@ -36,6 +36,7 @@ import WhatsAppSetupPanel from './WhatsAppSetupPanel';
 import { matchesSearch, premisesInTerritory } from '../../lib/listFilters';
 import { buildGuardProfileContext, premisesForSupervisor } from '../../lib/guardProfile';
 import { openManualWhatsAppIfNeeded, resolvePinDelivery } from '../../lib/pinDelivery';
+import { shiftFingerprint, resolveShiftDisplayStatus } from '../../lib/shiftValidation';
 
 const emptyGuardForm = () => ({
   fullName: '', employeeNumber: '', idNumber: '', phone: '', email: '',
@@ -107,6 +108,39 @@ export default function GuardManagement({
   const todayShifts = shifts.filter((s) => s.date === today);
   const activeAlerts = guardAlerts.filter((a) => a.status === 'Active');
   const pendingSwaps = shiftSwapRequests.filter((s) => s.status === 'Pending');
+
+  const rosterShifts = useMemo(
+    () =>
+      [...shifts]
+        .map((s) => ({
+          ...s,
+          displayStatus: resolveShiftDisplayStatus(s, attendance),
+        }))
+        .sort((a, b) => {
+          const byDate = (b.date || '').localeCompare(a.date || '');
+          if (byDate !== 0) return byDate;
+          return (a.startTime || '').localeCompare(b.startTime || '');
+        }),
+    [shifts, attendance]
+  );
+
+  const duplicateShiftCount = useMemo(() => {
+    const seen = new Set();
+    let dupes = 0;
+    for (const shift of shifts) {
+      const key = shiftFingerprint(shift);
+      if (seen.has(key)) dupes += 1;
+      else seen.add(key);
+    }
+    return dupes;
+  }, [shifts]);
+
+  const shiftStatusBadge = (status) => {
+    if (status === 'Active') return 'badge-green';
+    if (status === 'Completed') return 'badge-blue';
+    if (status === 'Missed') return 'badge-red';
+    return '';
+  };
   const expiringLicenses = guards.filter((g) => {
     if (!g.licenseExpiry) return false;
     const days = (new Date(g.licenseExpiry) - new Date()) / 86400000;
@@ -388,6 +422,18 @@ export default function GuardManagement({
     if (result) {
       notifyWhatsAppResult(result, 'Shift assignment');
       resetShiftForm();
+    }
+  };
+
+  const handleDedupeShifts = async () => {
+    if (!window.confirm('Remove duplicate shifts (same guard, site, date, and times)? This cannot be undone.')) {
+      return;
+    }
+    const result = await postAction('DEDUPE_SHIFTS', {});
+    if (result?.removedCount > 0) {
+      alert(`Removed ${result.removedCount} duplicate shift row(s).`);
+    } else if (result) {
+      alert('No duplicate shifts found.');
     }
   };
 
@@ -871,11 +917,25 @@ export default function GuardManagement({
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div>
               <h3 style={{ fontSize: '1.1rem' }}>Shift Roster</h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Assign guards to premises and shift times.</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Assign guards to premises and shift times. Past shifts show as Completed or Missed.
+              </p>
+              {duplicateShiftCount > 0 && (
+                <p style={{ fontSize: '0.75rem', color: '#b45309', marginTop: '0.35rem' }}>
+                  {duplicateShiftCount} duplicate row{duplicateShiftCount === 1 ? '' : 's'} detected on the roster.
+                </p>
+              )}
             </div>
-            <button type="button" className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => { resetShiftForm(); setShowShiftForm(true); }}>
-              <Plus size={14} /> Schedule Shift
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {duplicateShiftCount > 0 && (
+                <button type="button" className="btn-secondary" style={{ fontSize: '0.8rem' }} onClick={handleDedupeShifts} disabled={saving}>
+                  Clean duplicates
+                </button>
+              )}
+              <button type="button" className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => { resetShiftForm(); setShowShiftForm(true); }}>
+                <Plus size={14} /> Schedule Shift
+              </button>
+            </div>
           </div>
 
           {showShiftForm && (
@@ -912,15 +972,17 @@ export default function GuardManagement({
               </tr>
             </thead>
             <tbody>
-              {shifts.length === 0 ? (
+              {rosterShifts.length === 0 ? (
                 <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-dimmed)' }}>No shifts scheduled</td></tr>
-              ) : shifts.slice(0, 30).map((s) => (
+              ) : rosterShifts.slice(0, 50).map((s) => (
                 <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '0.5rem' }}>{s.date}</td>
                   <td style={{ padding: '0.5rem' }}>{guardName(s.guardId)}</td>
                   <td style={{ padding: '0.5rem' }}>{premiseName(s.premiseId)}</td>
                   <td style={{ padding: '0.5rem' }}>{s.startTime} – {s.endTime} ({s.shiftType})</td>
-                  <td style={{ padding: '0.5rem' }}><span className={`badge ${s.status === 'Active' ? 'badge-green' : s.status === 'Completed' ? 'badge-blue' : ''}`}>{s.status}</span></td>
+                  <td style={{ padding: '0.5rem' }}>
+                    <span className={`badge ${shiftStatusBadge(s.displayStatus)}`}>{s.displayStatus}</span>
+                  </td>
                   <td style={{ padding: '0.5rem' }}>
                     <div style={{ display: 'flex', gap: '0.35rem' }}>
                       <button type="button" className="btn-secondary" style={{ padding: '0.25rem 0.4rem' }} onClick={() => startEditShift(s)}><Pencil size={12} /></button>

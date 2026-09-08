@@ -27,6 +27,8 @@ import {
 } from './db/operationalWrites.js';
 import { evaluateLicenseExpiryAlerts, evaluateShiftCompliance } from './guards';
 import { runMonitoringEvaluators } from './monitoringEngine.js';
+import { dedupeShiftList } from './shiftValidation.js';
+import { consolidateGuardAlerts } from './guards.js';
 import { enrichStateWithSubscription, applyEvalSubscriptionOverrides, registerEvalPremiumSession, isLocalEvalSubscriptionMode } from './subscription.js';
 import { getWhatsAppStatus } from './whatsapp';
 import { getEmailStatus } from './email';
@@ -60,6 +62,10 @@ export async function loadFreshStateFromDatabase() {
     normalizeGuardSupervisorAssignments(state, tenantId);
     const migrated = migrateLegacyPatrolSchedules(state, tenantId);
     syncAllPlaceCheckpoints(state, tenantId);
+    if (state.shifts?.[tenantId]) {
+      state.shifts[tenantId] = dedupeShiftList(state.shifts[tenantId]);
+    }
+    consolidateGuardAlerts(state, tenantId);
     if (migrated > 0) {
       await persistAllPatrolSchedules(state, tenantId);
     }
@@ -175,7 +181,7 @@ const READ_ONLY_ACTIONS = new Set(['GUARD_LOGIN', 'SUPERVISOR_LOGIN', 'SWITCH_TE
 const RELATIONAL_WRITE_ACTIONS = new Set([
   'CREATE_GUARD', 'UPDATE_GUARD', 'BULK_ASSIGN_GUARD_SUPERVISOR', 'AUTO_ASSIGN_GUARD_SUPERVISORS_BY_TERRITORY',
   'RESET_GUARD_PIN', 'CHANGE_GUARD_PIN',
-  'CREATE_SHIFT', 'UPDATE_SHIFT',
+  'CREATE_SHIFT', 'UPDATE_SHIFT', 'DEDUPE_SHIFTS',
   'CREATE_PREMISE', 'UPDATE_PREMISE', 'CREATE_PLACE', 'UPDATE_PLACE',
   'CREATE_TERRITORY', 'UPDATE_TERRITORY', 'CREATE_SUPERVISOR', 'UPDATE_SUPERVISOR', 'UPDATE_SUPERVISOR_PHOTO',
   'RESET_SUPERVISOR_PIN', 'CHANGE_SUPERVISOR_PIN',

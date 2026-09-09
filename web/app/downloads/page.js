@@ -20,8 +20,8 @@ import { FALLBACK_MANIFEST, loadDownloadsManifest } from '../../lib/downloadsMan
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Mobile App Downloads — Titan Protection',
-  description: 'Download Titan Monitor and Titan Supervisor Android apps for field operations.',
+  title: 'App Downloads — Titan Protection',
+  description: 'Download Titan Monitor, Titan Supervisor, and the Windows desktop Command Centre client.',
 };
 
 const APP_CATALOG = {
@@ -45,9 +45,9 @@ const APP_CATALOG = {
   },
 };
 
-async function getApkFileMeta(apkFile) {
+async function getFileMeta(fileName) {
   try {
-    const filePath = path.join(process.cwd(), 'public', 'downloads', apkFile);
+    const filePath = path.join(process.cwd(), 'public', 'downloads', fileName);
     const fileStat = await stat(filePath);
     const mb = fileStat.size / (1024 * 1024);
     return {
@@ -60,6 +60,22 @@ async function getApkFileMeta(apkFile) {
       sizeLabel: 'Not published yet',
     };
   }
+}
+
+async function getApkFileMeta(apkFile) {
+  return getFileMeta(apkFile);
+}
+
+async function getDesktopMeta(manifest) {
+  const entry = manifest.desktop || FALLBACK_MANIFEST.desktop;
+  const portableMeta = await getFileMeta(entry.portableFile);
+  const setupMeta = await getFileMeta(entry.setupFile);
+  return {
+    ...entry,
+    portableMeta,
+    setupMeta,
+    available: portableMeta.available || setupMeta.available,
+  };
 }
 
 async function getApps() {
@@ -85,21 +101,22 @@ async function getApps() {
       };
     })
   );
-  return { updatedAt: manifest.updatedAt, apps };
+  const desktop = await getDesktopMeta(manifest);
+  return { updatedAt: manifest.updatedAt, apps, desktop };
 }
 
 export default async function DownloadsPage() {
-  const { apps, updatedAt } = await getApps();
+  const { apps, updatedAt, desktop } = await getApps();
 
   return (
     <div className="releases-page">
       <header className="releases-hero">
         <div className="releases-hero-inner">
           <span className="releases-badge">System releases &amp; deployment</span>
-          <h1>Mobile App Downloads &amp; System Ecosystem</h1>
+          <h1>App Downloads &amp; System Ecosystem</h1>
           <p>
-            Access the latest compiled Android APKs for Titan field officers and supervisors.
-            Review how the web command portal and mobile clients stay in sync across your operation.
+            Android APKs for field officers and supervisors, plus the Windows desktop Command Centre client.
+            All clients connect to the same live Titan server.
           </p>
           <div className="releases-hero-actions">
             <Link href="/" className="releases-back-link">
@@ -181,6 +198,52 @@ export default async function DownloadsPage() {
               })}
             </div>
 
+            <h2 className="releases-section-label" style={{ marginTop: '1.5rem' }}>Windows desktop client</h2>
+            <article className="releases-apk-card">
+              <div className="releases-apk-card-head">
+                <div className="releases-apk-icon">
+                  <Monitor size={22} />
+                </div>
+                <div>
+                  <h3>{desktop.name}</h3>
+                  <span className="releases-apk-badge">Command Centre desktop</span>
+                </div>
+              </div>
+              <p className="releases-apk-desc">
+                Dedicated Windows app for Master Admin and supervisors — opens the live Command Centre in a
+                focused window (no browser tabs). Same sign-in and data as the web dashboard.
+              </p>
+              <dl className="releases-meta-list">
+                <div className="releases-meta-row">
+                  <dt><Layers size={14} /> Version</dt>
+                  <dd>v{desktop.version}</dd>
+                </div>
+                <div className="releases-meta-row">
+                  <dt><HardDrive size={14} /> Portable EXE</dt>
+                  <dd>{desktop.portableMeta.sizeLabel}</dd>
+                </div>
+                <div className="releases-meta-row">
+                  <dt><Package size={14} /> Installer</dt>
+                  <dd>{desktop.setupMeta.sizeLabel}</dd>
+                </div>
+              </dl>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem' }}>
+                {desktop.portableMeta.available && (
+                  <a href={`/downloads/${desktop.portableFile}`} className="releases-download-btn" download={desktop.portableFile}>
+                    <Download size={18} /> Portable EXE
+                  </a>
+                )}
+                {desktop.setupMeta.available && (
+                  <a href={`/downloads/${desktop.setupFile}`} className="releases-download-btn releases-download-btn-secondary" download={desktop.setupFile}>
+                    <Download size={18} /> Setup installer
+                  </a>
+                )}
+              </div>
+              {desktop.notes && (
+                <p className="releases-apk-notes"><strong>Notes:</strong> {desktop.notes}</p>
+              )}
+            </article>
+
             <div className="releases-install-steps glass-panel">
               <h3><Smartphone size={18} /> Install &amp; in-app updates</h3>
               <ol>
@@ -205,10 +268,10 @@ export default async function DownloadsPage() {
                 <li>
                   <span className="releases-eco-icon monitor"><Monitor size={18} /></span>
                   <div>
-                    <strong>Master Admin Web Portal</strong>
+                    <strong>Master Admin Web &amp; Desktop</strong>
                     <p>
-                      Central command hub for administrators — register supervisors, guards, premises,
-                      and territories. Command Centre receives live SOS, GPS clock-ins, patrol taps, and incidents.
+                      Central command hub for administrators — browser or Windows desktop app. Register supervisors,
+                      guards, premises, and territories. Command Centre receives live SOS, GPS clock-ins, patrol taps, and incidents.
                     </p>
                   </div>
                 </li>

@@ -1,0 +1,46 @@
+{
+  "name": "titan-protection-desktop",
+  "version": "1.0.0",
+  "description": "Titan Protection Command Centre — Windows desktop client",
+  "main": "electron/main.js",
+  "author": "Titan Protection",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:local": "set TITAN_APP_URL=http://localhost:3010&& electron .",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "org.titanprotection.commandcentre",
+    "productName": "Titan Protection",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "assets/icon.png",
+      "signAndEditExecutable": false,
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "portable": {
+      "artifactName": "TitanProtection-${version}-portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "TitanProtection-${version}-Setup.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

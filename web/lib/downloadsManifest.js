@@ -40,4 +40,13 @@ export const FALLBACK_MANIFEST = {
     apkFile: 'titan-supervisor-latest.apk',
     notes: 'Fix server connection — APK now calls titanprotection.org (not localhost). PIN login works.',
   },
+  desktop: {
+    appId: 'desktop',
+    name: 'Titan Protection Desktop',
+    description: 'Windows desktop client for Command Centre and supervisor portal.',
+    version: '1.0.0',
+    portableFile: 'titan-protection-desktop.exe',
+    setupFile: 'titan-protection-desktop-setup.exe',
+    notes: 'Electron wrapper for the live web dashboard — no separate login, always synced with production.',
+  },
 };

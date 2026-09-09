@@ -14,6 +14,8 @@ web/out/
 # Mobile / Vite
 mobile/dist/
 mobile/dist-ssr/
+desktop/node_modules/
+desktop/dist/
 
 # Android build artifacts
 mobile/android/.gradle/

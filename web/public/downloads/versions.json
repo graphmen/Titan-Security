@@ -1,21 +1,30 @@
 {
-    "updatedAt":  "2026-09-09T05:45:08.766Z",
-    "monitor":  {
-                    "appId":  "monitor",
-                    "name":  "Titan Monitor",
-                    "description":  "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
-                    "version":  "1.0.33",
-                    "versionCode":  33,
-                    "apkFile":  "titan-monitor-latest.apk",
-                    "notes":  "Published 2026-09-09 07:45"
-                },
-    "supervisor":  {
-                       "appId":  "supervisor",
-                       "name":  "Titan Supervisor",
-                       "description":  "Supervisor field app - teams, sites, and territory operations.",
-                       "version":  "1.2.5",
-                       "versionCode":  25,
-                       "apkFile":  "titan-supervisor-latest.apk",
-                       "notes":  "Published 2026-09-09 07:45"
-                   }
+  "updatedAt": "2026-09-09T08:55:00.000Z",
+  "monitor": {
+    "appId": "monitor",
+    "name": "Titan Monitor",
+    "description": "Guard field app - patrol, clock-in, SOS, and NFC checkpoints.",
+    "version": "1.0.33",
+    "versionCode": 33,
+    "apkFile": "titan-monitor-latest.apk",
+    "notes": "Visitor check-in at premises; NFC patrol scanning."
+  },
+  "supervisor": {
+    "appId": "supervisor",
+    "name": "Titan Supervisor",
+    "description": "Supervisor field app - teams, sites, and territory operations.",
+    "version": "1.2.5",
+    "versionCode": 25,
+    "apkFile": "titan-supervisor-latest.apk",
+    "notes": "Supervisor field operations synced with Command Centre."
+  },
+  "desktop": {
+    "appId": "desktop",
+    "name": "Titan Protection Desktop",
+    "description": "Windows desktop client for Command Centre and supervisor portal.",
+    "version": "1.0.0",
+    "portableFile": "titan-protection-desktop.exe",
+    "setupFile": "titan-protection-desktop-setup.exe",
+    "notes": "Electron desktop wrapper for https://titanprotection.org — always live-synced."
+  }
 }

@@ -432,30 +432,66 @@ export function processLocalAction(payload) {
       break;
     }
     case 'REGISTER_VISITOR': {
-      const { name, idNumber, company, vehiclePlate, guardId, guardName } = payload;
+      const { name, idNumber, company, vehiclePlate, guardId, guardName, premiseId } = payload;
+      if (!name?.trim() || !idNumber?.trim()) {
+        return { error: 'Visitor name and ID are required', status: 400 };
+      }
+      const premiseList = state.premises[tenantId] || [];
+      const premise = premiseList.find((p) => p.id === premiseId);
+      const resolvedPremiseId = premise?.id || premiseId || null;
+      const resolvedPremiseName = premise?.name || payload.premiseName || null;
+      const resolvedGuardName = guardName || getGuardName(state, tenantId, guardId, guardName);
+      const now = new Date().toISOString();
       const visitor = {
         id: `v-${Date.now()}`,
         tenantId,
-        name,
-        idNumber,
-        company,
-        vehiclePlate: vehiclePlate || 'N/A',
-        checkInTime: new Date().toISOString(),
+        name: name.trim(),
+        idNumber: idNumber.trim(),
+        company: company?.trim() || '',
+        vehiclePlate: vehiclePlate?.trim() || 'N/A',
+        checkInTime: now,
         checkOutTime: null,
         status: 'Active',
+        premiseId: resolvedPremiseId,
+        premiseName: resolvedPremiseName,
         registeredByGuardId: guardId || null,
-        registeredByGuardName: guardName || null,
+        registeredByGuardName: guardId ? resolvedGuardName : guardName || null,
       };
       state.visitors.unshift(visitor);
+      state.occurrenceBook.unshift({
+        id: `ob-vis-in-${Date.now()}`,
+        tenantId,
+        timestamp: now,
+        guardName: visitor.registeredByGuardName || 'Access Desk',
+        guardId: guardId || null,
+        type: 'Visitor Check-In',
+        description: `${visitor.name} checked in at ${resolvedPremiseName || 'site'}${visitor.company ? ` (${visitor.company})` : ''}${visitor.vehiclePlate && visitor.vehiclePlate !== 'N/A' ? ` · ${visitor.vehiclePlate}` : ''}`,
+        status: 'Resolved',
+        attachments: { photo: null, voice: null },
+      });
       return { success: true, visitorId: visitor.id, visitor };
     }
     case 'CHECKOUT_VISITOR': {
-      const { visitorId } = payload;
+      const { visitorId, guardId, guardName } = payload;
       const visitor = state.visitors.find((v) => v.id === visitorId);
-      if (visitor) {
-        visitor.status = 'Checked Out';
-        visitor.checkOutTime = new Date().toISOString();
-      }
+      if (!visitor) return { error: 'Visitor not found', status: 404 };
+      const now = new Date().toISOString();
+      visitor.status = 'Checked Out';
+      visitor.checkOutTime = now;
+      const siteName = visitor.premiseName
+        || (state.premises[tenantId] || []).find((p) => p.id === visitor.premiseId)?.name
+        || 'site';
+      state.occurrenceBook.unshift({
+        id: `ob-vis-out-${Date.now()}`,
+        tenantId,
+        timestamp: now,
+        guardName: guardName || getGuardName(state, tenantId, guardId, 'Access Desk'),
+        guardId: guardId || null,
+        type: 'Visitor Check-Out',
+        description: `${visitor.name} checked out from ${siteName}`,
+        status: 'Resolved',
+        attachments: { photo: null, voice: null },
+      });
       break;
     }
     case 'CREATE_EQUIPMENT': {

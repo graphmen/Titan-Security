@@ -241,19 +241,33 @@ export async function persistOperationalActionToDb(action, payload, tenantId, st
         (visitorId && (state.visitors || []).find((v) => v.id === visitorId))
         || (state.visitors || [])[0];
       if (visitor) {
+        const row = {
+          id: visitor.id,
+          tenant_id: tenantId,
+          name: visitor.name,
+          id_number: visitor.idNumber,
+          company: visitor.company,
+          vehicle_plate: visitor.vehiclePlate,
+          check_in_time: visitor.checkInTime,
+          check_out_time: visitor.checkOutTime,
+          status: visitor.status,
+          premise_id: visitor.premiseId || null,
+          premise_name: visitor.premiseName || null,
+          registered_by_guard_id: visitor.registeredByGuardId || null,
+          registered_by_guard_name: visitor.registeredByGuardName || null,
+        };
+        let result = await db.from('visitors').upsert(row);
+        if (result?.error && /premise_|registered_by/i.test(result.error.message || '')) {
+          const { premise_id, premise_name, registered_by_guard_id, registered_by_guard_name, ...minimal } = row;
+          result = await db.from('visitors').upsert(minimal);
+        }
+        await requireDbOk(result, 'visitors REGISTER');
+      }
+      const obItem = (state.occurrenceBook || []).find((item) => item.id?.startsWith('ob-vis-in-'));
+      if (obItem) {
         await requireDbOk(
-          await db.from('visitors').upsert({
-            id: visitor.id,
-            tenant_id: tenantId,
-            name: visitor.name,
-            id_number: visitor.idNumber,
-            company: visitor.company,
-            vehicle_plate: visitor.vehiclePlate,
-            check_in_time: visitor.checkInTime,
-            check_out_time: visitor.checkOutTime,
-            status: visitor.status,
-          }),
-          'visitors REGISTER'
+          await db.from('occurrence_book').upsert(occurrenceToRow(obItem, tenantId)),
+          'occurrence_book visitor check-in'
         );
       }
       break;
@@ -268,6 +282,13 @@ export async function persistOperationalActionToDb(action, payload, tenantId, st
             check_out_time: visitor.checkOutTime,
           }).eq('id', visitorId),
           'visitors CHECKOUT'
+        );
+      }
+      const obItem = (state.occurrenceBook || []).find((item) => item.id?.startsWith('ob-vis-out-'));
+      if (obItem) {
+        await requireDbOk(
+          await db.from('occurrence_book').upsert(occurrenceToRow(obItem, tenantId)),
+          'occurrence_book visitor check-out'
         );
       }
       break;

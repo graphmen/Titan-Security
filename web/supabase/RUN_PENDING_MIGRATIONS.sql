@@ -27,3 +27,10 @@ ALTER TABLE public.places ADD COLUMN IF NOT EXISTS gps_captured_at timestamptz;
 
 -- 012: when supervisor dismisses an alert, persist resolved_at
 ALTER TABLE public.guard_alerts ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
+
+-- 013: visitor check-in at premises (mobile guard + command centre)
+ALTER TABLE public.visitors ADD COLUMN IF NOT EXISTS premise_id text;
+ALTER TABLE public.visitors ADD COLUMN IF NOT EXISTS premise_name text;
+ALTER TABLE public.visitors ADD COLUMN IF NOT EXISTS registered_by_guard_id text;
+ALTER TABLE public.visitors ADD COLUMN IF NOT EXISTS registered_by_guard_name text;
+CREATE INDEX IF NOT EXISTS idx_visitors_premise ON public.visitors(tenant_id, premise_id, status);

@@ -838,10 +838,17 @@ export default function App() {
     e.preventDefault();
     if (!vName || !vIdNumber) return;
 
+    const visitorPremiseId = myAttendance?.premiseId || premiseId;
+    if (!isOnDuty || !visitorPremiseId) {
+      showToast('Clock in at your site first to register visitors', 'error');
+      return;
+    }
+
     const payload = {
       tenantId,
       guardId,
       guardName,
+      premiseId: visitorPremiseId,
       name: vName,
       idNumber: vIdNumber,
       company: vCompany,
@@ -892,6 +899,7 @@ export default function App() {
         tenantId,
         visitorId,
         guardId,
+        guardName,
       });
       showToast('Visitor checked out');
       fetchState();
@@ -899,10 +907,6 @@ export default function App() {
       showToast(e.message || 'Could not check out visitor', 'error');
     }
   };
-
-  const activeVisitors = (state?.visitors || []).filter(
-    (v) => v.tenantId === tenantId && v.status === 'Active'
-  );
 
   // Complete Checklist
   const handleSubmitChecklist = async (e) => {
@@ -1085,6 +1089,14 @@ export default function App() {
   const attendance = state?.attendance?.[tenantId] || [];
   const myAttendance = attendance.find((a) => a.guardId === guardId && (a.status === 'On Duty' || a.status === 'Late'));
   const isOnDuty = !!myAttendance;
+  const visitorPremiseId = myAttendance?.premiseId || premiseId;
+  const activeVisitors = (state?.visitors || []).filter((v) => {
+    if (v.tenantId !== tenantId || v.status !== 'Active') return false;
+    if (isOnDuty && visitorPremiseId) {
+      return !v.premiseId || v.premiseId === visitorPremiseId;
+    }
+    return true;
+  });
   const todayShifts = (state?.shifts?.[tenantId] || []).filter(
     (s) => s.guardId === guardId && s.date === new Date().toISOString().slice(0, 10)
   );
@@ -2348,8 +2360,15 @@ export default function App() {
           <div className="mob-tab-panel" key={`access-${tabKey}`}>
             <h3 className="mob-section-title">
               <span className="mob-section-icon access"><Users size={16} /></span>
-              Access Desk Scan
+              {activePremise ? `${activePremise.name} — Access Desk` : 'Access Desk Scan'}
             </h3>
+            {!isOnDuty && (
+              <div className="mob-card" style={{ marginBottom: '0.75rem', background: '#fffbeb', border: '1px solid #fde68a' }}>
+                <p style={{ fontSize: '0.78rem', color: '#92400e', margin: 0 }}>
+                  Clock in at your premises first — then you can check visitors in and out for this site.
+                </p>
+              </div>
+            )}
 
             {/* QR Scanner camera graphic */}
             <div className="mob-card" style={{ padding: '0.5rem' }}>
@@ -2391,19 +2410,22 @@ export default function App() {
               <label className="mob-field-label">Vehicle Plate (Optional)</label>
               <input className="mob-input" value={vPlate} onChange={e => setVPlate(e.target.value)} placeholder="e.g. ADV-7201-ZW" style={{ marginBottom: '1rem' }} />
 
-              <button type="submit" className="mob-btn mob-btn-success">
-                <UserCheck size={16} /> Register Access Entry
+              <button type="submit" className="mob-btn mob-btn-success" disabled={!isOnDuty}>
+                <UserCheck size={16} /> {isOnDuty ? 'Check In Visitor' : 'Clock in first'}
               </button>
             </form>
 
             {activeVisitors.length > 0 && (
               <div className="mob-card" style={{ marginTop: '0.75rem' }}>
-                <div className="mob-card-label">Active on site ({activeVisitors.length})</div>
+                <div className="mob-card-label">Active at this site ({activeVisitors.length})</div>
                 {activeVisitors.map((v) => (
                   <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0', borderBottom: '1px solid var(--mob-border)' }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{v.name}</div>
-                      <div style={{ fontSize: '0.68rem', color: 'var(--mob-text-muted)' }}>{v.company || '—'} · {v.idNumber}</div>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--mob-text-muted)' }}>
+                        {v.company || '—'} · {v.idNumber}
+                        {v.checkInTime ? ` · ${new Date(v.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                      </div>
                     </div>
                     <button type="button" className="mob-btn mob-btn-secondary mob-btn-sm" onClick={() => handleCheckoutVisitor(v.id)}>
                       Check out

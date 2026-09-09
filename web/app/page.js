@@ -51,6 +51,7 @@ import ReportExportPanel from './components/ReportExportPanel';
 import EquipmentRegister from './components/EquipmentRegister';
 import { mergeSystemSettings } from '../lib/systemSettings';
 import { getLiveOccurrenceBook, getOccurrenceHistory, getLiveVisitors, formatObDateTime } from '../lib/historyArchive';
+import { formatVisitorCheckInTime, resolveVisitorPremiseName } from '../lib/visitors';
 import { apiFetch } from '../lib/apiClient';
 import { tenantRows } from '../lib/safeData';
 import { useRouter } from 'next/navigation';
@@ -85,6 +86,7 @@ export default function DashboardPage() {
   const [vIdNumber, setVIdNumber] = useState('');
   const [vCompany, setVCompany] = useState('');
   const [vPlate, setVPlate] = useState('');
+  const [vPremiseId, setVPremiseId] = useState('');
 
   // Audio / alert preferences (synced from system settings)
   const sirenEnabledRef = useRef(true);
@@ -350,6 +352,7 @@ export default function DashboardPage() {
   const handleAddVisitor = async (e) => {
     e.preventDefault();
     if (!vName || !vIdNumber) return;
+    const premiseId = vPremiseId || curPremises[0]?.id || '';
     try {
       await apiFetch('/api/state', {
         method: 'POST',
@@ -357,6 +360,7 @@ export default function DashboardPage() {
         body: JSON.stringify({ 
           action: 'REGISTER_VISITOR',
           tenantId: state.activeTenantId,
+          premiseId,
           name: vName, 
           idNumber: vIdNumber, 
           company: vCompany, 
@@ -1003,6 +1007,14 @@ export default function DashboardPage() {
                     <label>Representing</label>
                     <input className="form-input" value={vCompany} onChange={e => setVCompany(e.target.value)} placeholder="e.g. DHL Express" />
                   </div>
+                  <div className="input-group" style={{ gridColumn: 'span 2', marginBottom: 0 }}>
+                    <label>Premises / Site</label>
+                    <select className="form-select" value={vPremiseId || curPremises[0]?.id || ''} onChange={(e) => setVPremiseId(e.target.value)} required>
+                      {curPremises.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="input-group" style={{ gridColumn: 'span 2', marginBottom: '0.4rem' }}>
                     <label>Vehicle License Plate</label>
                     <input className="form-input" value={vPlate} onChange={e => setVPlate(e.target.value)} placeholder="e.g. AGC-339-ZW" />
@@ -1024,9 +1036,11 @@ export default function DashboardPage() {
                     <thead>
                       <tr style={{ borderBottom: '1px solid var(--border-light)', color: 'var(--text-muted)' }}>
                         <th style={{ padding: '0.4rem' }}>Visitor Details</th>
+                        <th style={{ padding: '0.4rem' }}>Premises</th>
                         <th style={{ padding: '0.4rem' }}>Company</th>
                         <th style={{ padding: '0.4rem' }}>Plate</th>
                         <th style={{ padding: '0.4rem' }}>Check In</th>
+                        <th style={{ padding: '0.4rem' }}>Logged By</th>
                         <th style={{ padding: '0.4rem' }}>Status</th>
                         <th style={{ padding: '0.4rem', textAlign: 'right' }}>Action</th>
                       </tr>
@@ -1034,7 +1048,7 @@ export default function DashboardPage() {
                     <tbody>
                       {curVisitors.length === 0 ? (
                         <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dimmed)' }}>No guests signed in today.</td>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-dimmed)' }}>No guests signed in today.</td>
                         </tr>
                       ) : (
                         curVisitors.map(v => (
@@ -1043,9 +1057,11 @@ export default function DashboardPage() {
                               <div style={{ fontWeight: '600' }}>{v.name}</div>
                               <div style={{ fontSize: '0.725rem', color: 'var(--text-dimmed)' }}>{v.idNumber}</div>
                             </td>
+                            <td style={{ padding: '0.5rem' }}>{resolveVisitorPremiseName(state, state.activeTenantId, v)}</td>
                             <td style={{ padding: '0.5rem' }}>{v.company || 'N/A'}</td>
                             <td style={{ padding: '0.5rem' }}><span style={{ fontFamily: 'monospace', background: '#f1f5f9', padding: '0.15rem 0.35rem', borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '0.8rem' }}>{v.vehiclePlate}</span></td>
-                            <td style={{ padding: '0.5rem' }}>{new Date(v.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                            <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{formatVisitorCheckInTime(v.checkInTime)}</td>
+                            <td style={{ padding: '0.5rem', fontSize: '0.75rem' }}>{v.registeredByGuardName || 'Desk'}</td>
                             <td style={{ padding: '0.5rem' }}>
                               <span className={`badge ${v.status === 'Active' ? 'badge-green' : 'badge-blue'}`}>
                                 {v.status}

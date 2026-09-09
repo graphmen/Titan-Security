@@ -327,6 +327,10 @@ export async function loadAppStateFromRelationalDb() {
       checkInTime: v.check_in_time,
       checkOutTime: v.check_out_time,
       status: v.status,
+      premiseId: v.premise_id || null,
+      premiseName: v.premise_name || null,
+      registeredByGuardId: v.registered_by_guard_id || null,
+      registeredByGuardName: v.registered_by_guard_name || null,
     }));
   }
 

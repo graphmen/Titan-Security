@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { BookOpen, Users, Search, Clock, Filter } from 'lucide-react';
 import { getOccurrenceHistory, getVisitorHistory, formatObDateTime } from '../../lib/historyArchive';
+import { resolveVisitorPremiseName } from '../../lib/visitors';
 
 export default function HistoryPanel({
   state,
@@ -163,6 +164,7 @@ export default function HistoryPanel({
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-light)', textAlign: 'left' }}>
                   <th style={{ padding: '0.5rem' }}>Check-in</th>
+                  <th style={{ padding: '0.5rem' }}>Premises</th>
                   <th style={{ padding: '0.5rem' }}>Name</th>
                   <th style={{ padding: '0.5rem' }}>ID / Company</th>
                   <th style={{ padding: '0.5rem' }}>Vehicle</th>
@@ -173,6 +175,7 @@ export default function HistoryPanel({
                 {visitorHistory.map((v) => (
                   <tr key={v.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>{formatObDateTime(v.checkInTime)}</td>
+                    <td style={{ padding: '0.5rem' }}>{resolveVisitorPremiseName(state, tenantId, v)}</td>
                     <td style={{ padding: '0.5rem' }}>{v.name}</td>
                     <td style={{ padding: '0.5rem' }}>{v.idNumber}{v.company ? ` · ${v.company}` : ''}</td>
                     <td style={{ padding: '0.5rem' }}>{v.vehiclePlate || '—'}</td>

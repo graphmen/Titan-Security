@@ -231,11 +231,12 @@ export async function GET(req) {
 
   const scopeSupervisor = client === 'supervisor' && supervisorId;
   const adminSessionKey = getAdminSessionKey(session);
+  const forceFresh = url.searchParams.get('fresh') === '1';
 
   try {
     if (isForceSupabaseEnabled()) {
       if (await isSupabaseReady()) {
-        let state = await getSupabaseAppState(adminSessionKey);
+        let state = await getSupabaseAppState(adminSessionKey, { force: forceFresh });
         if (scopeSupervisor) {
           const scoped = filterStateForSupervisor(state, tenantId, supervisorId);
           if (!scoped) {

@@ -5,8 +5,8 @@ import {
   SUPERVISOR_COOKIE,
   createSupervisorSessionToken,
   sessionCookieOptions,
-  verifySupervisorPin,
 } from '../../../../../lib/webAuth';
+import { findSupervisorByPin } from '../../../../../lib/supervisorAuth';
 import { sanitizeSupervisorPublic } from '../../../../../lib/supervisorScope';
 import { isForceSupabaseEnabled } from '../../../../../lib/env';
 
@@ -27,11 +27,20 @@ export async function POST(req) {
     }
 
     const state = await loadState();
-    const supervisor = verifySupervisorPin(state, tenantId, pin);
+    const supervisor = findSupervisorByPin(state.supervisors?.[tenantId] || [], pin);
     if (!supervisor) {
       return NextResponse.json(
         { error: 'Invalid PIN — use the same code as the Titan Supervisor mobile app' },
         { status: 401 }
+      );
+    }
+    if (!(supervisor.assignedTerritoryIds || []).length) {
+      return NextResponse.json(
+        {
+          error:
+            'Your supervisor account has no assigned territories yet. Ask your Master Admin to assign territories, then try again.',
+        },
+        { status: 403 }
       );
     }
 

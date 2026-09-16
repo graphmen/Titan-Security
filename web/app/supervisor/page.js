@@ -25,11 +25,11 @@ import {
   History,
   Package,
 } from 'lucide-react';
-import GuardManagement from '../components/GuardManagement';
-import PremisesRegistration from '../components/PremisesRegistration';
-import DatabaseExplorer from '../components/DatabaseExplorer';
-import HistoryPanel from '../components/HistoryPanel';
-import EquipmentRegister from '../components/EquipmentRegister';
+const GuardManagement = dynamic(() => import('../components/GuardManagement'));
+const PremisesRegistration = dynamic(() => import('../components/PremisesRegistration'));
+const DatabaseExplorer = dynamic(() => import('../components/DatabaseExplorer'));
+const HistoryPanel = dynamic(() => import('../components/HistoryPanel'));
+const EquipmentRegister = dynamic(() => import('../components/EquipmentRegister'));
 import MapErrorBoundary from '../components/MapErrorBoundary';
 import { mergeSystemSettings } from '../../lib/systemSettings';
 import { getLiveOccurrenceBook, getOccurrenceHistory, getLiveVisitors, formatObDateTime } from '../../lib/historyArchive';
@@ -69,15 +69,20 @@ export default function SupervisorDashboardPage() {
   const [vPlate, setVPlate] = useState('');
   const fetchInFlightRef = useRef(false);
   const pollTimerRef = useRef(null);
+  const pollActiveRef = useRef(false);
 
-  const fetchState = async () => {
-    if (fetchInFlightRef.current) return;
+  const fetchState = async (options = {}) => {
+    const force = options === true || options?.force;
+    if (fetchInFlightRef.current && !force) return false;
     fetchInFlightRef.current = true;
     try {
-      const res = await apiFetch('/api/state?client=supervisor', { signal: AbortSignal.timeout(30000) });
+      const freshQs = force ? '&fresh=1' : '';
+      const res = await apiFetch(`/api/state?client=supervisor${freshQs}`, { signal: AbortSignal.timeout(30000) });
       if (res.status === 401) {
-        router.push('/supervisor/login');
-        return;
+        pollActiveRef.current = false;
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        router.replace('/supervisor/login');
+        return false;
       }
       if (!res.ok) throw new Error('Failed to load your territory data');
       const data = await res.json();
@@ -85,25 +90,37 @@ export default function SupervisorDashboardPage() {
       setSupervisorName(data.supervisor?.fullName || 'Supervisor');
       setLoading(false);
       setError(null);
+      return true;
     } catch (err) {
       setError(err.message || 'Connection error');
+      setLoading(false);
+      return false;
     } finally {
       fetchInFlightRef.current = false;
     }
   };
 
   const schedulePoll = () => {
+    if (!pollActiveRef.current) return;
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     pollTimerRef.current = setTimeout(async () => {
-      await fetchState();
-      schedulePoll();
+      const ok = await fetchState();
+      if (ok) schedulePoll();
     }, 10000);
   };
 
   useEffect(() => {
-    fetchState();
-    schedulePoll();
+    let cancelled = false;
+    (async () => {
+      const ok = await fetchState();
+      if (!cancelled && ok) {
+        pollActiveRef.current = true;
+        schedulePoll();
+      }
+    })();
     return () => {
+      cancelled = true;
+      pollActiveRef.current = false;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, []);
@@ -170,9 +187,16 @@ export default function SupervisorDashboardPage() {
 
   if (loading && !state) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem' }}>
-        <RefreshCw className="spin" size={36} style={{ color: 'var(--color-primary)' }} />
-        <p style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Loading your supervisor workspace…</p>
+      <div className="app-layout">
+        <aside className="sidebar-wrapper">
+          <div className="sidebar-logo">
+            <img src="/emblem-wordmark.png" alt="Titan Protection" />
+          </div>
+        </aside>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', minHeight: '100vh' }}>
+          <RefreshCw className="spin" size={36} style={{ color: 'var(--color-primary)' }} />
+          <p style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Loading supervisor workspace…</p>
+        </div>
       </div>
     );
   }

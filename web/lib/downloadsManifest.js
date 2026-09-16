@@ -44,9 +44,8 @@ export const FALLBACK_MANIFEST = {
     appId: 'desktop',
     name: 'Titan Protection Desktop',
     description: 'Windows desktop client for Command Centre and supervisor portal.',
-    version: '1.0.0',
-    portableFile: 'titan-protection-desktop.exe',
+    version: '1.0.2',
     setupFile: 'titan-protection-desktop-setup.exe',
-    notes: 'Electron wrapper for the live web dashboard — no separate login, always synced with production.',
+    notes: 'Windows installer with EULA, Titan emblem icon, Start Menu and desktop shortcuts.',
   },
 };

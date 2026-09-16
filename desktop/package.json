@@ -1,6 +1,6 @@
 {
   "name": "titan-protection-desktop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Titan Protection Command Centre — Windows desktop client",
   "main": "electron/main.js",
   "author": "Titan Protection",
@@ -8,14 +8,15 @@
   "scripts": {
     "start": "electron .",
     "start:local": "set TITAN_APP_URL=http://localhost:3010&& electron .",
-    "build": "electron-builder --win",
-    "build:portable": "electron-builder --win portable"
+    "icons": "powershell -ExecutionPolicy Bypass -File scripts/generate-desktop-icons.ps1",
+    "prebuild": "npm run icons",
+    "build": "electron-builder --win nsis"
   },
   "build": {
     "appId": "org.titanprotection.commandcentre",
     "productName": "Titan Protection",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
       "electron/**/*",
@@ -24,19 +25,33 @@
     ],
     "win": {
       "icon": "assets/icon.png",
+      "executableName": "TitanProtection",
+      "publisherName": "Titan Protection",
       "signAndEditExecutable": false,
       "target": [
-        "portable",
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
       ]
-    },
-    "portable": {
-      "artifactName": "TitanProtection-${version}-portable.exe"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "TitanProtection-${version}-Setup.exe"
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Titan Protection",
+      "menuCategory": "Titan Protection",
+      "runAfterFinish": true,
+      "license": "assets/LICENSE.txt",
+      "installerLanguages": ["en_US"],
+      "displayLanguageSelector": false,
+      "artifactName": "TitanProtection-${version}-Setup.exe",
+      "uninstallDisplayName": "Titan Protection Command Centre",
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     }
   },
   "devDependencies": {

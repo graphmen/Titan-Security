@@ -41,14 +41,14 @@ import {
   History,
   Package,
 } from 'lucide-react';
-import PremisesRegistration from './components/PremisesRegistration';
-import GuardManagement from './components/GuardManagement';
-import SupervisorManagement from './components/SupervisorManagement';
-import SystemSettings from './components/SystemSettings';
-import DatabaseExplorer from './components/DatabaseExplorer';
-import HistoryPanel from './components/HistoryPanel';
-import ReportExportPanel from './components/ReportExportPanel';
-import EquipmentRegister from './components/EquipmentRegister';
+const PremisesRegistration = dynamic(() => import('./components/PremisesRegistration'));
+const GuardManagement = dynamic(() => import('./components/GuardManagement'));
+const SupervisorManagement = dynamic(() => import('./components/SupervisorManagement'));
+const SystemSettings = dynamic(() => import('./components/SystemSettings'));
+const DatabaseExplorer = dynamic(() => import('./components/DatabaseExplorer'));
+const HistoryPanel = dynamic(() => import('./components/HistoryPanel'));
+const ReportExportPanel = dynamic(() => import('./components/ReportExportPanel'));
+const EquipmentRegister = dynamic(() => import('./components/EquipmentRegister'));
 import { mergeSystemSettings } from '../lib/systemSettings';
 import { getLiveOccurrenceBook, getOccurrenceHistory, getLiveVisitors, formatObDateTime } from '../lib/historyArchive';
 import { formatVisitorCheckInTime, resolveVisitorPremiseName } from '../lib/visitors';
@@ -57,8 +57,8 @@ import { tenantRows } from '../lib/safeData';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import MapErrorBoundary from './components/MapErrorBoundary';
-import GuardStatusBoard from './components/GuardStatusBoard';
-import SubscriptionPanel from './components/SubscriptionPanel';
+const GuardStatusBoard = dynamic(() => import('./components/GuardStatusBoard'));
+const SubscriptionPanel = dynamic(() => import('./components/SubscriptionPanel'));
 
 const PremisesMapPanel = dynamic(() => import('./components/PremisesMapPanel'), {
   ssr: false,
@@ -126,7 +126,8 @@ export default function DashboardPage() {
     }
     fetchInFlightRef.current = true;
     try {
-      const res = await apiFetch('/api/state?client=web', { signal: AbortSignal.timeout(30000) });
+      const freshQs = force ? '&fresh=1' : '';
+      const res = await apiFetch(`/api/state?client=web${freshQs}`, { signal: AbortSignal.timeout(30000) });
       if (res.status === 401) {
         router.push('/login');
         return;
@@ -425,13 +426,20 @@ export default function DashboardPage() {
     }
   };
 
-  // Loading display
+  // Loading display — show app shell immediately so the page feels responsive
   if (loading && !state) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem', background: '#f8fafc' }}>
-        <RefreshCw style={{ animation: 'spin 1.5s linear infinite', color: '#1b4332', width: '36px', height: '36px' }} />
-        <p style={{ color: '#3d5a48', fontWeight: 500 }}>Loading Titan Protection Command Centre...</p>
-        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+      <div className="app-layout">
+        <aside className="sidebar-wrapper">
+          <div className="sidebar-logo">
+            <img src="/emblem-wordmark.png" alt="Titan Protection" />
+          </div>
+        </aside>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', minHeight: '100vh', background: '#f8fafc' }}>
+          <RefreshCw style={{ animation: 'spin 1.5s linear infinite', color: '#1b4332', width: '36px', height: '36px' }} />
+          <p style={{ color: '#3d5a48', fontWeight: 500 }}>Loading Command Centre…</p>
+          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+        </div>
       </div>
     );
   }
@@ -440,7 +448,7 @@ export default function DashboardPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '1rem', background: '#f8fafc', padding: '1.5rem', textAlign: 'center' }}>
         <p style={{ color: 'var(--color-danger)', fontWeight: 500, maxWidth: '520px' }}>{error || 'Cannot reach Titan server. Check your connection and refresh.'}</p>
-        <button type="button" className="btn-primary" onClick={() => { setLoading(true); setError(null); fetchState(); }}>Try again</button>
+        <button type="button" className="btn-primary" onClick={() => { setLoading(true); setError(null); fetchState({ force: true }); }}>Try again</button>
       </div>
     );
   }
@@ -569,7 +577,7 @@ export default function DashboardPage() {
           </li>
           <li>
             <Link href="/downloads" className="sidebar-nav-item sidebar-nav-link">
-              <Download size={18} /> Mobile App Downloads
+              <Download size={18} /> Downloads
             </Link>
           </li>
           <li>

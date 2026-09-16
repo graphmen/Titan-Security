@@ -1,0 +1,86 @@
+TITAN PROTECTION DESKTOP — END USER LICENSE AGREEMENT
+
+Copyright (c) 2026 Titan Protection. All rights reserved.
+
+IMPORTANT — READ CAREFULLY BEFORE INSTALLING OR USING THIS SOFTWARE.
+
+By clicking "I Agree", installing, or using Titan Protection Desktop (the
+"Software"), you accept these Terms and Conditions. If you do not agree, do
+not install or use the Software.
+
+
+1. LICENSE GRANT
+Titan Protection grants you a limited, non-exclusive, non-transferable license
+to install and use the Software on Windows computers owned or controlled by
+you or your organisation, solely for legitimate security operations management
+connected to your authorised Titan Protection account.
+
+
+2. CONNECTED SERVICE
+The Software is a desktop client that connects to the Titan Protection web
+platform at https://titanprotection.org (or another URL configured by your
+organisation). You must sign in with valid Master Admin or Supervisor
+credentials issued by your organisation. All operational data is stored on
+Titan Protection servers — the desktop app does not replace cloud backups or
+administrator controls.
+
+
+3. ACCEPTABLE USE
+You agree to use the Software only for lawful security operations purposes.
+You must not:
+  • Reverse engineer, decompile, or attempt to extract the source code
+  • Circumvent authentication, licensing, or access controls
+  • Use the Software to transmit malware or unauthorised data
+  • Share login credentials or allow unauthorised access to Command Centre
+
+
+4. DATA & PRIVACY
+Use of the Software is subject to your organisation's data policies and Titan
+Protection's operational data handling practices. GPS, patrol, incident, and
+personnel data processed through the platform remain the responsibility of the
+licensed security company operating the system.
+
+
+5. UPDATES
+The Software may check for updates or load the latest web dashboard from the
+live server. Titan Protection may update the connected service at any time to
+improve security and functionality.
+
+
+6. THIRD-PARTY COMPONENTS
+The Software includes Electron and other open-source components distributed
+under their respective licenses. Chromium and Electron license notices are
+included with the installed application.
+
+
+7. DISCLAIMER OF WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. TITAN PROTECTION DOES NOT
+GUARANTEE UNINTERRUPTED OR ERROR-FREE OPERATION.
+
+
+8. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, TITAN PROTECTION SHALL NOT BE LIABLE
+FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR
+ANY LOSS OF DATA, PROFITS, OR BUSINESS INTERRUPTION ARISING FROM USE OF THE
+SOFTWARE OR CONNECTED SERVICES.
+
+
+9. TERMINATION
+This license ends automatically if you breach these terms. Upon termination you
+must uninstall the Software. Sections 6–8 survive termination.
+
+
+10. GOVERNING LAW
+These terms are governed by the laws applicable to Titan Protection's place
+of business, without regard to conflict-of-law principles.
+
+
+11. CONTACT
+For support, licensing, or questions about these terms, contact your Titan
+Protection system administrator or visit https://titanprotection.org
+
+
+By proceeding with installation, you confirm that you have read, understood,
+and agree to be bound by this End User License Agreement.

@@ -17,7 +17,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { FALLBACK_MANIFEST, loadDownloadsManifest } from '../../lib/downloadsManifest';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 
 export const metadata = {
   title: 'App Downloads — Titan Protection',
@@ -68,13 +68,11 @@ async function getApkFileMeta(apkFile) {
 
 async function getDesktopMeta(manifest) {
   const entry = manifest.desktop || FALLBACK_MANIFEST.desktop;
-  const portableMeta = await getFileMeta(entry.portableFile);
   const setupMeta = await getFileMeta(entry.setupFile);
   return {
     ...entry,
-    portableMeta,
     setupMeta,
-    available: portableMeta.available || setupMeta.available,
+    available: setupMeta.available,
   };
 }
 
@@ -212,6 +210,7 @@ export default async function DownloadsPage() {
               <p className="releases-apk-desc">
                 Dedicated Windows app for Master Admin and supervisors — opens the live Command Centre in a
                 focused window (no browser tabs). Same sign-in and data as the web dashboard.
+                Installs with Start Menu and desktop shortcuts using the Titan emblem icon.
               </p>
               <dl className="releases-meta-list">
                 <div className="releases-meta-row">
@@ -219,25 +218,26 @@ export default async function DownloadsPage() {
                   <dd>v{desktop.version}</dd>
                 </div>
                 <div className="releases-meta-row">
-                  <dt><HardDrive size={14} /> Portable EXE</dt>
-                  <dd>{desktop.portableMeta.sizeLabel}</dd>
-                </div>
-                <div className="releases-meta-row">
-                  <dt><Package size={14} /> Installer</dt>
+                  <dt><Package size={14} /> Windows installer</dt>
                   <dd>{desktop.setupMeta.sizeLabel}</dd>
                 </div>
               </dl>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.65rem' }}>
-                {desktop.portableMeta.available && (
-                  <a href={`/downloads/${desktop.portableFile}`} className="releases-download-btn" download={desktop.portableFile}>
-                    <Download size={18} /> Portable EXE
-                  </a>
-                )}
-                {desktop.setupMeta.available && (
-                  <a href={`/downloads/${desktop.setupFile}`} className="releases-download-btn releases-download-btn-secondary" download={desktop.setupFile}>
-                    <Download size={18} /> Setup installer
-                  </a>
-                )}
+              {desktop.setupMeta.available ? (
+                <a href={`/downloads/${desktop.setupFile}`} className="releases-download-btn" download={desktop.setupFile}>
+                  <Download size={18} /> Download for Windows
+                </a>
+              ) : (
+                <p className="releases-apk-notes">Windows installer not published yet — check back shortly.</p>
+              )}
+              <div className="releases-install-steps glass-panel" style={{ marginTop: '1rem' }}>
+                <h3><Monitor size={18} /> Windows installation</h3>
+                <ol>
+                  <li>Download and run <strong>Titan Protection Setup</strong>.</li>
+                  <li>If Windows SmartScreen warns about an unknown publisher, choose <strong>More info</strong> → <strong>Run anyway</strong>.</li>
+                  <li>Follow the installer wizard — read and accept the End User License Agreement.</li>
+                  <li>Finish install, then open <strong>Titan Protection</strong> from the desktop or Start Menu.</li>
+                  <li>To remove later: <strong>Settings → Apps → Titan Protection Command Centre → Uninstall</strong>.</li>
+                </ol>
               </div>
               {desktop.notes && (
                 <p className="releases-apk-notes"><strong>Notes:</strong> {desktop.notes}</p>

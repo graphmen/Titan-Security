@@ -34,12 +34,41 @@ import { getWhatsAppStatus } from './whatsapp';
 import { getEmailStatus } from './email';
 import { deliverPinNotifications } from './pinDeliveryServer';
 import { isForceSupabaseEnabled } from './env';
+import { LEGACY_DEMO_GUARD_IDS } from './db/legacyDemo';
 
 const PROBE_TIMEOUT_MS = 8000;
 const CACHE_OK_MS = 30_000;
 const CACHE_FAIL_MS = 60_000;
+const STATE_READ_CACHE_MS = 10_000;
+const TENANT_BOOTSTRAP_MS = 300_000;
+const CHECKPOINT_SYNC_MS = 300_000;
 
 let readyCache = { ok: null, at: 0, error: null };
+let appStateCache = { raw: null, at: 0, dbGuardCount: null };
+let tenantBootstrapAt = 0;
+let checkpointSyncedAt = 0;
+
+function cloneState(state) {
+  return structuredClone(state);
+}
+
+function countGuardsFromLoadedState(state) {
+  let count = 0;
+  for (const tenantId of Object.keys(state.guards || {})) {
+    for (const guard of state.guards[tenantId] || []) {
+      if (!LEGACY_DEMO_GUARD_IDS.has(guard.id)) count += 1;
+    }
+  }
+  return count;
+}
+
+function storeAppStateCache(state) {
+  appStateCache = {
+    raw: cloneState(state),
+    at: Date.now(),
+    dbGuardCount: countGuardsFromLoadedState(state),
+  };
+}
 
 function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
   return Promise.race([
@@ -52,11 +81,38 @@ function withTimeout(promise, ms = PROBE_TIMEOUT_MS) {
 
 export function invalidateSupabaseCache() {
   readyCache = { ok: null, at: 0, error: null };
+  appStateCache = { raw: null, at: 0, dbGuardCount: null };
+}
+
+function normalizeLoadedState(state) {
+  for (const tenantId of Object.keys(state.tenants || {})) {
+    normalizeGuardSupervisorAssignments(state, tenantId);
+    migrateLegacyPatrolSchedules(state, tenantId);
+    syncAllPlaceCheckpoints(state, tenantId);
+    if (state.shifts?.[tenantId]) {
+      state.shifts[tenantId] = dedupeShiftList(state.shifts[tenantId]);
+    }
+    consolidateGuardAlerts(state, tenantId);
+  }
 }
 
 /** Load live data from Supabase into memory for this request only. */
-export async function loadFreshStateFromDatabase() {
-  await ensureMinimalTenantInDb();
+export async function loadFreshStateFromDatabase(options = {}) {
+  const force = options.force === true;
+  const now = Date.now();
+
+  if (!force && appStateCache.raw && now - appStateCache.at < STATE_READ_CACHE_MS) {
+    const state = cloneState(appStateCache.raw);
+    globalThis.__titanState = state;
+    globalThis.__titanFreshLoadAt = appStateCache.at;
+    return state;
+  }
+
+  if (now - tenantBootstrapAt > TENANT_BOOTSTRAP_MS) {
+    await ensureMinimalTenantInDb();
+    tenantBootstrapAt = now;
+  }
+
   const state = await loadAppStateFromRelationalDb();
   for (const tenantId of Object.keys(state.tenants || {})) {
     normalizeGuardSupervisorAssignments(state, tenantId);
@@ -70,9 +126,15 @@ export async function loadFreshStateFromDatabase() {
       await persistAllPatrolSchedules(state, tenantId);
     }
   }
-  await ensurePlaceCheckpointsSynced(state);
+
+  if (now - checkpointSyncedAt > CHECKPOINT_SYNC_MS) {
+    await ensurePlaceCheckpointsSynced(state);
+    checkpointSyncedAt = now;
+  }
+
   globalThis.__titanState = state;
-  globalThis.__titanFreshLoadAt = Date.now();
+  globalThis.__titanFreshLoadAt = now;
+  storeAppStateCache(state);
   return state;
 }
 
@@ -109,7 +171,7 @@ export async function syncLocalToSupabase() {
       'Could not reach the server database. Contact your system administrator.'
     );
   }
-  const state = await loadFreshStateFromDatabase();
+  const state = await loadFreshStateFromDatabase({ force: true });
   const summary = getRelationalSummary(state);
   readyCache = { ok: true, at: Date.now() };
   return {
@@ -162,11 +224,11 @@ export async function getDbGuardCount() {
   }
 }
 
-/** Every read loads directly from Supabase — no stale server memory. */
-export async function getSupabaseAppState(adminSessionKey = null) {
-  const state = await loadFreshStateFromDatabase();
+/** Load app state — uses a short-lived cache between polls; pass { force: true } after mutations. */
+export async function getSupabaseAppState(adminSessionKey = null, options = {}) {
+  const state = await loadFreshStateFromDatabase(options);
   applyEvalSubscriptionOverrides(state, adminSessionKey);
-  const dbGuardCount = await getDbGuardCount();
+  const dbGuardCount = appStateCache.dbGuardCount ?? countGuardsFromLoadedState(state);
   return {
     ...buildAppStateResponse(state),
     dbGuardCount,
@@ -196,7 +258,7 @@ const RELATIONAL_WRITE_ACTIONS = new Set([
 
 export async function runSupabaseAction(payload, adminSessionKey = null) {
   invalidateSupabaseCache();
-  await loadFreshStateFromDatabase();
+  await loadFreshStateFromDatabase({ force: true });
 
   const result = processLocalAction(payload);
   if (result?.error) return result;
@@ -248,7 +310,7 @@ export async function runSupabaseAction(payload, adminSessionKey = null) {
       wipeMethod: wipeResult.method,
       whatsapp,
       email,
-      state: await loadFreshStateFromDatabase(),
+      state: await loadFreshStateFromDatabase({ force: true }),
     };
   } else if (destructive) {
     await applyDirectRowDelete(action, payload, tenantId);
@@ -273,8 +335,10 @@ export async function runSupabaseAction(payload, adminSessionKey = null) {
 
   globalThis.__titanFreshLoadAt = null;
   const state = await loadAppStateFromRelationalDb();
+  normalizeLoadedState(state);
   globalThis.__titanState = state;
   globalThis.__titanFreshLoadAt = Date.now();
+  storeAppStateCache(state);
 
   const loginOnly = action === 'GUARD_LOGIN' || action === 'SUPERVISOR_LOGIN';
   const withState = (payload) => (loginOnly ? payload : { ...payload, state });

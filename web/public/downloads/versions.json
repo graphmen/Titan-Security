@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-09T08:55:00.000Z",
+  "updatedAt": "2026-09-09T11:48:00.000Z",
   "monitor": {
     "appId": "monitor",
     "name": "Titan Monitor",
@@ -22,9 +22,8 @@
     "appId": "desktop",
     "name": "Titan Protection Desktop",
     "description": "Windows desktop client for Command Centre and supervisor portal.",
-    "version": "1.0.0",
-    "portableFile": "titan-protection-desktop.exe",
+    "version": "1.0.2",
     "setupFile": "titan-protection-desktop-setup.exe",
-    "notes": "Electron desktop wrapper for https://titanprotection.org — always live-synced."
+    "notes": "Windows installer with EULA, Titan emblem icon, and desktop shortcuts. Uninstall v1.0.1 before upgrading if the app will not open."
   }
 }

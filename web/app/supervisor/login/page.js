@@ -2,13 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Delete, CornerDownLeft, Loader2, ArrowLeft, UserCog } from 'lucide-react';
 
 const PIN_LENGTH = 6;
 
 export default function SupervisorLoginPage() {
-  const router = useRouter();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [shake, setShake] = useState(false);
@@ -43,8 +41,8 @@ export default function SupervisorLoginPage() {
       const json = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        router.push('/supervisor');
-        router.refresh();
+        // Full navigation ensures the session cookie is sent on the first dashboard load
+        window.location.assign('/supervisor');
         return;
       }
 

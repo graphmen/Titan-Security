@@ -116,6 +116,10 @@ export async function countGuardsInDb() {
   return (data || []).filter((g) => !LEGACY_DEMO_GUARD_IDS.has(g.id)).length;
 }
 
+const HISTORY_ROW_LIMIT = 1000;
+const VISITOR_ROW_LIMIT = 500;
+const CHECKLIST_SUBMISSION_LIMIT = 500;
+
 /** Load full app state from relational tables (parallel queries for faster serverless cold starts). */
 export async function loadAppStateFromRelationalDb() {
   const state = {
@@ -179,10 +183,10 @@ export async function loadAppStateFromRelationalDb() {
     db.from('guard_alerts').select('*'),
     db.from('shift_swap_requests').select('*'),
     db.from('whatsapp_outbox').select('*'),
-    db.from('occurrence_book').select('*').order('timestamp', { ascending: false }),
-    db.from('visitors').select('*').order('check_in_time', { ascending: false }),
+    db.from('occurrence_book').select('*').order('timestamp', { ascending: false }).limit(HISTORY_ROW_LIMIT),
+    db.from('visitors').select('*').order('check_in_time', { ascending: false }).limit(VISITOR_ROW_LIMIT),
     db.from('checklist_templates').select('*'),
-    db.from('checklist_submissions').select('*').order('timestamp', { ascending: false }),
+    db.from('checklist_submissions').select('*').order('timestamp', { ascending: false }).limit(CHECKLIST_SUBMISSION_LIMIT),
     db.from('active_sos_alerts').select('*'),
   ]);
 
